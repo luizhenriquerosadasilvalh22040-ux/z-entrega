@@ -28,7 +28,7 @@ export class AuthService {
     const accessToken = jwt.sign(
       { userId: payload.userId, role: payload.role },
       authConfig.jwtSecret,
-      { expiresIn: authConfig.jwtExpiration }
+      { expiresIn: authConfig.jwtExpiration as any }
     );
 
     const refreshToken = crypto.randomBytes(40).toString('hex');
