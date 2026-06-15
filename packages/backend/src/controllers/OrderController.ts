@@ -44,6 +44,11 @@ export class OrderController {
         req.user.role
       );
 
+      const io = req.app.get('io');
+      if (io && order) {
+        io.to(`order:${id}`).emit('orderStatusUpdated', { orderId: id, status });
+      }
+
       res.status(200).json({
         status: 'success',
         data: { order }
