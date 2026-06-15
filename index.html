@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Organize o seu delivery no WhatsApp e venda muito mais. Feito sob medida para mercados, farmácias, depósitos e restaurantes da nossa cidade. Mensalidade fixa e sem taxas por venda.">
+    <meta name="keywords" content="delivery local, whatsapp, cardápio digital, comércio local, farmácia delivery, depósito material delivery, mercado delivery, traz pra cá">
+    <meta name="author" content="Traz Pra Cá Delivery">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Traz Pra Cá Delivery - O delivery do comércio da nossa cidade">
+    <meta property="og:description" content="Venda mais no celular sem pagar comissão e sem despesas com moto própria. Feito para todo tipo de comércio local.">
+    <meta property="og:image" content="assets/delivery_hero.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Traz Pra Cá Delivery - O delivery do comércio da nossa cidade">
+    <meta property="twitter:description" content="Venda mais no celular sem pagar comissão e sem despesas com moto própria. Feito para todo tipo de comércio local.">
+    <meta property="twitter:image" content="assets/delivery_hero.png">
+
+    <title>Traz Pra Cá Delivery - O delivery do comércio da nossa cidade</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Lateral Delivery Road (Motoboy flutuante com poeira no Scroll) -->
+    <div class="delivery-road-container">
+        <div class="delivery-road"></div>
+        <img src="assets/motoboy_logo.png" alt="Motoboy Traz Pra Cá" class="scrolling-motoboy" id="scrolling-motoboy">
+    </div>
+
+    <!-- Header / Navbar -->
+    <header class="header">
+        <div class="container header-container">
+            <a href="#" class="logo-container">
+                <img src="assets/motoboy_logo.png" alt="Mascote Motoboy Traz Pra Cá" class="logo-panda">
+                <span class="logo-text">Traz Pra Cá <span class="highlight">Delivery</span></span>
+            </a>
+            <nav class="nav-menu">
+                <a href="#como-funciona" class="nav-link">Como Funciona</a>
+                <a href="#vantagens" class="nav-link">Vantagens</a>
+                <a href="#segmentos" class="nav-link">Para Sua Loja</a>
+                <a href="#video-demonstracao" class="nav-link">Depoimentos</a>
+                <a href="#regiao" class="nav-link">Região</a>
+                <a href="#oferta" class="nav-link">Experimentar Grátis</a>
+            </nav>
+            <div class="header-cta">
+                <a href="https://wa.me/5544997158781?text=Ol%C3%A1!%20Vi%20a%20p%C3%A1gina%20e%20gostaria%20de%20cadastrar%20minha%20loja%20no%20Traz%20Pra%20C%C3%A1%20Delivery" target="_blank" class="btn btn-secondary btn-whatsapp">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.4 1.451 5.352 1.453 5.4 0 9.792-4.393 9.795-9.799.002-2.618-1.01-5.08-2.856-6.928C17.047 1.933 14.58 1.026 12 1.026c-5.4 0-9.791 4.393-9.794 9.799-.001 1.882.479 3.722 1.393 5.337l-.993 3.634 3.731-.977zm11.587-6.845c-.04-.065-.152-.104-.319-.188-.165-.084-.979-.482-1.13-.537-.152-.055-.262-.084-.373.084-.11.168-.429.537-.526.65-.098.11-.196.124-.361.04-.166-.083-.7-.258-1.332-.822-.492-.439-.824-.981-.92-1.15-.097-.167-.01-.258.073-.341.074-.075.166-.188.249-.281.082-.095.11-.162.165-.326.055-.165.027-.308-.013-.391-.041-.084-.372-.9-.512-1.232-.134-.324-.27-.279-.372-.284l-.318-.004c-.11 0-.288.041-.44.206-.152.165-.579.566-.579 1.38 0 .814.593 1.6 1.005 2.152.413.551 2.17 3.31 5.253 4.643.733.317 1.307.505 1.753.647.736.234 1.406.2 1.936.12.59-.09 1.802-.738 2.058-1.453.256-.715.256-1.328.179-1.454z"/>
+                    </svg>
+                    <span>Falar no WhatsApp</span>
+                </a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Menu de Navegação">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container hero-container">
+            <div class="hero-content reveal">
+                <div class="tag-local">
+                    <svg class="icon-pin" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                    <span>O jeito mais simples de vender para toda a cidade</span>
+                </div>
+                <h1 class="hero-title">Modernize sua loja e <span class="text-gradient">venda no WhatsApp</span></h1>
+                <p class="hero-subtitle">Leve o comércio da sua terra para a tela de todos os moradores. Seu cliente faz o pedido sem complicação, você organiza suas vendas e lucra mais, sem taxas abusivas e sem os altos custos de uma moto própria.</p>
+                <div class="hero-cta-group">
+                    <a href="https://wa.me/5544997158781?text=Ol%C3%A1!%20Quero%20cadastrar%20minha%20loja%20e%20modernizar%20minhas%20vendas%20no%20Traz%20Pra%20C%C3%A1" target="_blank" class="btn btn-primary btn-whatsapp btn-large pulse-animation">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.4 1.451 5.352 1.453 5.4 0 9.792-4.393 9.795-9.799.002-2.618-1.01-5.08-2.856-6.928C17.047 1.933 14.58 1.026 12 1.026c-5.4 0-9.791 4.393-9.794 9.799-.001 1.882.479 3.722 1.393 5.337l-.993 3.634 3.731-.977zm11.587-6.845c-.04-.065-.152-.104-.319-.188-.165-.084-.979-.482-1.13-.537-.152-.055-.262-.084-.373.084-.11.168-.429.537-.526.65-.098.11-.196.124-.361.04-.166-.083-.7-.258-1.332-.822-.492-.439-.824-.981-.92-1.15-.097-.167-.01-.258.073-.341.074-.075.166-.188.249-.281.082-.095.11-.162.165-.326.055-.165.027-.308-.013-.391-.041-.084-.372-.9-.512-1.232-.134-.324-.27-.279-.372-.284l-.318-.004c-.11 0-.288.041-.44.206-.152.165-.579.566-.579 1.38 0 .814.593 1.6 1.005 2.152.413.551 2.17 3.31 5.253 4.643.733.317 1.307.505 1.753.647.736.234 1.406.2 1.936.12.59-.09 1.802-.738 2.058-1.453.256-.715.256-1.328.179-1.454z"/>
+                        </svg>
+                        <span>Quero Cadastrar Minha Loja Gratuitamente</span>
+                    </a>
+                </div>
+                <div class="hero-features-list">
+                    <span class="hero-feature-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="icon-check"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Sem baixar aplicativo pesado
+                    </span>
+                    <span class="hero-feature-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="icon-check"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Teste grátis por 15 dias
+                    </span>
+                    <span class="hero-feature-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="icon-check"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Sem comissão por venda
+                    </span>
+                </div>
+            </div>
+            <div class="hero-image-container reveal">
+                <img src="assets/delivery_hero.png" alt="Ilustração 3D Scooter de Delivery" class="hero-image floating">
+                <!-- Floating Glass Alerts -->
+                <div class="glass-alert alert-1">
+                    <div class="alert-pulse"></div>
+                    <span>📦 Novo Pedido no Depósito!</span>
+                </div>
+                <div class="glass-alert alert-2">
+                    <div class="alert-pulse blue"></div>
+                    <span>💊 Remédio a caminho da entrega</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Vantagens Financeiras (Cards com Interações Únicas) -->
+    <section id="vantagens" class="advantages-section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2 class="section-title">Mais sobra no seu bolso no fim do mês</h2>
+                <p class="section-subtitle">Abaixo, veja na prática como o Traz Pra Cá gera economia e rentabilidade para o seu negócio.</p>
+            </div>
+            
+            <div class="grid grid-3">
+                <!-- Card 1: Sem Taxas (Interatividade WhatsApp Mockup) -->
+                <div class="card tilt-card reveal card-interactive" data-tilt>
+                    <div class="card-icon-wrapper bg-green-light">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="card-icon text-green">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                    </div>
+                    <h3 class="card-title">Sem Taxas por Venda</h3>
+                    <p class="card-text">Outros aplicativos cobram comissão sobre tudo. Com nossa mensalidade fixa, o lucro fica livre.</p>
+                    
+                    <!-- Simulação Interativa WhatsApp -->
+                    <div class="card-interactive-wrapper">
+                        <div class="wa-chat-mock">
+                            <div class="wa-chat-bubble">🍕 Novo Pedido: 1 Pizza</div>
+                            <div class="wa-chat-bubble">💵 Valor: R$ 45,00</div>
+                            <div class="wa-chat-bubble success">✅ Taxa do Aplicativo: R$ 0,00!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Zero Custos Logística (Calculadora Deslizante) -->
+                <div class="card tilt-card reveal card-interactive" data-tilt>
+                    <div class="card-icon-wrapper bg-blue-light">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="card-icon text-blue">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <h3 class="card-title">Calculadora de Logística</h3>
+                    <p class="card-text">Simule a economia de usar nossa rede compartilhada contra manter moto própria fixa na loja.</p>
+                    
+                    <!-- Calculadora Deslizante -->
+                    <div class="card-interactive-wrapper calc-card">
+                        <div class="calc-slider-box">
+                            <label for="calc-range">Pedidos/Dia: <span id="calc-qty" class="qty-highlight">15</span></label>
+                            <input type="range" id="calc-range" min="5" max="60" value="15" class="range-slider">
+                        </div>
+                        <div class="calc-result">
+                            <span class="calc-label">Economia mensal estimada:</span>
+                            <span class="calc-value" id="calc-savings">R$ 1.250,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Loja Aberta até Tarde (Toggle Modo Noturno / Clock) -->
+                <div class="card tilt-card reveal card-interactive" data-tilt id="night-card">
+                    <div class="card-icon-wrapper bg-orange-light">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="card-icon text-orange" id="card-3-icon">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="card-title">Vendas até mais Tarde</h3>
+                    <p class="card-text">O comércio físico fecha, mas os pedidos no celular continuam ativos pela noite de forma automática.</p>
+                    
+                    <!-- Relógio e Toggle Modo Noturno -->
+                    <div class="card-interactive-wrapper clock-card-box">
+                        <div class="clock-display" id="clock-display">18:00</div>
+                        <button class="moon-mode-toggle" id="moon-mode-toggle" aria-label="Toggle Modo Noturno">
+                            <span class="toggle-track">
+                                <span class="toggle-thumb" id="toggle-thumb">☀️</span>
+                            </span>
+                            <span class="toggle-text" id="toggle-text">Ativar Noite</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Depoimentos Regionais por Abas (Galeria de Imagens & Depoimentos) -->
+    <section id="video-demonstracao" class="video-section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2 class="section-title">Parceiros satisfeitos em nossa região</h2>
+                <p class="section-subtitle">Conheça as histórias reais de lojistas locais e moradores que utilizam o Traz Pra Cá Delivery.</p>
+            </div>
+            
+            <div class="testimonial-player reveal">
+                <!-- Abas dos depoimentos -->
+                <div class="player-tabs">
+                    <button class="player-tab active" data-tab="rondon">Rondon</button>
+                    <button class="player-tab" data-tab="gaucha">Cidade Gaúcha</button>
+                    <button class="player-tab" data-tab="japura">Japurá</button>
+                    <button class="player-tab" data-tab="clientes">Pedidos Noturnos</button>
+                </div>
+                
+                <div class="player-display">
+                    <!-- Conteúdo das Abas (Layout Lado a Lado: Imagem 3D + Texto do Depoimento) -->
+                    <!-- Rondon -->
+                    <div class="testimonial-content-wrapper" id="tab-content-rondon">
+                        <div class="testimonial-image-box">
+                            <img src="assets/testimonial_rondon.png" alt="Zé da Pizzaria em Rondon" class="testimonial-img">
+                        </div>
+                        <div class="testimonial-text-box">
+                            <div class="testimonial-header">
+                                <div class="avatar-circle">🍕</div>
+                                <div>
+                                    <h4 class="testimonial-name">Zé da Pizzaria</h4>
+                                    <p class="testimonial-sub">Rondon (PR) • Pizzaria e Lanchonete</p>
+                                </div>
+                            </div>
+                            <p class="testimonial-quote">"O WhatsApp no horário de pico era uma loucura de mensagens travadas. Depois que coloquei o cardápio do Traz Pra Cá, o pedido já chega na cozinha pronto. Minhas vendas à noite cresceram 40% porque agora atendo todo mundo!"</p>
+                            <div class="testimonial-metrics">
+                                <div class="metric-card">
+                                    <span class="metric-val">+40%</span>
+                                    <span class="metric-desc">Faturamento Noturno</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-val">100%</span>
+                                    <span class="metric-desc">Lucro livre de comissão</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cidade Gaúcha -->
+                    <div class="testimonial-content-wrapper hidden" id="tab-content-gaucha">
+                        <div class="testimonial-image-box">
+                            <img src="assets/testimonial_gaucha.png" alt="Maria da Farmácia em Cidade Gaúcha" class="testimonial-img">
+                        </div>
+                        <div class="testimonial-text-box">
+                            <div class="testimonial-header">
+                                <div class="avatar-circle">💊</div>
+                                <div>
+                                    <h4 class="testimonial-name">Maria da Farmácia</h4>
+                                    <p class="testimonial-sub">Cidade Gaúcha (PR) • Drogaria Local</p>
+                                </div>
+                            </div>
+                            <p class="testimonial-quote">"Entregar remédio rápido mudou a nossa história. O morador manda a foto da receita de forma limpa e os entregadores parceiros fazem a entrega em minutos. Economizei demais não precisando comprar uma moto própria só para isso."</p>
+                            <div class="testimonial-metrics">
+                                <div class="metric-card">
+                                    <span class="metric-val">&lt; 15 min</span>
+                                    <span class="metric-desc">Tempo médio de entrega</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-val">R$ 900</span>
+                                    <span class="metric-desc">Economia logística/mês</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Japurá -->
+                    <div class="testimonial-content-wrapper hidden" id="tab-content-japura">
+                        <div class="testimonial-image-box">
+                            <img src="assets/testimonial_japura.png" alt="Pedro do Mercado em Japurá" class="testimonial-img">
+                        </div>
+                        <div class="testimonial-text-box">
+                            <div class="testimonial-header">
+                                <div class="avatar-circle">🛒</div>
+                                <div>
+                                    <h4 class="testimonial-name">Pedro do Mercado</h4>
+                                    <p class="testimonial-sub">Japurá (PR) • Minimercado e Açougue</p>
+                                </div>
+                            </div>
+                            <p class="testimonial-quote">"Quem mora no interior quer comodidade. O morador faz compras pequenas pelo link: um óleo, arroz, pão... O pedido cai impresso no balcão e a entrega é feita na hora. Modernizei meu negócio sem pagar comissões de apps gigantes!"</p>
+                            <div class="testimonial-metrics">
+                                <div class="metric-card">
+                                    <span class="metric-val">+180</span>
+                                    <span class="metric-desc">Pedidos novos por mês</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-val">Fixo</span>
+                                    <span class="metric-desc">Sem taxas por venda</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Clientes à Noite -->
+                    <div class="testimonial-content-wrapper hidden" id="tab-content-clientes">
+                        <div class="testimonial-image-box">
+                            <img src="assets/testimonial_night.png" alt="Clientes de noite no interior do Paraná" class="testimonial-img">
+                        </div>
+                        <div class="testimonial-text-box">
+                            <div class="testimonial-header">
+                                <div class="avatar-circle">🌙</div>
+                                <div>
+                                    <h4 class="testimonial-name">Clientes de Cidades Pequenas</h4>
+                                    <p class="testimonial-sub">Noroeste do Paraná • Moradores Satisfeitos</p>
+                                </div>
+                            </div>
+                            <p class="testimonial-quote">"Poder pedir um pacote de parafusos no depósito à tarde, um remédio urgente ou um lanche quente de noite pelo celular mudou nossa rotina no interior. É prático e rápido, sem precisar baixar nenhum aplicativo pesado."</p>
+                            <div class="testimonial-metrics">
+                                <div class="metric-card">
+                                    <span class="metric-val">1 min</span>
+                                    <span class="metric-desc">Tempo para fazer pedido</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-val">⭐ 4.9</span>
+                                    <span class="metric-desc">Nota média dos moradores</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Segmentos (Para todo tipo de comércio com animações customizadas) -->
+    <section id="segmentos" class="segments-section">
+        <div class="container">
+            <div class="section-header reveal">
+                <span class="section-tag">Feito para Todos</span>
+                <h2 class="section-title">Não importa o que você vende. O Traz Pra Cá entrega!</h2>
+                <p class="section-subtitle">Nossa plataforma foi desenhada para se adaptar perfeitamente a todos os tipos de comércios da nossa cidade.</p>
+            </div>
+
+            <div class="grid grid-4">
+                <!-- Segmento 1: Depósitos de Materiais -->
+                <div class="segment-card reveal" id="segment-deposit">
+                    <div class="segment-icon bg-orange-light text-orange">
+                        <svg class="seg-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                        </svg>
+                    </div>
+                    <h3 class="segment-title">Depósitos de Construção</h3>
+                    <p class="segment-text">Venda desde pequenos parafusos, conexões de PVC e ferramentas até sacos de cimento de forma organizada e rápida.</p>
+                </div>
+
+                <!-- Segmento 2: Farmácias -->
+                <div class="segment-card reveal" id="segment-pharma">
+                    <div class="segment-icon bg-blue-light text-blue">
+                        <svg class="seg-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4.5 16.5c-1.5 1.26-2.5 3.19-2.5 5.5h20c0-2.31-1-4.24-2.5-5.5"></path>
+                            <path d="M12 2v14.5"></path>
+                            <path d="M8 6h8"></path>
+                            <rect x="5" y="10" width="14" height="4" rx="1"></rect>
+                        </svg>
+                    </div>
+                    <h3 class="segment-title">Farmácias</h3>
+                    <p class="segment-text">Facilite o pedido de remédios sob receita, itens de higiene, cosméticos e fraldas para os moradores que não podem sair de casa.</p>
+                </div>
+
+                <!-- Segmento 3: Mercados e Mercearias -->
+                <div class="segment-card reveal" id="segment-market">
+                    <div class="segment-icon bg-green-light text-green">
+                        <svg class="seg-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="21" r="1"></circle>
+                            <circle cx="20" cy="21" r="1"></circle>
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                        </svg>
+                    </div>
+                    <h3 class="segment-title">Mercados e Quitandas</h3>
+                    <p class="segment-text">O morador monta as compras da semana ou pede pequenos itens de última hora pelo celular, sem precisar carregar sacolas pesadas.</p>
+                </div>
+
+                <!-- Segmento 4: Restaurantes e Lanchonetes -->
+                <div class="segment-card reveal" id="segment-food">
+                    <div class="segment-icon bg-orange-light text-orange">
+                        <svg class="seg-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                            <path d="M3 2h18"></path>
+                        </svg>
+                    </div>
+                    <h3 class="segment-title">Restaurantes e Pizzarias</h3>
+                    <p class="segment-text">Entregue marmitas no almoço, pizzas e lanches quentes à noite, organizando a fila de pedidos na cozinha sem erros de anotação.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Como Funciona Section -->
+    <section id="como-funciona" class="how-it-works-section">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2 class="section-title">Muito simples para você e seus clientes</h2>
+                <p class="section-subtitle">Sem instalações difíceis, sem telas confusas. Funciona como mágica em qualquer celular.</p>
+            </div>
+
+            <!-- Step 1 & 2 -->
+            <div class="how-step flex-row reveal">
+                <div class="step-content">
+                    <div class="step-badge">Passo 01 & 02</div>
+                    <h3 class="step-title">O cliente escolhe do próprio celular</h3>
+                    <p class="step-text">Ele só precisa clicar no seu link personalizado que fica no perfil do Instagram ou no WhatsApp. Não precisa baixar aplicativo pesado que consome espaço.</p>
+                    <ul class="step-list">
+                        <li>
+                            <svg class="list-check" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Fotos e descrições fáceis de ver
+                        </li>
+                        <li>
+                            <svg class="list-check" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Fechamento de pedido em menos de 1 minuto
+                        </li>
+                        <li>
+                            <svg class="list-check" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Envio do pedido direto para a sua tela
+                        </li>
+                    </ul>
+                </div>
+                <div class="step-image-container">
+                    <img src="assets/mockup_customer.png" alt="Tela do Cliente - Cardápio Digital no Smartphone" class="step-image 3d-effect">
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="how-step flex-row reverse reveal">
+                <div class="step-content">
+                    <div class="step-badge orange-badge">Passo 03</div>
+                    <h3 class="step-title">Tudo organizado no seu gerenciador</h3>
+                    <p class="step-text">Os pedidos caem prontinhos na sua tela de gerenciamento. Você só precisa aceitar com um clique. A cozinha ou o balcão já recebe as informações sem erros ou letras difíceis de ler.</p>
+                    <ul class="step-list">
+                        <li>
+                            <svg class="list-check text-orange" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Calcula valores e taxas automaticamente
+                        </li>
+                        <li>
+                            <svg class="list-check text-orange" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Taxa de entrega calculada pelo endereço correto do morador
+                        </li>
+                        <li>
+                            <svg class="list-check text-orange" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd"/></svg>
+                            Painel ultra simples que qualquer funcionário aprende em 5 minutos
+                        </li>
+                    </ul>
+                </div>
+                <div class="step-image-container">
+                    <img src="assets/mockup_merchant.png" alt="Painel do Lojista no Smartphone" class="step-image 3d-effect">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Nossa Região Map Section (GPS Maps Style) -->
+    <section id="regiao" class="region-section">
+        <div class="container region-container">
+            <div class="region-info reveal">
+                <span class="section-tag">Nossa Terra</span>
+                <h2 class="section-title">Nascido para fortalecer o interior do Paraná</h2>
+                <p class="section-subtitle">Conectamos comerciantes e moradores das pequenas cidades que fazem o nosso estado crescer. O Traz Pra Cá está integrando nossa região com entregas rápidas e economia compartilhada.</p>
+                <div class="region-list">
+                    <div class="region-item">
+                        <span class="region-dot"></span>
+                        <div>
+                            <h4>Fortalecimento Local</h4>
+                            <p>O dinheiro das vendas circula e se mantém 100% dentro da nossa própria cidade.</p>
+                        </div>
+                    </div>
+                    <div class="region-item">
+                        <span class="region-dot yellow"></span>
+                        <div>
+                            <h4>Rede de Cidades Conectadas</h4>
+                            <p>Ativação regional integrando comércios vizinhos com rapidez e proximidade humana.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Moldura GPS Maps -->
+            <div class="region-map-wrapper reveal">
+                <div class="gps-container">
+                    <div class="gps-top-bar">
+                        <span class="gps-pulse-icon"></span>
+                        <span class="gps-status-text">GPS ATIVO • NAVEGANDO ROTA DE ENTREGA</span>
+                        <span class="gps-time" id="gps-clock">18:25</span>
+                    </div>
+                    
+                    <div class="map-bg-box gps-map-box">
+                        <!-- Stylized SVG Map of Paraná Cities (Estilo Google Maps Dark) -->
+                        <svg viewBox="0 0 600 420" class="map-svg" id="gps-map-svg" width="100%" height="100%">
+                            <!-- Ruas/Grelha de Fundo do GPS -->
+                            <path d="M 0,50 L 600,50 M 0,150 L 600,150 M 0,250 L 600,250 M 0,350 L 600,350" class="gps-street-grid" />
+                            <path d="M 100,0 L 100,420 M 250,0 L 250,420 M 400,0 L 400,420 M 530,0 L 530,420" class="gps-street-grid" />
+                            
+                            <!-- Conexões (Rotas Ativas com GPS Highlight) -->
+                            <line x1="300" y1="200" x2="450" y2="100" class="map-route-line route-1" />
+                            <line x1="300" y1="200" x2="150" y2="100" class="map-route-line route-2" />
+                            <line x1="300" y1="200" x2="180" y2="300" class="map-route-line route-3" />
+                            <line x1="300" y1="200" x2="320" y2="320" class="map-route-line route-4" />
+                            <line x1="300" y1="200" x2="100" y2="180" class="map-route-line route-5" />
+
+                            <!-- Marcador do Motoboy no GPS (Navega dinamicamente no hover) -->
+                            <g id="gps-motoboy-marker" transform="translate(300, 200)">
+                                <circle r="18" class="gps-marker-glow" />
+                                <text x="-12" y="6" class="gps-marker-icon">🛵</text>
+                            </g>
+
+                            <!-- Cidades do Paraná (Nós do GPS) -->
+                            <!-- Cidade 1: Guaporema -->
+                            <g class="map-node gps-node" data-x="150" data-y="100" transform="translate(150, 100)">
+                                <circle r="20" class="node-glow" />
+                                <circle r="8" class="node-center yellow" />
+                                <text y="-18" class="node-label">Guaporema</text>
+                            </g>
+
+                            <!-- Cidade 2: Japurá -->
+                            <g class="map-node gps-node" data-x="450" data-y="100" transform="translate(450, 100)">
+                                <circle r="20" class="node-glow" />
+                                <circle r="8" class="node-center yellow" />
+                                <text y="-18" class="node-label">Japurá</text>
+                            </g>
+
+                            <!-- Cidade 3: Cidade Gaúcha -->
+                            <g class="map-node gps-node" data-x="100" data-y="180" transform="translate(100, 180)">
+                                <circle r="20" class="node-glow" />
+                                <circle r="8" class="node-center yellow" />
+                                <text y="-18" class="node-label">Cidade Gaúcha</text>
+                            </g>
+
+                            <!-- Sede Central: Rondon -->
+                            <g class="map-node gps-node main-node" data-x="300" data-y="200" transform="translate(300, 200)">
+                                <circle r="32" class="node-glow main" />
+                                <circle r="12" class="node-center orange" />
+                                <text y="-25" class="node-label main">RONDON</text>
+                            </g>
+
+                            <!-- Cidade 4: Indianópolis -->
+                            <g class="map-node gps-node" data-x="180" data-y="300" transform="translate(180, 300)">
+                                <circle r="20" class="node-glow" />
+                                <circle r="8" class="node-center yellow" />
+                                <text y="24" class="node-label">Indianópolis</text>
+                            </g>
+
+                            <!-- Cidade 5: São Manoel do Paraná -->
+                            <g class="map-node gps-node" data-x="320" data-y="320" transform="translate(320, 320)">
+                                <circle r="20" class="node-glow" />
+                                <circle r="8" class="node-center yellow" />
+                                <text y="24" class="node-label">S. M. do Paraná</text>
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Oferta Irrecusável -->
+    <section id="oferta" class="offer-section">
+        <div class="container">
+            <div class="offer-box glass-card reveal">
+                <div class="offer-mascot-wrapper">
+                    <img src="assets/motoboy_logo.png" alt="Motoboy Mascote Traz Pra Cá" class="offer-mascot">
+                </div>
+                <div class="offer-badge">Garantia Local sem Riscos</div>
+                <h2 class="offer-title">Comece a usar hoje mesmo sem riscos</h2>
+                <p class="offer-text">Nós cadastramos os seus primeiros produtos e você testa a plataforma inteira por <strong>15 dias totalmente grátis</strong>. Sem fidelidade, sem letras miúdas, sem pegadinhas. Nosso objetivo é fazer a economia da nossa cidade crescer junto com você!</p>
+                <div class="offer-cta-group">
+                    <a href="https://wa.me/5544997158781?text=Ol%C3%A1!%20Gostaria%20de%20cadastrar%20minha%20loja%20e%20fazer%20o%20teste%20de%2015%20dias%20gr%C3%A1tis" target="_blank" class="btn btn-primary btn-whatsapp btn-large pulse-animation">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.4 1.451 5.352 1.453 5.4 0 9.792-4.393 9.795-9.799.002-2.618-1.01-5.08-2.856-6.928C17.047 1.933 14.58 1.026 12 1.026c-5.4 0-9.791 4.393-9.794 9.799-.001 1.882.479 3.722 1.393 5.337l-.993 3.634 3.731-.977zm11.587-6.845c-.04-.065-.152-.104-.319-.188-.165-.084-.979-.482-1.13-.537-.152-.055-.262-.084-.373.084-.11.168-.429.537-.526.65-.098.11-.196.124-.361.04-.166-.083-.7-.258-1.332-.822-.492-.439-.824-.981-.92-1.15-.097-.167-.01-.258.073-.341.074-.075.166-.188.249-.281.082-.095.11-.162.165-.326.055-.165.027-.308-.013-.391-.041-.084-.372-.9-.512-1.232-.134-.324-.27-.279-.372-.284l-.318-.004c-.11 0-.288.041-.44.206-.152.165-.579.566-.579 1.38 0 .814.593 1.6 1.005 2.152.413.551 2.17 3.31 5.253 4.643.733.317 1.307.505 1.753.647.736.234 1.406.2 1.936.12.59-.09 1.802-.738 2.058-1.453.256-.715.256-1.328.179-1.454z"/>
+                        </svg>
+                        <span>Criar Meu Cardápio Grátis no WhatsApp</span>
+                    </a>
+                </div>
+                <div class="guarantee-footer">
+                    <svg class="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>Teste sem compromisso. Cancelamento sem burocracia.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-brand">
+                <div class="logo-container">
+                    <img src="assets/motoboy_logo.png" alt="Mascote Motoboy Traz Pra Cá" class="logo-panda small">
+                    <span class="logo-text">Traz Pra Cá <span class="highlight">Delivery</span></span>
+                </div>
+                <p class="footer-desc">Ajudando pequenos negócios em cidades de 10 a 20 mil habitantes a modernizarem suas vendas pelo celular, aproximando moradores e lojistas de forma humana.</p>
+            </div>
+            
+            <div class="footer-links">
+                <h4 class="footer-title">Links</h4>
+                <a href="#como-funciona" class="footer-link">Como Funciona</a>
+                <a href="#vantagens" class="footer-link">Vantagens</a>
+                <a href="#segmentos" class="footer-link">Para Sua Loja</a>
+                <a href="#regiao" class="footer-link">Região</a>
+                <a href="#oferta" class="footer-link">Preços</a>
+            </div>
+
+            <div class="footer-contact">
+                <h4 class="footer-title">Contato</h4>
+                <p>E-mail: contato@trazpracadelivery.com.br</p>
+                <p>Suporte: Segunda a Sábado das 08:00 às 22:00</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="container footer-bottom-container">
+                <p class="copyright">&copy; 2026 Traz Pra Cá Delivery. Todos os direitos reservados.</p>
+                <p class="made-local">Orgulhosamente desenvolvido para valorizar o comércio local. 💚</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Script -->
+    <script src="script.js"></script>
+</body>
+</html>
