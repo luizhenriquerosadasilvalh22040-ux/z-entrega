@@ -1,0 +1,214 @@
+import React, { useState, useEffect } from 'react';
+import { Sparkles, X } from 'lucide-react';
+
+// ==========================================
+// 1. BUTTON
+// ==========================================
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  fullWidth?: boolean;
+}
+
+export const Button: React.FC<ButtonProps> = ({
+  children,
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  className = '',
+  ...props
+}) => {
+  const baseStyle = "inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus:outline-none active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none";
+  
+  const variants = {
+    primary: "bg-energy text-white hover:bg-energy-dark shadow-lg shadow-orange-500/20 hover:shadow-orange-500/35",
+    secondary: "bg-slate-100 text-slate-800 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
+    outline: "border-2 border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800",
+    danger: "bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/10",
+    ghost: "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+  };
+
+  const sizes = {
+    sm: "px-3 py-1.5 text-xs",
+    md: "px-5 py-2.5 text-sm",
+    lg: "px-6 py-3.5 text-base"
+  };
+
+  return (
+    <button
+      className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ==========================================
+// 2. INPUT
+// ==========================================
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  error?: string;
+}
+
+export const Input: React.FC<InputProps> = ({
+  label,
+  error,
+  className = '',
+  ...props
+}) => {
+  return (
+    <div className="w-full mb-4">
+      {label && <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">{label}</label>}
+      <input
+        className={`w-full px-4 py-3 bg-white dark:bg-slate-900 border ${
+          error ? 'border-red-500 focus:ring-red-500/20' : 'border-slate-200 dark:border-slate-800 focus:ring-orange-500/20'
+        } rounded-xl shadow-sm text-sm focus:border-energy focus:ring-4 transition-all duration-200 outline-none dark:text-white`}
+        {...props}
+      />
+      {error && <span className="block text-xs text-red-500 mt-1">{error}</span>}
+    </div>
+  );
+};
+
+// ==========================================
+// 3. CARD
+// ==========================================
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+  interactive?: boolean;
+}
+
+export const Card: React.FC<CardProps> = ({
+  children,
+  className = '',
+  interactive = false
+}) => {
+  return (
+    <div className={`bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-6 shadow-md transition-all duration-300 ${
+      interactive ? 'hover:scale-[1.02] hover:shadow-xl hover:border-orange-500/10' : ''
+    } ${className}`}>
+      {children}
+    </div>
+  );
+};
+
+// ==========================================
+// 4. BADGE
+// ==========================================
+interface BadgeProps {
+  variant?: 'orange' | 'green' | 'blue' | 'red' | 'gray';
+  children: React.ReactNode;
+}
+
+export const Badge: React.FC<BadgeProps> = ({
+  variant = 'gray',
+  children
+}) => {
+  const styles = {
+    orange: "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400",
+    green: "bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400",
+    blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400",
+    red: "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400",
+    gray: "bg-slate-50 text-slate-600 dark:bg-slate-800/80 dark:text-slate-300"
+  };
+
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${styles[variant]}`}>
+      {children}
+    </span>
+  );
+};
+
+// ==========================================
+// 5. MODAL
+// ==========================================
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  children: React.ReactNode;
+}
+
+export const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children
+}) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
+        onClick={onClose}
+      />
+
+      {/* Box */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative z-10 border border-slate-100 dark:border-slate-850 animate-float-in">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h3>
+          <button 
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto pr-1">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 6. TOAST
+// ==========================================
+interface ToastProps {
+  message: string;
+  type?: 'success' | 'error' | 'info';
+  onClose: () => void;
+}
+
+export const Toast: React.FC<ToastProps> = ({
+  message,
+  type = 'info',
+  onClose
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const styles = {
+    success: "bg-green-500 text-white shadow-green-500/25",
+    error: "bg-red-500 text-white shadow-red-500/25",
+    info: "bg-slate-800 text-white shadow-slate-800/25"
+  };
+
+  return (
+    <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl transition-all duration-300 transform translate-y-0 ${styles[type]} animate-slide-in`}>
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="hover:opacity-80">
+        <X size={16} />
+      </button>
+    </div>
+  );
+};
