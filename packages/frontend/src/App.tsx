@@ -8,6 +8,8 @@ import { Register } from './pages/Register';
 import { MyOrders } from './pages/MyOrders';
 import { Tracking } from './pages/Tracking';
 import { Dashboard } from './pages/Dashboard';
+import { Store } from './pages/Store';
+import { AdminDashboard } from './pages/AdminDashboard';
 
 function App() {
   const { checkAuth, isLoading } = useAuthStore();
@@ -37,6 +39,8 @@ function App() {
           <Route path="/orders" element={<MyOrders />} />
           <Route path="/tracking" element={<Tracking />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/store/:id" element={<Store />} />
+          <Route path="/admin" element={<AdminDashboard />} />
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -12,6 +12,7 @@ interface IMerchant {
   phone: string;
   operatingHours: { open: string; close: string };
   address: { street: string; number: string; city: string };
+  logoImage?: string;
 }
 
 interface IProduct {
@@ -205,12 +206,26 @@ export const Home: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredMerchants.map((merchant) => (
-              <Card key={merchant._id} interactive className="flex flex-col justify-between">
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-slate-800 dark:text-white text-lg">{merchant.name}</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">{merchant.address.city}</p>
+              <Card key={merchant._id} interactive className="flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-amber-500"></div>
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-start gap-3 justify-between">
+                    <div className="flex items-center gap-3">
+                      {merchant.logoImage ? (
+                        <img 
+                          src={merchant.logoImage} 
+                          alt={merchant.name} 
+                          className="w-12 h-12 rounded-xl object-cover border bg-slate-50"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-energy flex items-center justify-center font-black text-lg border border-orange-500/10">
+                          {merchant.name.substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <h3 className="font-bold text-slate-800 dark:text-white text-base leading-snug line-clamp-1">{merchant.name}</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">{merchant.address.city}</p>
+                      </div>
                     </div>
                     <Badge variant={merchant.category === 'Comida' ? 'orange' : merchant.category === 'Farmácia' ? 'blue' : merchant.category === 'Construção' ? 'green' : 'gray'}>
                       {merchant.category}
@@ -228,8 +243,8 @@ export const Home: React.FC = () => {
                 </div>
 
                 <div className="mt-6">
-                  <Button fullWidth onClick={() => handleOpenMenu(merchant)}>
-                    Ver Menu e Fazer Pedido
+                  <Button fullWidth onClick={() => navigate(`/store/${merchant._id}`)}>
+                    Ver Cardápio
                   </Button>
                 </div>
               </Card>
