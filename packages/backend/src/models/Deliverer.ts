@@ -9,6 +9,7 @@ export interface IDelivererDocument extends Document {
   plate?: string;
   isActive: boolean;
   isAvailable: boolean;
+  isActiveToday: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,7 +22,8 @@ const DelivererSchema = new Schema<IDelivererDocument>({
   vehicle: { type: String, required: true, enum: ['Moto', 'Bicicleta', 'Carro'], default: 'Moto' },
   plate: { type: String },
   isActive: { type: Boolean, default: true },
-  isAvailable: { type: Boolean, default: false }
+  isAvailable: { type: Boolean, default: false },
+  isActiveToday: { type: Boolean, default: false }
 }, {
   timestamps: true
 });

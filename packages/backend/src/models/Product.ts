@@ -8,6 +8,8 @@ export interface IProductDocument extends Document {
   category: string;
   image?: string;
   isAvailable: boolean;
+  stockQuantity: number;
+  isPaused: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,7 +21,9 @@ const ProductSchema = new Schema<IProductDocument>({
   price: { type: Number, required: true },
   category: { type: String, required: true, index: true },
   image: { type: String },
-  isAvailable: { type: Boolean, default: true }
+  isAvailable: { type: Boolean, default: true },
+  stockQuantity: { type: Number, default: 99 }, // Estoque padrão inicial alto
+  isPaused: { type: Boolean, default: false }
 }, {
   timestamps: true
 });
