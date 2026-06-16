@@ -130,6 +130,27 @@ export class MerchantController {
     }
   }
 
+  public static async updateLogo(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (req.user?.userId !== id) {
+        res.status(403).json({ status: 'fail', message: 'Forbidden access' });
+        return;
+      }
+
+      const { logoImage } = req.body;
+      const merchant = await MerchantService.updateProfile(id, { logoImage } as any);
+      if (!merchant) {
+        res.status(404).json({ status: 'fail', message: 'Merchant not found' });
+        return;
+      }
+      res.status(200).json({ status: 'success', data: { merchant } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async count(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const count = await MerchantService.countMerchants();

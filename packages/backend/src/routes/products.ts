@@ -14,6 +14,7 @@ router.get('/merchant/:merchantId', ProductController.listByMerchant);
 router.use(authenticate);
 router.post('/', validate(createProductSchema), ProductController.create);
 router.put('/:id', validate(updateProductSchema), ProductController.update);
+router.put('/:id/stock', ProductController.updateStock);
 router.delete('/:id', ProductController.delete);
 
 export default router;
