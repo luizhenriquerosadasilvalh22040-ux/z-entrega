@@ -7,6 +7,7 @@ import { redisClient } from '../config/redis';
 import { authConfig } from '../config/auth';
 import { encrypt } from '../config/encryption';
 import { IAddress, IOperatingHours } from '../types';
+import { NotificationService } from './NotificationService';
 
 export interface ITokenResponse {
   accessToken: string;
@@ -134,12 +135,9 @@ export class AuthService {
     return await merchant.save();
   }
 
-  /**
-   * Login do cliente
-   */
   public static async loginCustomer(email: string, password: string): Promise<{ customer: ICustomerDocument } & ITokenResponse> {
     const customer = await Customer.findOne({ email });
-    if (!customer) {
+    if (!customer || !customer.passwordHash) {
       throw new Error('Invalid email or password');
     }
 
@@ -155,7 +153,7 @@ export class AuthService {
     const tokens = await this.generateTokens({
       userId: customer._id.toString(),
       role: 'customer',
-      email: customer.email,
+      email: customer.email || '',
       name: customer.name,
     });
 
@@ -228,5 +226,77 @@ export class AuthService {
   public static async logout(refreshToken: string): Promise<void> {
     const redisKey = `refreshToken:${refreshToken}`;
     await redisClient.del(redisKey);
+  }
+
+  /**
+   * Solicita um código OTP de verificação via WhatsApp para o cliente
+   */
+  public static async requestCustomerOtp(phone: string, name?: string, address?: IAddress): Promise<{ isNewUser: boolean }> {
+    let customer = await Customer.findOne({ phone });
+    let isNewUser = false;
+
+    // Código fixo '1234' para facilitar os testes, ou código randômico em produção
+    const code = '1234'; 
+
+    if (customer) {
+      customer.verificationCode = code;
+      await customer.save();
+    } else {
+      if (!name || !address) {
+        throw new Error('Customer does not exist and registration details are missing');
+      }
+      isNewUser = true;
+      customer = new Customer({
+        name,
+        phone,
+        address,
+        verificationCode: code,
+        isPhoneVerified: false,
+        isActive: true
+      });
+      await customer.save();
+    }
+
+    // Enfileira notificação de WhatsApp com o código OTP
+    try {
+      await NotificationService.queueNotification({
+        userId: customer._id.toString(),
+        userType: 'Customer',
+        type: 'WhatsApp',
+        target: customer.phone,
+        content: `Olá! Seu código de verificação Traz Pra Cá é: *${code}*.`
+      });
+    } catch (err) {
+      console.error('Erro ao enfileirar notificação de OTP:', err);
+    }
+
+    return { isNewUser };
+  }
+
+  /**
+   * Verifica o código OTP digitado pelo cliente
+   */
+  public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: ICustomerDocument } & ITokenResponse> {
+    const customer = await Customer.findOne({ phone });
+    if (!customer) {
+      throw new Error('Cliente não encontrado');
+    }
+
+    if (!customer.verificationCode || customer.verificationCode !== code) {
+      throw new Error('Código de verificação inválido');
+    }
+
+    customer.isPhoneVerified = true;
+    customer.verificationCode = undefined; // Limpa o código utilizado
+    await customer.save();
+
+    const tokens = await this.generateTokens({
+      userId: customer._id.toString(),
+      role: 'customer',
+      email: customer.email || '',
+      name: customer.name,
+    });
+
+    return { customer, ...tokens };
   }
 }

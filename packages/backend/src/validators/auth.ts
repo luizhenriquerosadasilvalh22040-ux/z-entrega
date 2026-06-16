@@ -29,6 +29,17 @@ export const customerRegisterSchema = Joi.object({
   address: AddressSchema.required()
 });
 
+export const customerRequestOtpSchema = Joi.object({
+  phone: Joi.string().required(),
+  name: Joi.string().min(3).max(100).optional(),
+  address: AddressSchema.optional()
+});
+
+export const customerVerifyOtpSchema = Joi.object({
+  phone: Joi.string().required(),
+  code: Joi.string().required()
+});
+
 export const merchantRegisterSchema = Joi.object({
   name: Joi.string().min(3).max(100).required(),
   email: Joi.string().email().required(),

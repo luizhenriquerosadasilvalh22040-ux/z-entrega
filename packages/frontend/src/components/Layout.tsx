@@ -110,7 +110,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Link to="/login" className="text-sm font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white px-3 py-2">
                   Entrar
                 </Link>
-                <Link to="/register" className="text-sm font-semibold bg-energy hover:bg-energy-dark text-white px-4 py-2.5 rounded-xl transition-all shadow-sm">
+                <Link to="/login" className="text-sm font-semibold bg-energy hover:bg-energy-dark text-white px-4 py-2.5 rounded-xl transition-all shadow-sm">
                   Criar Conta
                 </Link>
               </div>
@@ -203,11 +203,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 Entrar
               </Link>
               <Link 
-                to="/register" 
+                to="/login" 
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="flex-1 text-center text-sm font-semibold bg-energy text-white py-2.5 rounded-xl"
               >
-                Cadastrar
+                Criar Conta
               </Link>
             </div>
           )}
@@ -221,13 +221,15 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Footer */}
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800/80 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center md:flex md:justify-between md:items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center md:flex md:justify-between md:items-center gap-4">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             &copy; 2026 Traz Pra Cá Delivery. Todos os direitos reservados.
           </p>
-          <p className="text-sm text-slate-400 dark:text-slate-500 mt-2 md:mt-0 flex items-center justify-center gap-1">
-            Desenvolvido para valorizar o comércio local 💚
-          </p>
+          <div className="text-xs text-slate-400 dark:text-slate-500 mt-2 md:mt-0 flex flex-wrap items-center justify-center gap-3">
+            <Link to="/parceiros" className="hover:text-energy transition-colors font-semibold">Portal de Parceiros & Administração 🏢</Link>
+            <span>•</span>
+            <span className="flex items-center gap-0.5">Valorizando o comércio local 💚</span>
+          </div>
         </div>
       </footer>
     </div>

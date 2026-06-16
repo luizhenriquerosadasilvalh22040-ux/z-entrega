@@ -1,43 +1,97 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Button, Input, Card, Toast } from '../components/ui';
-import { Link, useNavigate } from 'react-router-dom';
-import { LogIn } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MessageSquare, ShieldCheck, ArrowRight, MapPin, User } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login, error, clearError } = useAuthStore();
+  const { requestOtp, verifyOtp, error } = useAuthStore();
   const navigate = useNavigate();
 
-  const [role, setRole] = useState<'customer' | 'merchant' | 'admin'>('customer');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
+  const [code, setCode] = useState('');
   
+  // Detalhes do Cadastro (usado apenas se for novo usuário)
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState({
+    street: '',
+    number: '',
+    neighborhood: '',
+    city: 'Rondon', // cidade padrão da região
+    state: 'PR',
+    zipCode: '87800-000'
+  });
+
+  const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Solicita o envio do código OTP
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setToast({ message: 'Preencha todos os campos', type: 'error' });
+    if (!phone) {
+      setToast({ message: 'Digite o número do seu WhatsApp', type: 'error' });
       return;
     }
 
     setLoading(true);
     try {
-      await login(email, password, role);
-      setToast({ message: 'Login realizado com sucesso!', type: 'success' });
-      setTimeout(() => {
-        if (role === 'merchant') {
-          navigate('/dashboard');
-        } else if (role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/');
-        }
-      }, 1000);
+      // Tenta enviar OTP. Se for novo usuário e não enviarmos nome/endereço, o backend pode falhar, 
+      // então primeiro tentamos um request simples para ver se já existe.
+      await requestOtp(phone);
+      setToast({ message: 'Código de verificação enviado!', type: 'success' });
+      setStep('otp');
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Email ou senha incorretos';
-      setToast({ message: msg, type: 'error' });
+      // Se o backend retornar que o cliente não existe, expandimos o formulário para cadastro
+      const message = err.response?.data?.message || '';
+      if (message.includes('missing') || message.includes('exist')) {
+        setToast({ message: 'Número novo! Complete seu cadastro rápido.', type: 'success' });
+        setStep('register');
+      } else {
+        setToast({ message: message || 'Erro ao enviar código de verificação', type: 'error' });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Envia OTP contendo os dados do cadastro completo
+  const handleRegisterAndRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !address.street || !address.number || !address.neighborhood) {
+      setToast({ message: 'Preencha seu nome e endereço para entrega', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await requestOtp(phone, name, address);
+      setToast({ message: 'Cadastro pré-salvo! Código enviado.', type: 'success' });
+      setStep('otp');
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Erro ao realizar cadastro';
+      setToast({ message: message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verifica o código OTP digitado
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code) {
+      setToast({ message: 'Digite o código de verificação', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await verifyOtp(phone, code);
+      setToast({ message: 'Login realizado com sucesso!', type: 'success' });
+      setTimeout(() => navigate('/'), 1000);
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Código de verificação incorreto';
+      setToast({ message: message, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -45,82 +99,126 @@ export const Login: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto my-12">
-      <Card>
-        <div className="text-center space-y-2 mb-8">
-          <div className="inline-flex p-3 bg-orange-500/10 rounded-2xl text-energy">
-            <LogIn size={26} />
+      <Card className="relative overflow-hidden">
+        {/* Banner Strip */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 to-amber-500"></div>
+
+        <div className="text-center space-y-2 mb-8 pt-4">
+          <div className="inline-flex p-3.5 bg-orange-500/10 rounded-2xl text-energy animate-pulse">
+            {step === 'otp' ? <ShieldCheck size={28} /> : <MessageSquare size={28} />}
           </div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">Acesse sua Conta</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Entre na plataforma Traz Pra Cá Delivery</p>
+          <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">
+            {step === 'phone' && 'Entrar no Traz Pra Cá'}
+            {step === 'register' && 'Criar Conta Rápido'}
+            {step === 'otp' && 'Verificar Telefone'}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {step === 'phone' && 'Digite seu WhatsApp para iniciar.'}
+            {step === 'register' && 'Complete os dados para entrega.'}
+            {step === 'otp' && `Digite o código enviado para ${phone}`}
+          </p>
         </div>
 
-        {/* Role Selector Tabs */}
-        <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl mb-6">
-          <button
-            type="button"
-            onClick={() => setRole('customer')}
-            className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              role === 'customer'
-                ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            Cliente
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('merchant')}
-            className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              role === 'merchant'
-                ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            Lojista
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('admin')}
-            className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              role === 'admin'
-                ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-            }`}
-          >
-            Admin
-          </button>
-        </div>
+        {/* STEP 1: Phone input */}
+        {step === 'phone' && (
+          <form onSubmit={handleRequestOtp} className="space-y-5">
+            <Input
+              label="WhatsApp (com DDD)"
+              type="tel"
+              placeholder="Ex: 44999998888"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+            />
+            <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
+              {loading ? 'Enviando...' : 'Receber Código no WhatsApp'} <ArrowRight size={16} />
+            </Button>
+          </form>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            placeholder="seuemail@exemplo.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+        {/* STEP 2: Quick Register */}
+        {step === 'register' && (
+          <form onSubmit={handleRegisterAndRequestOtp} className="space-y-4">
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <User size={13} /> Seus Dados
+              </h4>
+              <Input
+                label="Nome Completo"
+                placeholder="Como quer ser chamado"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
 
-          <Input
-            label="Senha"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <MapPin size={13} /> Endereço de Entrega
+              </h4>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <Input
+                    label="Rua"
+                    placeholder="Ex: Av. Paraná"
+                    value={address.street}
+                    onChange={(e) => setAddress({ ...address, street: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Input
+                    label="Número"
+                    placeholder="Ex: 150"
+                    value={address.number}
+                    onChange={(e) => setAddress({ ...address, number: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
 
-          <Button type="submit" fullWidth size="lg" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </Button>
-        </form>
+              <Input
+                label="Bairro"
+                placeholder="Ex: Centro"
+                value={address.neighborhood}
+                onChange={(e) => setAddress({ ...address, neighborhood: e.target.value })}
+                required
+              />
+            </div>
 
-        <div className="text-center mt-6 text-sm text-slate-500">
-          Não tem uma conta?{' '}
-          <Link to="/register" className="font-semibold text-energy hover:underline">
-            Cadastre-se grátis
-          </Link>
-        </div>
+            <div className="pt-4 flex gap-3">
+              <Button type="button" variant="outline" fullWidth onClick={() => setStep('phone')}>
+                Voltar
+              </Button>
+              <Button type="submit" fullWidth disabled={loading}>
+                {loading ? 'Processando...' : 'Enviar Código OTP'}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* STEP 3: OTP Code verification */}
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <Input
+              label="Código de Verificação"
+              placeholder="Digite o código (Ex: 1234)"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              maxLength={6}
+            />
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="outline" fullWidth onClick={() => setStep('phone')}>
+                Mudar Número
+              </Button>
+              <Button type="submit" fullWidth disabled={loading}>
+                {loading ? 'Verificando...' : 'Confirmar Código'}
+              </Button>
+            </div>
+          </form>
+        )}
       </Card>
 
       {toast && (

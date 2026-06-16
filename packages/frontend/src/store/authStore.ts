@@ -26,6 +26,8 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
+  requestOtp: (phone: string, name?: string, address?: any) => Promise<{ isNewUser: boolean }>;
+  verifyOtp: (phone: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -68,6 +70,42 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch (error: any) {
       const message = error.response?.data?.message || 'Erro ao realizar login';
+      set({ error: message, isLoading: false });
+      throw error;
+    }
+  },
+
+  requestOtp: async (phone, name, address) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await apiClient.post('/auth/customer/request-otp', { phone, name, address });
+      set({ isLoading: false });
+      return res.data.data;
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Erro ao solicitar código';
+      set({ error: message, isLoading: false });
+      throw error;
+    }
+  },
+
+  verifyOtp: async (phone, code) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await apiClient.post('/auth/customer/verify-otp', { phone, code });
+      const { customer, accessToken, refreshToken } = res.data.data;
+
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('role', 'customer');
+
+      set({
+        user: customer,
+        role: 'customer',
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Código inválido';
       set({ error: message, isLoading: false });
       throw error;
     }

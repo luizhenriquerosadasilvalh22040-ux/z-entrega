@@ -10,6 +10,7 @@ import { Deliverer } from './models/Deliverer';
 import { Order } from './models/Order';
 import { Notification } from './models/Notification';
 import { OrderService } from './services/OrderService';
+import { AuthService } from './services/AuthService';
 import logger from './config/logger';
 
 async function runTestFlow() {
@@ -17,10 +18,9 @@ async function runTestFlow() {
     logger.info('Starting programmatic E2E flow validation...');
     await connectDatabase();
 
-    // 1. Encontra Lojista, Cliente e Produto semeados
-    const customer = await Customer.findOne({ email: 'customer@example.com' });
+    // 1. Encontra Lojista e Produto semeados
     const merchant = await Merchant.findOne({ email: 'merchant@example.com' });
-    if (!customer || !merchant) {
+    if (!merchant) {
       throw new Error('Seed data missing. Please run seed script first.');
     }
 
@@ -28,6 +28,29 @@ async function runTestFlow() {
     if (!product) {
       throw new Error('Product data missing.');
     }
+
+    // 2. Fluxo OTP do Cliente
+    logger.info('--- 2. Testando fluxo OTP do Cliente ---');
+    const testPhone = '44999998888';
+    
+    // Solicita o código OTP
+    logger.info(`Solicitando OTP para o telefone ${testPhone}...`);
+    const otpReq = await AuthService.requestCustomerOtp(testPhone, 'João Silva', {
+      street: 'Rua São Paulo',
+      number: '450',
+      neighborhood: 'Jardim Planalto',
+      city: 'Rondon',
+      state: 'PR',
+      zipCode: '87800000',
+      coordinates: { lat: -23.415, lng: -52.752 }
+    });
+    logger.info(`OTP solicitado. Novo usuário? ${otpReq.isNewUser}`);
+
+    // Verifica o código OTP
+    logger.info('Verificando OTP com o código padrão "1234"...');
+    const verifyRes = await AuthService.verifyCustomerOtp(testPhone, '1234');
+    const customer = verifyRes.customer;
+    logger.info(`Cliente autenticado com sucesso: ${customer.name} (${customer.phone})`);
 
     // 2. Garante que exista um entregador cadastrado e escalado para hoje
     let deliverer = await Deliverer.findOne({ email: 'carlos@example.com' });

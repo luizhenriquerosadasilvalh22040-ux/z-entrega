@@ -167,4 +167,40 @@ export class AuthController {
       next(error);
     }
   }
+
+  public static async requestCustomerOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { phone, name, address } = req.body;
+      const { isNewUser } = await AuthService.requestCustomerOtp(phone, name, address);
+      res.status(200).json({
+        status: 'success',
+        message: 'Código de verificação enviado para seu WhatsApp.',
+        data: { isNewUser }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async verifyCustomerOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { phone, code } = req.body;
+      const { customer, accessToken, refreshToken } = await AuthService.verifyCustomerOtp(phone, code);
+
+      const customerObj = customer.toObject();
+      delete customerObj.passwordHash;
+      delete customerObj.verificationCode;
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          customer: customerObj,
+          accessToken,
+          refreshToken
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

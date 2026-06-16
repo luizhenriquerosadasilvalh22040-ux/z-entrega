@@ -43,6 +43,13 @@ interface IMerchant {
   subscriptionPrice?: number;
 }
 
+interface IBanner {
+  _id: string;
+  imageUrl: string;
+  title?: string;
+  linkUrl?: string;
+}
+
 export const AdminDashboard: React.FC = () => {
   const { user, role, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
@@ -68,6 +75,14 @@ export const AdminDashboard: React.FC = () => {
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [banners, setBanners] = useState<IBanner[]>([]);
+  const [isAddBannerOpen, setIsAddBannerOpen] = useState(false);
+  const [bannerForm, setBannerForm] = useState({
+    imageUrl: '',
+    title: '',
+    linkUrl: ''
+  });
 
   useEffect(() => {
     // Redireciona se não for admin
@@ -97,6 +112,11 @@ export const AdminDashboard: React.FC = () => {
       const merchantsRes = await apiClient.get('/admin/merchants');
       if (merchantsRes.data?.status === 'success') {
         setMerchants(merchantsRes.data.data.merchants);
+      }
+
+      const bannersRes = await apiClient.get('/banners');
+      if (bannersRes.data?.status === 'success') {
+        setBanners(bannersRes.data.data.banners);
       }
 
     } catch (err) {
@@ -210,6 +230,43 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       setToast({ message: 'Erro ao salvar mensalidade do lojista', type: 'error' });
+    }
+  };
+
+  const handleAddBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await apiClient.post('/banners', bannerForm);
+      if (res.data?.status === 'success') {
+        setToast({ message: 'Banner cadastrado com sucesso!', type: 'success' });
+        setIsAddBannerOpen(false);
+        setBannerForm({
+          imageUrl: '',
+          title: '',
+          linkUrl: ''
+        });
+        // Recarrega os banners
+        const bannersRes = await apiClient.get('/banners');
+        if (bannersRes.data?.status === 'success') {
+          setBanners(bannersRes.data.data.banners);
+        }
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Erro ao cadastrar banner';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const handleDeleteBanner = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este banner?')) return;
+    try {
+      const res = await apiClient.delete(`/banners/${id}`);
+      if (res.data?.status === 'success') {
+        setToast({ message: 'Banner removido com sucesso!', type: 'success' });
+        setBanners(prev => prev.filter(b => b._id !== id));
+      }
+    } catch (err) {
+      setToast({ message: 'Erro ao remover banner', type: 'error' });
     }
   };
 
@@ -475,6 +532,58 @@ export const AdminDashboard: React.FC = () => {
         </Card>
       </div>
 
+      {/* Row 3: Banner Management */}
+      <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <span className="text-xl">🖼️</span> Controle de Banners
+          </h2>
+          <Button size="sm" onClick={() => setIsAddBannerOpen(true)} className="flex items-center gap-1.5">
+            <Plus size={16} /> Novo Banner
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {banners.length === 0 ? (
+            <div className="col-span-full text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800/80">
+              Nenhum banner promocional cadastrado no momento.
+            </div>
+          ) : (
+            banners.map((banner) => (
+              <Card key={banner._id} className="overflow-hidden relative flex flex-col justify-between p-0">
+                <div className="h-32 w-full overflow-hidden bg-slate-150 dark:bg-slate-800">
+                  <img
+                    src={banner.imageUrl}
+                    alt={banner.title || 'Banner'}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-4 flex-1 flex flex-col justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm line-clamp-1">
+                      {banner.title || 'Sem título'}
+                    </h4>
+                    {banner.linkUrl && (
+                      <p className="text-xs text-slate-400 mt-1 truncate">
+                        Link: {banner.linkUrl}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex justify-end border-t border-slate-50 dark:border-slate-850 pt-2">
+                    <button
+                      onClick={() => handleDeleteBanner(banner._id)}
+                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                    >
+                      <Trash2 size={14} /> Excluir
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Modal: Add Driver */}
       <Modal isOpen={isAddDriverOpen} onClose={() => setIsAddDriverOpen(false)} title="Cadastrar Novo Entregador">
         <form onSubmit={handleAddDriver} className="space-y-4">
@@ -566,6 +675,42 @@ export const AdminDashboard: React.FC = () => {
             </Button>
             <Button type="submit" fullWidth>
               Salvar Alteração
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal: Add Banner */}
+      <Modal isOpen={isAddBannerOpen} onClose={() => setIsAddBannerOpen(false)} title="Adicionar Novo Banner">
+        <form onSubmit={handleAddBanner} className="space-y-4">
+          <Input
+            label="URL da Imagem"
+            placeholder="https://exemplo.com/imagem.png"
+            value={bannerForm.imageUrl}
+            onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
+            required
+          />
+
+          <Input
+            label="Título (Opcional)"
+            placeholder="Título do banner"
+            value={bannerForm.title}
+            onChange={(e) => setBannerForm({ ...bannerForm, title: e.target.value })}
+          />
+
+          <Input
+            label="URL de Destino / Link (Opcional)"
+            placeholder="https://exemplo.com/promocao"
+            value={bannerForm.linkUrl}
+            onChange={(e) => setBannerForm({ ...bannerForm, linkUrl: e.target.value })}
+          />
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" fullWidth onClick={() => setIsAddBannerOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" fullWidth>
+              Salvar Banner
             </Button>
           </div>
         </form>

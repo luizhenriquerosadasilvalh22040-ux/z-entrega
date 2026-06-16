@@ -6,7 +6,9 @@ import {
   customerRegisterSchema,
   merchantRegisterSchema,
   loginSchema,
-  refreshSchema
+  refreshSchema,
+  customerRequestOtpSchema,
+  customerVerifyOtpSchema
 } from '../validators/auth';
 
 const router = Router();
@@ -14,6 +16,8 @@ const router = Router();
 // Registro e login de Clientes
 router.post('/customer/register', validate(customerRegisterSchema), AuthController.registerCustomer);
 router.post('/customer/login', validate(loginSchema), AuthController.loginCustomer);
+router.post('/customer/request-otp', validate(customerRequestOtpSchema), AuthController.requestCustomerOtp);
+router.post('/customer/verify-otp', validate(customerVerifyOtpSchema), AuthController.verifyCustomerOtp);
 
 // Registro e login de Lojistas
 router.post('/merchant/register', validate(merchantRegisterSchema), AuthController.registerMerchant);

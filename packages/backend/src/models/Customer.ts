@@ -3,11 +3,13 @@ import { IAddress } from '../types';
 
 export interface ICustomerDocument extends Document {
   name: string;
-  email: string;
-  passwordHash: string;
-  cpf: string; // Salvo encriptado
+  email?: string;
+  passwordHash?: string;
+  cpf?: string; // Salvo encriptado
   phone: string;
   address: IAddress;
+  isPhoneVerified: boolean;
+  verificationCode?: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -28,11 +30,13 @@ const AddressSchema = new Schema<IAddress>({
 
 const CustomerSchema = new Schema<ICustomerDocument>({
   name: { type: String, required: true },
-  email: { type: String, required: true, unique: true, index: true },
-  passwordHash: { type: String, required: true },
-  cpf: { type: String, required: true, unique: true },
-  phone: { type: String, required: true },
+  email: { type: String, unique: true, index: true, sparse: true },
+  passwordHash: { type: String },
+  cpf: { type: String, unique: true, sparse: true },
+  phone: { type: String, required: true, unique: true, index: true },
   address: { type: AddressSchema, required: true },
+  isPhoneVerified: { type: Boolean, default: false },
+  verificationCode: { type: String },
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true
