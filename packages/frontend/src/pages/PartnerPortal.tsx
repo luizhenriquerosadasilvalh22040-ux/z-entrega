@@ -389,7 +389,7 @@ export const PartnerPortal: React.FC = () => {
                   onChange={(e) => setAPassword(e.target.value)}
                   required
                 />
-                <Button type="submit" fullWidth variant="default" disabled={loading} className="bg-slate-900 dark:bg-slate-800 text-white">
+                <Button type="submit" fullWidth variant="primary" disabled={loading} className="bg-slate-900 dark:bg-slate-800 text-white">
                   {loading ? 'Entrando...' : 'Entrar como Administrador'}
                 </Button>
               </form>

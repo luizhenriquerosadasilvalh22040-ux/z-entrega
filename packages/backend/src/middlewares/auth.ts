@@ -17,13 +17,35 @@ declare global {
 }
 
 export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token: string | undefined;
+
+  // 1. Tenta obter do cookie accessToken
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const cookies: { [key: string]: string } = {};
+    cookieHeader.split(';').forEach(c => {
+      const parts = c.split('=');
+      const name = parts[0].trim();
+      const val = parts.slice(1).join('=');
+      if (name && val) {
+        cookies[name] = decodeURIComponent(val);
+      }
+    });
+    token = cookies['accessToken'];
+  }
+
+  // 2. Fallback para header Authorization
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
+
+  if (!token) {
     res.status(401).json({ status: 'fail', message: 'No token provided' });
     return;
   }
-
-  const token = authHeader.split(' ')[1];
 
   try {
     const decoded = jwt.verify(token, authConfig.jwtSecret) as IDecodedUser;

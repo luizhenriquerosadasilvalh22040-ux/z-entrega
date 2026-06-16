@@ -24,6 +24,14 @@ export class AdminController {
       const totalDeliverers = await Deliverer.countDocuments();
       const activeDeliverersToday = await Deliverer.countDocuments({ isActiveToday: true });
 
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const dailyOrdersVolume = await Order.countDocuments({
+        createdAt: { $gte: startOfToday, $lte: endOfToday }
+      });
+
       // 3. Receita total e do dia
       const orders = await Order.find({ status: { $ne: 'CANCELLED' } });
       const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
@@ -42,6 +50,7 @@ export class AdminController {
             totalDeliverers,
             activeDeliverersToday,
             totalSales,
+            dailyOrdersVolume,
             defaultSubscriptionPrice: config.defaultSubscriptionPrice
           }
         }
@@ -312,6 +321,70 @@ export class AdminController {
       res.status(200).json({
         status: 'success',
         data: { merchant }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async listActiveOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const orders = await Order.find({
+        createdAt: { $gte: startOfToday, $lte: endOfToday },
+        status: { $nin: ['DELIVERED', 'CANCELLED'] }
+      })
+      .populate('customerId', 'name phone')
+      .populate('merchantId', 'name address')
+      .populate('delivererId', 'name phone')
+      .sort({ createdAt: -1 });
+
+      res.status(200).json({
+        status: 'success',
+        data: { orders }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async getDeliverersDailyReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      // 1. Motoboys escalados hoje
+      const deliverers = await Deliverer.find({ isActiveToday: true, isActive: true });
+
+      // 2. Calcula entregas concluídas de cada um
+      const report = [];
+      for (const driver of deliverers) {
+        const completedDeliveries = await Order.countDocuments({
+          delivererId: driver._id,
+          status: 'DELIVERED',
+          createdAt: { $gte: startOfToday, $lte: endOfToday }
+        });
+
+        report.push({
+          delivererId: driver._id,
+          name: driver.name,
+          phone: driver.phone,
+          vehicle: driver.vehicle,
+          plate: driver.plate,
+          completedDeliveries,
+          totalPay: completedDeliveries * 5.00
+        });
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: { report }
       });
     } catch (error) {
       next(error);

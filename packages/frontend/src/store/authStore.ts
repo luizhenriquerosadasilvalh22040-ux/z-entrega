@@ -13,7 +13,21 @@ export interface IUser {
     city: string;
     state: string;
     zipCode: string;
+    complement?: string;
+    referencePoint?: string;
   };
+  savedAddresses?: {
+    nickname: string;
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    complement?: string;
+    referencePoint?: string;
+  }[];
+  isForceClosed?: boolean;
   category?: string;
   operatingHours?: { open: string; close: string };
   paymentMethods?: string[];
@@ -52,15 +66,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const response = await apiClient.post(endpoint, { email, password });
       
-      const { customer, merchant, admin, accessToken, refreshToken } = response.data.data;
+      const { customer, merchant, admin } = response.data.data;
       let user = null;
       if (role === 'customer') user = customer;
       else if (role === 'merchant') user = merchant;
       else if (role === 'admin') user = admin;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      // Armazena apenas flags auxiliares (cookies contêm as chaves criptografadas reais)
       localStorage.setItem('role', role);
+      localStorage.setItem('isLogged', 'true');
 
       set({
         user,
@@ -94,11 +108,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const cleanPhone = phone.replace(/\D/g, '');
       const res = await apiClient.post('/auth/customer/verify-otp', { phone: cleanPhone, code });
-      const { customer, accessToken, refreshToken } = res.data.data;
+      const { customer } = res.data.data;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      // Armazena apenas flags auxiliares
       localStorage.setItem('role', 'customer');
+      localStorage.setItem('isLogged', 'true');
 
       set({
         user: customer,
@@ -115,17 +129,16 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      try {
-        await apiClient.post('/auth/logout', { refreshToken });
-      } catch (err) {
-        // Ignora falhas no logout do servidor
-      }
+    try {
+      await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {});
+    } catch (err) {
+      // Ignora falhas no logout do servidor
     }
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('role');
+    localStorage.removeItem('isLogged');
 
     set({
       user: null,
@@ -135,10 +148,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkAuth: async () => {
-    const accessToken = localStorage.getItem('accessToken');
+    const isLogged = localStorage.getItem('isLogged') === 'true';
     const role = localStorage.getItem('role') as 'customer' | 'merchant' | 'admin';
     
-    if (!accessToken || !role) {
+    if (!isLogged || !role) {
       set({ isAuthenticated: false, user: null, role: null });
       return;
     }
@@ -158,6 +171,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('role');
+      localStorage.removeItem('isLogged');
       set({ isAuthenticated: false, user: null, role: null, isLoading: false });
     }
   },

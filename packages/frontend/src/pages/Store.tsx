@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
-import { Button, Card, Badge, Modal, Toast } from '../components/ui';
+import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
 import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield } from 'lucide-react';
 
 interface IMerchant {
@@ -13,6 +13,21 @@ interface IMerchant {
   operatingHours: { open: string; close: string };
   address: { street: string; number: string; neighborhood: string; city: string };
   logoImage?: string;
+  isForceClosed?: boolean;
+}
+
+interface IOption {
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+}
+
+interface IOptionGroup {
+  name: string;
+  required: boolean;
+  minSelect: number;
+  maxSelect: number;
+  options: IOption[];
 }
 
 interface IProduct {
@@ -25,17 +40,41 @@ interface IProduct {
   stockQuantity: number;
   isPaused: boolean;
   image?: string;
+  optionGroups?: IOptionGroup[];
 }
 
 interface ICartItem {
+  cartId: string;
   product: IProduct;
   quantity: number;
+  chosenOptions?: { groupName: string; optionName: string; price: number }[];
+  notes?: string;
 }
 
 export const Store: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, role } = useAuthStore();
+  const { isAuthenticated, role, user, checkAuth } = useAuthStore();
+
+  const isStoreOpen = (): boolean => {
+    if (!merchant) return false;
+    if (merchant.isForceClosed) return false;
+    const hours = merchant.operatingHours;
+    if (!hours) return false;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [openH, openM] = hours.open.split(':').map(Number);
+    const [closeH, closeM] = hours.close.split(':').map(Number);
+
+    const openMinutes = openH * 60 + openM;
+    const closeMinutes = closeH * 60 + closeM;
+
+    if (closeMinutes < openMinutes) {
+      return (currentMinutes >= openMinutes || currentMinutes < closeMinutes);
+    } else {
+      return (currentMinutes >= openMinutes && currentMinutes < closeMinutes);
+    }
+  };
 
   const [merchant, setMerchant] = useState<IMerchant | null>(null);
   const [products, setProducts] = useState<IProduct[]>([]);
@@ -47,6 +86,26 @@ export const Store: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // States for Custom Product Details Modal
+  const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<{ groupName: string; optionName: string; price: number }[]>([]);
+  const [itemNotes, setItemNotes] = useState('');
+  const [itemQuantity, setItemQuantity] = useState(1);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // States for Checkout Delivery Details
+  const [complement, setComplement] = useState('');
+  const [referencePoint, setReferencePoint] = useState('');
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('principal');
+  const [addressNickname, setAddressNickname] = useState('');
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('');
+  const [stateCode, setStateCode] = useState('PR');
+  const [zipCode, setZipCode] = useState('');
+  const [saveThisAddress, setSaveThisAddress] = useState(false);
 
   useEffect(() => {
     const fetchStoreData = async () => {
@@ -75,33 +134,169 @@ export const Store: React.FC = () => {
     }
   }, [id]);
 
-  const handleAddToCart = (product: IProduct) => {
-    if (product.isPaused || product.stockQuantity <= 0) {
-      setToast({ message: 'Este produto está temporariamente indisponível ou esgotado', type: 'error' });
-      return;
-    }
-
-    setCart((prev) => {
-      const existing = prev.find(item => item.product._id === product._id);
-      if (existing) {
-        if (existing.quantity >= product.stockQuantity) {
-          setToast({ message: `Limite de estoque atingido (${product.stockQuantity} un.)`, type: 'error' });
-          return prev;
-        }
-        return prev.map(item => item.product._id === product._id ? { ...item, quantity: item.quantity + 1 } : item);
+  useEffect(() => {
+    if (selectedAddressId === 'principal') {
+      if (user?.address) {
+        setStreet(user.address.street || '');
+        setNumber(user.address.number || '');
+        setNeighborhood(user.address.neighborhood || '');
+        setCity(user.address.city || '');
+        setStateCode(user.address.state || 'PR');
+        setZipCode(user.address.zipCode || '');
+        setComplement(user.address.complement || '');
+        setReferencePoint(user.address.referencePoint || '');
       }
-      return [...prev, { product, quantity: 1 }];
+    } else if (selectedAddressId !== 'custom') {
+      const idx = parseInt(selectedAddressId, 10);
+      const addr = user?.savedAddresses?.[idx];
+      if (addr) {
+        setStreet(addr.street || '');
+        setNumber(addr.number || '');
+        setNeighborhood(addr.neighborhood || '');
+        setCity(addr.city || '');
+        setStateCode(addr.state || 'PR');
+        setZipCode(addr.zipCode || '');
+        setComplement(addr.complement || '');
+        setReferencePoint(addr.referencePoint || '');
+      }
+    } else {
+      setStreet('');
+      setNumber('');
+      setNeighborhood('');
+      setCity('');
+      setStateCode('PR');
+      setZipCode('');
+      setComplement('');
+      setReferencePoint('');
+      setAddressNickname('');
+    }
+  }, [selectedAddressId, user]);
+
+  const isSameOptions = (
+    opt1?: { groupName: string; optionName: string; price: number }[],
+    opt2?: { groupName: string; optionName: string; price: number }[]
+  ): boolean => {
+    const list1 = opt1 || [];
+    const list2 = opt2 || [];
+    if (list1.length !== list2.length) return false;
+    
+    const sorted1 = [...list1].sort((a, b) => a.optionName.localeCompare(b.optionName));
+    const sorted2 = [...list2].sort((a, b) => a.optionName.localeCompare(b.optionName));
+    
+    for (let i = 0; i < sorted1.length; i++) {
+      if (sorted1[i].groupName !== sorted2[i].groupName || sorted1[i].optionName !== sorted2[i].optionName) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleSelectOption = (group: IOptionGroup, option: IOption) => {
+    setSelectedOptions((prev) => {
+      const otherGroupsOptions = prev.filter(o => o.groupName !== group.name);
+      const thisGroupOptions = prev.filter(o => o.groupName === group.name);
+      const alreadySelected = thisGroupOptions.find(o => o.optionName === option.name);
+
+      if (group.maxSelect === 1) {
+        if (alreadySelected) {
+          if (!group.required) {
+            return otherGroupsOptions;
+          }
+          return prev;
+        } else {
+          return [...otherGroupsOptions, { groupName: group.name, optionName: option.name, price: option.price }];
+        }
+      } else {
+        if (alreadySelected) {
+          return prev.filter(o => !(o.groupName === group.name && o.optionName === option.name));
+        } else {
+          if (thisGroupOptions.length >= group.maxSelect) {
+            setToast({ message: `Você pode escolher no máximo ${group.maxSelect} opções para ${group.name}`, type: 'error' });
+            return prev;
+          }
+          return [...prev, { groupName: group.name, optionName: option.name, price: option.price }];
+        }
+      }
     });
   };
 
-  const handleRemoveFromCart = (productId: string) => {
-    setCart((prev) => {
-      const existing = prev.find(item => item.product._id === productId);
-      if (existing?.quantity === 1) {
-        return prev.filter(item => item.product._id !== productId);
+  const handleAddCustomToCart = () => {
+    if (!selectedProduct) return;
+
+    if (selectedProduct.optionGroups) {
+      for (const group of selectedProduct.optionGroups) {
+        if (group.required) {
+          const selectedInGroup = selectedOptions.filter(o => o.groupName === group.name);
+          if (selectedInGroup.length === 0) {
+            setToast({ message: `Por favor, selecione uma opção para "${group.name}"`, type: 'error' });
+            return;
+          }
+        }
       }
-      return prev.map(item => item.product._id === productId ? { ...item, quantity: item.quantity - 1 } : item);
+    }
+
+    setCart((prev) => {
+      const existing = prev.find(item => 
+        item.product._id === selectedProduct._id && 
+        isSameOptions(item.chosenOptions, selectedOptions) && 
+        (item.notes || '') === (itemNotes || '')
+      );
+
+      if (existing) {
+        const newQty = existing.quantity + itemQuantity;
+        if (selectedProduct.stockQuantity && newQty > selectedProduct.stockQuantity) {
+          setToast({ message: `Limite de estoque atingido (${selectedProduct.stockQuantity} un.)`, type: 'error' });
+          return prev;
+        }
+        return prev.map(item => 
+          item.cartId === existing.cartId 
+            ? { ...item, quantity: newQty } 
+            : item
+        );
+      }
+
+      const cartId = `${selectedProduct._id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      return [...prev, {
+        cartId,
+        product: selectedProduct,
+        quantity: itemQuantity,
+        chosenOptions: [...selectedOptions],
+        notes: itemNotes
+      }];
     });
+
+    setToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
+    setIsDetailsModalOpen(false);
+  };
+
+  const handleUpdateCartQty = (cartId: string, delta: number) => {
+    setCart((prev) => {
+      const existing = prev.find(item => item.cartId === cartId);
+      if (!existing) return prev;
+
+      const newQty = existing.quantity + delta;
+      if (newQty <= 0) {
+        const updated = prev.filter(item => item.cartId !== cartId);
+        if (updated.length === 0) {
+          setIsCheckingOut(false);
+        }
+        return updated;
+      }
+
+      if (delta > 0 && existing.product.stockQuantity && newQty > existing.product.stockQuantity) {
+        setToast({ message: `Limite de estoque atingido (${existing.product.stockQuantity} un.)`, type: 'error' });
+        return prev;
+      }
+
+      return prev.map(item => item.cartId === cartId ? { ...item, quantity: newQty } : item);
+    });
+  };
+
+  const getItemTotalPrice = (item: ICartItem): number => {
+    const optionsPrice = item.chosenOptions 
+      ? item.chosenOptions.reduce((sum, opt) => sum + opt.price, 0)
+      : 0;
+    return item.product.price + optionsPrice;
   };
 
   // Obtém lista única de categorias presentes nos produtos cadastrados
@@ -116,7 +311,7 @@ export const Store: React.FC = () => {
     return matchesSearch && matchesCategory && isVisible;
   });
 
-  const cartTotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+  const cartTotal = cart.reduce((total, item) => total + (getItemTotalPrice(item) * item.quantity), 0);
   const deliveryFee = 5.00;
   const grandTotal = cartTotal + deliveryFee;
 
@@ -132,16 +327,52 @@ export const Store: React.FC = () => {
       return;
     }
 
+    if (!street || !number || !neighborhood || !city || !zipCode) {
+      setToast({ message: 'Preencha todos os campos obrigatórios do endereço', type: 'error' });
+      return;
+    }
+
     try {
+      const targetAddress = {
+        street,
+        number,
+        neighborhood,
+        city,
+        state: stateCode,
+        zipCode,
+        complement,
+        referencePoint
+      };
+
+      if (selectedAddressId === 'custom' && saveThisAddress) {
+        if (!addressNickname) {
+          setToast({ message: 'Digite um apelido para o novo endereço (Ex: Trabalho)', type: 'error' });
+          return;
+        }
+
+        const newSavedAddresses = [
+          ...(user?.savedAddresses || []),
+          { nickname: addressNickname, ...targetAddress }
+        ];
+
+        await apiClient.put(`/customers/${user?._id}/profile`, {
+          savedAddresses: newSavedAddresses
+        });
+        await checkAuth();
+      }
+
       const orderItems = cart.map(item => ({
         productId: item.product._id,
-        quantity: item.quantity
+        quantity: item.quantity,
+        chosenOptions: item.chosenOptions || [],
+        notes: item.notes || ''
       }));
 
       const res = await apiClient.post('/orders', {
         merchantId: merchant?._id,
         items: orderItems,
-        paymentMethod
+        paymentMethod,
+        deliveryAddress: targetAddress
       });
 
       if (res.data?.status === 'success') {
@@ -158,10 +389,35 @@ export const Store: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-energy"></div>
-          <p className="text-sm text-slate-500">Buscando cardápio do estabelecimento...</p>
+      <div className="space-y-8 animate-pulse">
+        {/* Store Header Skeleton */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-100 dark:border-slate-800/80 flex flex-col md:flex-row gap-6 items-center">
+          <div className="w-24 h-24 rounded-2xl bg-slate-200 dark:bg-slate-850 flex-shrink-0"></div>
+          <div className="flex-1 space-y-3 w-full">
+            <div className="h-6 bg-slate-200 dark:bg-slate-850 rounded w-1/3"></div>
+            <div className="h-4 bg-slate-200 dark:bg-slate-850 rounded w-1/4"></div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <div className="h-5 bg-slate-200 dark:bg-slate-850 rounded-full w-24"></div>
+              <div className="h-5 bg-slate-200 dark:bg-slate-850 rounded-full w-20"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Product Grid Skeleton */}
+        <div className="space-y-4">
+          <div className="h-6 bg-slate-200 dark:bg-slate-850 rounded w-1/6 mb-4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[1, 2, 3, 4].map((n) => (
+              <Card key={n} className="flex gap-4 p-4 border border-slate-100 dark:border-slate-800/80 items-center">
+                <div className="flex-1 space-y-3">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-850 rounded w-2/3"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-850 rounded w-full"></div>
+                  <div className="h-4 bg-slate-200 dark:bg-slate-850 rounded w-1/4 pt-1"></div>
+                </div>
+                <div className="w-20 h-20 rounded-xl bg-slate-200 dark:bg-slate-850 flex-shrink-0"></div>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -210,6 +466,9 @@ export const Store: React.FC = () => {
               <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">{merchant.name}</h1>
               <Badge variant={merchant.category === 'Comida' ? 'orange' : merchant.category === 'Farmácia' ? 'blue' : merchant.category === 'Construção' ? 'green' : 'gray'}>
                 {merchant.category}
+              </Badge>
+              <Badge variant={isStoreOpen() ? 'green' : 'red'}>
+                {isStoreOpen() ? 'Aberto Agora' : 'Fechado no Momento'}
               </Badge>
             </div>
             
@@ -293,7 +552,9 @@ export const Store: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredProducts.map((product) => {
-                const cartItem = cart.find(item => item.product._id === product._id);
+                const productCartCount = cart
+                  .filter(item => item.product._id === product._id)
+                  .reduce((sum, item) => sum + item.quantity, 0);
                 const isOutOfStock = product.stockQuantity <= 0;
                 const isItemPaused = product.isPaused;
                 const isDisabled = isOutOfStock || isItemPaused;
@@ -326,35 +587,26 @@ export const Store: React.FC = () => {
                     </div>
                     
                     <div className="flex items-center justify-between border-t border-slate-50 dark:border-slate-800 pt-3 mt-4">
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1.5">
                         {isDisabled ? 'Esgotado' : `Estoque: ${product.stockQuantity} un.`}
+                        {productCartCount > 0 && (
+                          <Badge variant="orange">{productCartCount} no carrinho</Badge>
+                        )}
                       </span>
                       <div>
-                        {cartItem ? (
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => handleRemoveFromCart(product._id)} 
-                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
-                            >
-                              <Minus size={15} />
-                            </button>
-                            <span className="text-xs font-black px-1.5">{cartItem.quantity}</span>
-                            <button 
-                              onClick={() => handleAddToCart(product)} 
-                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
-                            >
-                              <Plus size={15} />
-                            </button>
-                          </div>
-                        ) : (
-                          <Button 
-                            size="sm" 
-                            disabled={isDisabled}
-                            onClick={() => handleAddToCart(product)}
-                          >
-                            Adicionar
-                          </Button>
-                        )}
+                        <Button 
+                          size="sm" 
+                          disabled={isDisabled}
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setSelectedOptions([]);
+                            setItemNotes('');
+                            setItemQuantity(1);
+                            setIsDetailsModalOpen(true);
+                          }}
+                        >
+                          {productCartCount > 0 ? 'Adicionar mais' : 'Adicionar'}
+                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -386,8 +638,12 @@ export const Store: React.FC = () => {
               <span className="text-xs text-slate-400 dark:text-slate-500 hidden md:block">
                 Taxa de entrega R$ 5,00 inclusa no checkout
               </span>
-              <Button size="lg" onClick={() => setIsCheckingOut(true)}>
-                Revisar e Finalizar
+              <Button 
+                size="lg" 
+                disabled={!isStoreOpen()}
+                onClick={() => setIsCheckingOut(true)}
+              >
+                {isStoreOpen() ? 'Revisar e Finalizar' : 'Estabelecimento Fechado 🚫'}
               </Button>
             </div>
           </div>
@@ -406,13 +662,207 @@ export const Store: React.FC = () => {
 
           <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Resumo do Carrinho</h4>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {cart.map((item) => (
-                <div key={item.product._id} className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
-                  <span>{item.quantity}x {item.product.name}</span>
-                  <span className="font-semibold">R$ {(item.product.price * item.quantity).toFixed(2)}</span>
-                </div>
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+              {cart.map((item) => {
+                const itemPrice = getItemTotalPrice(item);
+                return (
+                  <div key={item.cartId} className="flex flex-col gap-1 pb-3 border-b border-slate-100 dark:border-slate-800/60 last:border-0 last:pb-0">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="space-y-0.5 flex-1">
+                        <p className="text-sm font-bold text-slate-800 dark:text-white">{item.product.name}</p>
+                        {item.chosenOptions && item.chosenOptions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {item.chosenOptions.map((opt, idx) => (
+                              <Badge key={`${opt.optionName}-${idx}`} variant="gray">
+                                {opt.optionName} {opt.price > 0 && `(+R$ ${opt.price.toFixed(2)})`}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {item.notes && (
+                          <p className="text-xs italic text-slate-500 dark:text-slate-400 mt-1">
+                            Obs: "{item.notes}"
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-sm font-black text-energy">
+                        R$ {(itemPrice * item.quantity).toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-[10px] text-slate-400">
+                        Valor unitário: R$ {itemPrice.toFixed(2)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCartQty(item.cartId, -1)}
+                          className="p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="text-xs font-black px-1.5">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCartQty(item.cartId, 1)}
+                          className="p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Delivery Address Details */}
+          <div className="space-y-4 border-t border-b border-slate-100 dark:border-slate-800/80 py-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Endereço de Entrega
+            </h4>
+            
+            {/* Address Nicknames Selector */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setSelectedAddressId('principal')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  selectedAddressId === 'principal'
+                    ? 'border-energy bg-energy/5 text-energy shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                Principal (Casa)
+              </button>
+
+              {user?.savedAddresses?.map((addr, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedAddressId(String(idx))}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                    selectedAddressId === String(idx)
+                      ? 'border-energy bg-energy/5 text-energy shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  {addr.nickname}
+                </button>
               ))}
+
+              <button
+                type="button"
+                onClick={() => setSelectedAddressId('custom')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                  selectedAddressId === 'custom'
+                    ? 'border-energy bg-energy/5 text-energy shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                + Outro Endereço
+              </button>
+            </div>
+
+            {selectedAddressId === 'custom' ? (
+              <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-850/40 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Apelido do Endereço *"
+                    placeholder="Ex: Trabalho, Minha Casa"
+                    value={addressNickname}
+                    onChange={(e) => setAddressNickname(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="CEP *"
+                    placeholder="Ex: 87103-000"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-3">
+                    <Input
+                      label="Rua *"
+                      placeholder="Ex: Av. Brasil"
+                      value={street}
+                      onChange={(e) => setStreet(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <Input
+                      label="Número *"
+                      placeholder="Ex: 123"
+                      value={number}
+                      onChange={(e) => setNumber(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Input
+                    label="Bairro *"
+                    placeholder="Ex: Centro"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Cidade *"
+                    placeholder="Ex: Maringá"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Estado *"
+                    placeholder="Ex: PR"
+                    maxLength={2}
+                    value={stateCode}
+                    onChange={(e) => setStateCode(e.target.value.toUpperCase())}
+                    required
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-1.5">
+                  <input
+                    type="checkbox"
+                    id="saveAddressCheckbox"
+                    checked={saveThisAddress}
+                    onChange={(e) => setSaveThisAddress(e.target.checked)}
+                    className="rounded text-energy focus:ring-energy border-slate-300 dark:border-slate-800"
+                  />
+                  <label htmlFor="saveAddressCheckbox" className="text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer">
+                    Salvar este endereço no meu perfil
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 dark:bg-slate-850/40 rounded-2xl border border-slate-100 dark:border-slate-800/50 text-xs text-slate-600 dark:text-slate-400">
+                <span className="font-bold text-slate-800 dark:text-white block mb-1">
+                  Endereço selecionado:
+                </span>
+                {street}, {number} - {neighborhood}, {city} - {stateCode} (CEP: {zipCode})
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Complemento"
+                placeholder="Ex: Apto 302, Bloco B"
+                value={complement}
+                onChange={(e) => setComplement(e.target.value)}
+              />
+              <Input
+                label="Ponto de Referência"
+                placeholder="Ex: Próximo à padaria"
+                value={referencePoint}
+                onChange={(e) => setReferencePoint(e.target.value)}
+              />
             </div>
           </div>
 
@@ -455,10 +905,152 @@ export const Store: React.FC = () => {
             </div>
           </div>
 
-          <Button fullWidth size="lg" onClick={handleCheckout}>
-            Confirmar e Enviar Pedido
+          <Button 
+            fullWidth 
+            size="lg" 
+            disabled={!isStoreOpen()}
+            onClick={handleCheckout}
+          >
+            {isStoreOpen() ? 'Confirmar e Enviar Pedido' : 'Estabelecimento Fechado'}
           </Button>
         </div>
+      </Modal>
+
+      {/* Product Details Customization Modal */}
+      <Modal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} title="Personalizar Produto">
+        {selectedProduct && (
+          <div className="space-y-6">
+            {/* Product Header */}
+            <div className="flex gap-4 border-b border-slate-150 dark:border-slate-800/80 pb-4">
+              {selectedProduct.image && (
+                <img 
+                  src={selectedProduct.image} 
+                  alt={selectedProduct.name} 
+                  className="w-20 h-20 rounded-xl object-cover bg-slate-50 border border-slate-100"
+                />
+              )}
+              <div className="flex-1 space-y-1">
+                <h4 className="font-bold text-base text-slate-800 dark:text-white">{selectedProduct.name}</h4>
+                <p className="text-xs text-slate-400 line-clamp-2">{selectedProduct.description}</p>
+                <p className="text-sm font-extrabold text-energy mt-1">Base: R$ {selectedProduct.price.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Option Groups */}
+            {selectedProduct.optionGroups && selectedProduct.optionGroups.length > 0 && (
+              <div className="space-y-6">
+                {selectedProduct.optionGroups.map((group) => {
+                  return (
+                    <div key={group.name} className="space-y-2.5">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h5 className="text-sm font-extrabold text-slate-800 dark:text-white">{group.name}</h5>
+                          <span className="text-[10px] text-slate-400">
+                            {group.maxSelect === 1 ? 'Selecione 1 opção' : `Selecione até ${group.maxSelect} opções`}
+                          </span>
+                        </div>
+                        {group.required ? (
+                          <Badge variant="orange">Obrigatório</Badge>
+                        ) : (
+                          <Badge variant="gray">Opcional</Badge>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {group.options.map((option) => {
+                          const isSelected = selectedOptions.some(
+                            o => o.groupName === group.name && o.optionName === option.name
+                          );
+
+                          return (
+                            <button
+                              key={option.name}
+                              type="button"
+                              onClick={() => handleSelectOption(group, option)}
+                              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left text-xs font-bold transition-all ${
+                                isSelected
+                                  ? 'border-energy bg-energy/5 text-slate-850 dark:text-white'
+                                  : 'border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850/50 text-slate-500'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={`w-4 h-4 border flex items-center justify-center transition-all ${
+                                  group.maxSelect === 1 ? 'rounded-full' : 'rounded-md'
+                                } ${
+                                  isSelected
+                                    ? 'border-energy bg-energy text-white scale-110'
+                                    : 'border-slate-350 dark:border-slate-700 bg-transparent'
+                                }`}>
+                                  {isSelected && (
+                                    <div className={`w-1.5 h-1.5 bg-white ${
+                                      group.maxSelect === 1 ? 'rounded-full' : 'rounded-sm'
+                                    }`} />
+                                  )}
+                                </div>
+                                <span>{option.name}</span>
+                              </div>
+                              {option.price > 0 && (
+                                <span className="text-xs font-black text-energy">+ R$ {option.price.toFixed(2)}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Custom Notes */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Observações do Item
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Ex: Tirar cebola, sem maionese, ponto bem passado, etc."
+                value={itemNotes}
+                onChange={(e) => setItemNotes(e.target.value)}
+                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-xs focus:ring-4 transition-all duration-200 outline-none dark:text-white resize-none"
+              />
+            </div>
+
+            {/* Quantity Stepper & Add Button */}
+            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-4 mt-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setItemQuantity(prev => Math.max(1, prev - 1))}
+                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="text-sm font-black px-2">{itemQuantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setItemQuantity(prev => {
+                    if (selectedProduct.stockQuantity && prev >= selectedProduct.stockQuantity) {
+                      setToast({ message: `Limite de estoque atingido (${selectedProduct.stockQuantity} un.)`, type: 'error' });
+                      return prev;
+                    }
+                    return prev + 1;
+                  })}
+                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              <Button
+                size="lg"
+                onClick={handleAddCustomToCart}
+              >
+                Adicionar • R$ {((selectedProduct.price + selectedOptions.reduce((sum, o) => sum + o.price, 0)) * itemQuantity).toFixed(2)}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Toast notifications */}

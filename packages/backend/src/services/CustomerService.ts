@@ -1,5 +1,5 @@
 import { Customer, ICustomerDocument } from '../models/Customer';
-import { IAddress } from '../types';
+import { IAddress, ISavedAddress } from '../types';
 
 export class CustomerService {
   public static async listCustomers(): Promise<ICustomerDocument[]> {
@@ -10,7 +10,7 @@ export class CustomerService {
     return await Customer.findById(id, { passwordHash: 0 });
   }
 
-  public static async updateProfile(id: string, data: { name?: string; phone?: string }): Promise<ICustomerDocument | null> {
+  public static async updateProfile(id: string, data: { name?: string; phone?: string; savedAddresses?: ISavedAddress[] }): Promise<ICustomerDocument | null> {
     return await Customer.findByIdAndUpdate(
       id,
       { $set: data },

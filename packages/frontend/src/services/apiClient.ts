@@ -7,6 +7,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Interceptor para adicionar o token de acesso
@@ -31,28 +32,38 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem('refreshToken');
 
-      if (refreshToken) {
-        try {
-          // Faz a requisição de refresh
-          const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+      try {
+        // Faz a requisição de refresh (se usar cookies, o cookie de refreshToken é enviado automaticamente)
+        const res = await axios.post(
+          `${API_URL}/auth/refresh`,
+          refreshToken ? { refreshToken } : {},
+          { withCredentials: true }
+        );
+        
+        if (res.data?.status === 'success') {
+          const { accessToken, refreshToken: newRefreshToken } = res.data.data;
           
-          if (res.data?.status === 'success') {
-            const { accessToken, refreshToken: newRefreshToken } = res.data.data;
-            
-            // Salva novos tokens
+          // Se retornou tokens no JSON (para testes/clientes CLI), salva
+          if (accessToken) {
             localStorage.setItem('accessToken', accessToken);
-            localStorage.setItem('refreshToken', newRefreshToken);
-            
-            // Refaz a requisição original com o novo token
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-            return apiClient(originalRequest);
           }
-        } catch (refreshError) {
-          // Se falhar o refresh (expirado também), força logout
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
+          if (newRefreshToken) {
+            localStorage.setItem('refreshToken', newRefreshToken);
+          }
+          
+          // Refaz a requisição original
+          if (accessToken && originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          }
+          return apiClient(originalRequest);
         }
+      } catch (refreshError) {
+        // Se falhar o refresh, força logout local
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('role');
+        localStorage.removeItem('isLogged');
+        window.location.href = '/login';
       }
     }
 

@@ -24,7 +24,11 @@ async function runTestFlow() {
       throw new Error('Seed data missing. Please run seed script first.');
     }
 
-    const product = await Product.findOne({ merchantId: merchant._id });
+    // Assegura que o lojista está com as portas abertas no horário de execução para o teste passar
+    merchant.operatingHours = { open: '00:00', close: '23:59' };
+    await merchant.save();
+
+    const product = await Product.findOne({ name: 'Pizza Calabresa Grande', merchantId: merchant._id });
     if (!product) {
       throw new Error('Product data missing.');
     }
@@ -83,10 +87,31 @@ async function runTestFlow() {
     const order = await OrderService.createOrder(
       customer._id.toString(),
       merchant._id.toString(),
-      [{ productId: product._id.toString(), quantity: 2 }],
+      [{
+        productId: product._id.toString(),
+        quantity: 2,
+        chosenOptions: [
+          { groupName: 'Borda', optionName: 'Borda de Catupiry', price: 5.00 },
+          { groupName: 'Adicionais', optionName: 'Bacon extra', price: 4.00 }
+        ],
+        notes: 'Sem cebola, por favor'
+      }],
       'PIX'
     );
     logger.info(`Pedido nº ${order._id} criado com status ${order.status}`);
+    logger.info(`Preço base do produto: R$ ${product.price.toFixed(2)}`);
+    logger.info(`Subtotal calculado pelo serviço: R$ ${order.subtotal.toFixed(2)}`);
+    logger.info(`Total calculado pelo serviço: R$ ${order.total.toFixed(2)}`);
+
+    // Valida o cálculo do subtotal e total
+    // Preço item = 45.00 (base) + 5.00 (borda) + 4.00 (bacon) = 54.00. Para Qtd = 2: 108.00.
+    // Total = 108.00 (subtotal) + 5.00 (deliveryFee) = 113.00.
+    const expectedSubtotal = 108.00;
+    const expectedTotal = 113.00;
+    if (order.subtotal !== expectedSubtotal || order.total !== expectedTotal) {
+      throw new Error(`Cálculo de valores incorreto! Esperado subtotal/total: R$ ${expectedSubtotal}/R$ ${expectedTotal}, mas obteve R$ ${order.subtotal}/R$ ${order.total}`);
+    }
+    logger.info('✅ Validação de preços e opcionais passou com sucesso!');
 
     // Verifica se a notificação de criação foi enfileirada
     let notifications = await Notification.find({ userId: customer._id }).sort({ createdAt: -1 });

@@ -19,13 +19,16 @@ export class NotificationService {
   /**
    * Envia uma notificação assíncrona colocando-a na fila
    */
-  public static async queueNotification(data: {
-    userId: string;
-    userType: 'Customer' | 'Merchant' | 'Deliverer';
-    type: 'WhatsApp' | 'Email' | 'SMS';
-    target: string;
-    content: string;
-  }): Promise<void> {
+  public static async queueNotification(
+    data: {
+      userId: string;
+      userType: 'Customer' | 'Merchant' | 'Deliverer';
+      type: 'WhatsApp' | 'Email' | 'SMS';
+      target: string;
+      content: string;
+    },
+    session?: any
+  ): Promise<string> {
     // 1. Cria o registro de notificação pendente no MongoDB
     const notification = new Notification({
       userId: new Types.ObjectId(data.userId),
@@ -37,16 +40,36 @@ export class NotificationService {
       attempts: 0
     });
 
-    await notification.save();
+    await notification.save(session ? { session } : undefined);
 
-    // 2. Adiciona o job na fila do Bull com retry exponencial
+    // 2. Só enfileira no Bull imediatamente se não houver transação ativa
+    if (!session) {
+      await notificationQueue.add(
+        { notificationId: notification._id.toString() },
+        {
+          attempts: 5,
+          backoff: {
+            type: 'exponential',
+            delay: 1000 // 1s, 2s, 4s, 8s, 16s...
+          }
+        }
+      );
+    }
+
+    return notification._id.toString();
+  }
+
+  /**
+   * Adiciona o job de notificação na fila do Bull (utilizado pós-commit de transações)
+   */
+  public static async addJobToQueue(notificationId: string): Promise<void> {
     await notificationQueue.add(
-      { notificationId: notification._id.toString() },
+      { notificationId },
       {
         attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 1000 // 1s, 2s, 4s, 8s, 16s...
+          delay: 1000
         }
       }
     );

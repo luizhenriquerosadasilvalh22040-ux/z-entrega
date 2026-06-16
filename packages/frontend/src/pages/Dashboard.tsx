@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
-  AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save 
+  AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
+  Volume2, VolumeX, Printer
 } from 'lucide-react';
+import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 
 interface IOrder {
@@ -37,6 +39,7 @@ interface IProduct {
   stockQuantity: number;
   isPaused: boolean;
   image?: string;
+  optionGroups?: any[];
 }
 
 export const Dashboard: React.FC = () => {
@@ -61,6 +64,7 @@ export const Dashboard: React.FC = () => {
     category: '',
     image: '',
     stockQuantity: 99,
+    optionGroups: [] as any[]
   });
 
   // Estados das Configurações do Lojista
@@ -70,6 +74,136 @@ export const Dashboard: React.FC = () => {
     close: '22:00',
     paymentMethods: [] as string[]
   });
+
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('alarmMuted') === 'true');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Conexão socket.io em tempo real
+  useEffect(() => {
+    if (!user?._id) return;
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    const socketUrl = API_URL.replace('/api', '');
+    const socket = io(socketUrl);
+
+    socket.emit('joinMerchantRoom', user._id);
+
+    socket.on('newOrder', (newOrder: IOrder) => {
+      setOrders((prev) => {
+        if (prev.some(o => o._id === newOrder._id)) return prev;
+        return [newOrder, ...prev];
+      });
+      setStats((prev) => ({
+        ...prev,
+        pendingOrders: prev.pendingOrders + 1,
+        totalOrders: prev.totalOrders + 1
+      }));
+      setToast({ message: 'Novo pedido recebido! 🔔', type: 'success' });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?._id]);
+
+  // Polling como backup em caso de queda de websocket
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'merchant') return;
+    
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, role]);
+
+  const pendingOrders = orders.filter((o) => o.status === 'PENDING');
+
+  // Controle de áudio do alarme
+  useEffect(() => {
+    const playAlarm = async () => {
+      if (pendingOrders.length > 0 && !isMuted) {
+        if (!audioRef.current) {
+          audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav');
+          audioRef.current.loop = true;
+        }
+        try {
+          await audioRef.current.play();
+        } catch (err) {
+          console.warn("Autoplay block: interação necessária do usuário para som de alarme");
+        }
+      } else {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+      }
+    };
+
+    playAlarm();
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [pendingOrders.length, isMuted]);
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const nextVal = !prev;
+      localStorage.setItem('alarmMuted', String(nextVal));
+      return nextVal;
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      const { compressImage } = await import('../utils/imageCompressor');
+      const compressedBase64 = await compressImage(file, 800, 800, 0.7);
+
+      const response = await apiClient.post('/upload', { image: compressedBase64 });
+      if (response.data?.status === 'success') {
+        const fileUrl = response.data.data.url;
+        setProductForm(prev => ({ ...prev, image: fileUrl }));
+        setToast({ message: 'Imagem carregada com sucesso!', type: 'success' });
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Erro ao fazer upload da imagem';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingLogo(true);
+      const { compressImage } = await import('../utils/imageCompressor');
+      const compressedBase64 = await compressImage(file, 800, 800, 0.7);
+
+      const response = await apiClient.post('/upload', { image: compressedBase64 });
+      if (response.data?.status === 'success') {
+        const fileUrl = response.data.data.url;
+        setSettingsForm(prev => ({ ...prev, logoImage: fileUrl }));
+        setToast({ message: 'Logo carregada com sucesso!', type: 'success' });
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Erro ao fazer upload da logo';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -153,6 +287,7 @@ export const Dashboard: React.FC = () => {
       category: productForm.category,
       image: productForm.image || undefined,
       stockQuantity: Number(productForm.stockQuantity),
+      optionGroups: productForm.optionGroups || []
     };
 
     try {
@@ -253,8 +388,152 @@ export const Dashboard: React.FC = () => {
     });
   };
 
-  // Separa pedidos pendentes e ativos
-  const pendingOrders = orders.filter(o => o.status === 'PENDING');
+  const handleToggleForceClose = async () => {
+    if (!user) return;
+    try {
+      const newStatus = !user.isForceClosed;
+      const res = await apiClient.put(`/merchants/${user._id}/profile`, { isForceClosed: newStatus });
+      if (res.data?.status === 'success') {
+        setToast({ 
+          message: newStatus 
+            ? 'Estabelecimento FECHADO manualmente!' 
+            : 'Estabelecimento ABERTO para vendas!', 
+          type: 'success' 
+        });
+        await checkAuth();
+      }
+    } catch (err) {
+      setToast({ message: 'Erro ao alterar o status de funcionamento', type: 'error' });
+    }
+  };
+
+  const handlePrintOrder = (order: any) => {
+    const printWindow = window.open('', '_blank', 'width=350,height=600');
+    if (!printWindow) {
+      setToast({ message: 'Erro ao abrir janela de impressão. Verifique se o bloqueador de popups está ativado.', type: 'error' });
+      return;
+    }
+
+    const itemsHtml = order.items.map((item: any) => {
+      const optionsStr = item.chosenOptions && item.chosenOptions.length > 0
+        ? `<div style="font-size: 11px; margin-left: 10px; font-style: italic;">
+             ${item.chosenOptions.map((opt: any) => `- ${opt.groupName}: ${opt.optionName} (+R$ ${opt.price.toFixed(2)})`).join('<br/>')}
+           </div>`
+        : '';
+      const notesStr = item.notes
+        ? `<div style="font-size: 11px; margin-left: 10px; font-weight: bold; background-color: #eee; padding: 2px;">
+             Obs: ${item.notes}
+           </div>`
+        : '';
+
+      return `
+        <div style="margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span><b>${item.quantity}x</b> ${item.name}</span>
+            <span>R$ ${(item.price * item.quantity).toFixed(2)}</span>
+          </div>
+          ${optionsStr}
+          ${notesStr}
+        </div>
+      `;
+    }).join('');
+
+    const formattedDate = new Date(order.createdAt).toLocaleString('pt-BR');
+
+    const address = order.deliveryAddress;
+    const addressStr = address
+      ? `${address.street}, ${address.number}<br/>
+         Bairro: ${address.neighborhood}<br/>
+         Cidade: ${address.city}<br/>
+         ${address.complement ? `<b>Complemento:</b> ${address.complement}<br/>` : ''}
+         ${address.referencePoint ? `<b>Referência:</b> ${address.referencePoint}<br/>` : ''}`
+      : 'Retirada no Balcão';
+
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Comanda - Pedido #${order._id.substring(order._id.length - 6)}</title>
+        <style>
+          @media print {
+            body { margin: 0; padding: 10px; }
+          }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #000;
+            background: #fff;
+            line-height: 1.4;
+            max-width: 300px;
+            margin: 0 auto;
+            padding: 15px;
+          }
+          .text-center { text-align: center; }
+          .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+          .totals-table { width: 100%; font-size: 12px; }
+          .totals-table td { padding: 2px 0; }
+          .bold { font-weight: bold; }
+        </style>
+      </head>
+      <body onload="window.print(); window.close();">
+        <div class="text-center">
+          <h2 style="margin: 0; font-size: 16px;">${user?.name}</h2>
+          <p style="margin: 3px 0; font-size: 11px;">Delivery Rápido</p>
+          <p style="margin: 3px 0; font-size: 12px;"><b>PEDIDO: #${order._id.substring(order._id.length - 6).toUpperCase()}</b></p>
+          <span style="font-size: 10px;">${formattedDate}</span>
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div>
+          <b>CLIENTE:</b> ${order.customerId?.name || 'Cliente'}<br/>
+          <b>CONTATO:</b> ${order.customerId?.phone || ''}<br/>
+          <b>PAGAMENTO:</b> ${order.paymentMethod}
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div>
+          <b>ENDEREÇO DE ENTREGA:</b><br/>
+          ${addressStr}
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div style="margin-top: 10px;">
+          <b style="display: block; margin-bottom: 5px;">ITENS:</b>
+          ${itemsHtml}
+        </div>
+        
+        <div class="divider"></div>
+        
+        <table class="totals-table">
+          <tr>
+            <td>Subtotal:</td>
+            <td align="right">R$ ${order.subtotal.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Taxa de Entrega:</td>
+            <td align="right">R$ ${order.deliveryFee.toFixed(2)}</td>
+          </tr>
+          <tr class="bold">
+            <td>TOTAL GERAL:</td>
+            <td align="right" style="font-size: 14px;">R$ ${order.total.toFixed(2)}</td>
+          </tr>
+        </table>
+        
+        <div class="divider"></div>
+        
+        <div class="text-center" style="font-size: 10px; margin-top: 15px;">
+          Obrigado pela preferência!
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  };
+
+  // Separa pedidos ativos
   const activeOrders = orders.filter(o => ['ACCEPTED', 'PREPARING', 'READY', 'DISPATCHED', 'IN_TRANSIT'].includes(o.status));
 
   // Helper para obter o próximo status
@@ -282,38 +561,61 @@ export const Dashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab Selector Links */}
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/20">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Manual Open/Closed Toggle */}
           <button
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'orders'
-                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-450'
+            type="button"
+            onClick={handleToggleForceClose}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border shadow-sm ${
+              user?.isForceClosed
+                ? 'border-red-200 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100/50'
+                : 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50'
             }`}
           >
-            <ShoppingCart size={14} /> Pedidos
+            <span className="relative flex h-2.5 w-2.5">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                user?.isForceClosed ? 'bg-red-400' : 'bg-emerald-400'
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                user?.isForceClosed ? 'bg-red-500' : 'bg-emerald-500'
+              }`}></span>
+            </span>
+            {user?.isForceClosed ? 'Loja Fechada (Clique para Abrir)' : 'Loja Aberta (Clique para Fechar)'}
           </button>
-          <button
-            onClick={() => setActiveTab('menu')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'menu'
-                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-450'
-            }`}
-          >
-            <MenuIcon size={14} /> Cardápio
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'settings'
-                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-450'
-            }`}
-          >
-            <Settings size={14} /> Configurações
-          </button>
+
+          {/* Tab Selector Links */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/20">
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'orders'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <ShoppingCart size={14} /> Pedidos
+            </button>
+            <button
+              onClick={() => setActiveTab('menu')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'menu'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <MenuIcon size={14} /> Cardápio
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'settings'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <Settings size={14} /> Configurações
+            </button>
+          </div>
         </div>
       </div>
 
@@ -372,18 +674,49 @@ export const Dashboard: React.FC = () => {
               
               {/* Pedidos Pendentes */}
               <div className="lg:col-span-1 space-y-4">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <AlertCircle size={20} className="text-yellow-500" /> Novos Pedidos ({pendingOrders.length})
-                </h3>
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <AlertCircle size={20} className="text-yellow-500" /> Novos Pedidos ({pendingOrders.length})
+                  </h3>
+                  {pendingOrders.length > 0 && (
+                    <button
+                      onClick={toggleMute}
+                      className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-energy transition-colors flex items-center gap-1 text-xs font-semibold"
+                      title={isMuted ? "Desmutar Alerta" : "Mutar Alerta"}
+                      aria-label={isMuted ? "Desmutar Alerta de Novos Pedidos" : "Mutar Alerta de Novos Pedidos"}
+                    >
+                      {isMuted ? (
+                        <>
+                          <VolumeX size={16} /> Mutado
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 size={16} className="animate-pulse text-energy" /> Tocando
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
                 
                 {pendingOrders.length === 0 ? (
                   <Card className="py-8 text-center text-slate-400">Nenhum novo pedido na fila.</Card>
                 ) : (
                   pendingOrders.map((order) => (
                     <Card key={order._id} className="border-l-4 border-l-yellow-500/60 space-y-4 shadow-sm">
-                      <div className="flex justify-between items-start">
+                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-extrabold text-slate-850 dark:text-white text-sm">{order.customerId?.name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-slate-850 dark:text-white text-sm">{order.customerId?.name}</h4>
+                            <button
+                              type="button"
+                              onClick={() => handlePrintOrder(order)}
+                              className="p-1 text-slate-400 hover:text-energy hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Imprimir Comanda"
+                              aria-label="Imprimir comanda térmica do pedido"
+                            >
+                              <Printer size={13} />
+                            </button>
+                          </div>
                           <p className="text-xs text-slate-400">{order.customerId?.phone}</p>
                         </div>
                         <div className="text-right">
@@ -431,7 +764,18 @@ export const Dashboard: React.FC = () => {
                           <div className="space-y-3">
                             <div className="flex justify-between items-start gap-2">
                               <div>
-                                <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">{order.customerId?.name}</h4>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">{order.customerId?.name}</h4>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePrintOrder(order)}
+                                    className="p-1 text-slate-400 hover:text-energy hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                                    title="Imprimir Comanda"
+                                    aria-label="Imprimir comanda térmica do pedido"
+                                  >
+                                    <Printer size={13} />
+                                  </button>
+                                </div>
                                 <span className="text-xs text-slate-400 block">{order.deliveryAddress?.street}, {order.deliveryAddress?.number}</span>
                               </div>
                               <Badge variant={order.status === 'READY' ? 'green' : 'orange'}>
@@ -474,7 +818,7 @@ export const Dashboard: React.FC = () => {
                 </h3>
                 <Button size="sm" onClick={() => {
                   setEditingProduct(null);
-                  setProductForm({ name: '', description: '', price: '', category: '', image: '', stockQuantity: 99 });
+                  setProductForm({ name: '', description: '', price: '', category: '', image: '', stockQuantity: 99, optionGroups: [] });
                   setIsProductModalOpen(true);
                 }} className="flex items-center gap-1.5">
                   <Plus size={16} /> Novo Produto
@@ -501,7 +845,7 @@ export const Dashboard: React.FC = () => {
                           <div className="space-y-1 flex-1">
                             <div className="flex items-start justify-between">
                               <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">{product.name}</h4>
-                              <Badge variant={product.isPaused || product.stockQuantity <= 0 ? 'danger' : 'gray'}>
+                              <Badge variant={product.isPaused || product.stockQuantity <= 0 ? 'red' : 'gray'}>
                                 {product.isPaused ? 'Pausado' : product.stockQuantity <= 0 ? 'Sem Estoque' : 'Ativo'}
                               </Badge>
                             </div>
@@ -537,11 +881,13 @@ export const Dashboard: React.FC = () => {
                               category: product.category,
                               image: product.image || '',
                               stockQuantity: product.stockQuantity,
+                              optionGroups: product.optionGroups || []
                             });
                             setIsProductModalOpen(true);
                           }}
                           className="p-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-350 transition-colors"
                           title="Editar produto"
+                          aria-label="Editar produto"
                         >
                           <Edit2 size={14} />
                         </button>
@@ -549,6 +895,7 @@ export const Dashboard: React.FC = () => {
                           onClick={() => handleDeleteProduct(product._id)}
                           className="p-2 border border-red-500/20 hover:bg-red-500/5 rounded-xl text-red-500 transition-colors"
                           title="Excluir produto"
+                          aria-label="Excluir produto"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -568,26 +915,44 @@ export const Dashboard: React.FC = () => {
               </h3>
 
               <form onSubmit={handleSaveSettings} className="space-y-5">
-                <Input
-                  label="URL da Logo / Imagem do Estabelecimento"
-                  placeholder="https://exemplo.com/logo.png"
-                  value={settingsForm.logoImage}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, logoImage: e.target.value })}
-                />
-                
-                {settingsForm.logoImage && (
-                  <div className="flex items-center gap-4 p-3 border border-slate-100 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-850/20">
-                    <img 
-                      src={settingsForm.logoImage} 
-                      alt="Preview logo" 
-                      className="w-16 h-16 rounded-xl object-cover bg-white"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                    <span className="text-xs text-slate-400">Pré-visualização do logo carregada</span>
+                <div className="flex flex-col mb-4">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    Imagem da Logo / Estabelecimento
+                  </label>
+                  <div className="flex gap-4 items-center">
+                    {settingsForm.logoImage ? (
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                        <img src={settingsForm.logoImage} alt="Logo Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setSettingsForm({ ...settingsForm, logoImage: '' })}
+                          className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-xs">
+                        Sem Logo
+                      </div>
+                    )}
+                    
+                    <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                      uploadingLogo
+                        ? 'opacity-50 pointer-events-none'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+                    }`}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                        disabled={uploadingLogo}
+                      />
+                      {uploadingLogo ? 'Carregando...' : 'Enviar Imagem'}
+                    </label>
                   </div>
-                )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <Input
@@ -688,12 +1053,201 @@ export const Dashboard: React.FC = () => {
               required
             />
 
-            <Input
-              label="URL da Imagem (opcional)"
-              placeholder="https://exemplo.com/coca.png"
-              value={productForm.image}
-              onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
-            />
+            <div className="flex flex-col mb-4 w-full">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Foto do Produto
+              </label>
+              <div className="flex gap-4 items-center">
+                {productForm.image ? (
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 flex-shrink-0">
+                    <img src={productForm.image} alt="Preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setProductForm({ ...productForm, image: '' })}
+                      className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-[10px] text-center flex-shrink-0">
+                    Sem Foto
+                  </div>
+                )}
+                
+                <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all whitespace-nowrap ${
+                  uploadingImage
+                    ? 'opacity-50 pointer-events-none'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+                }`}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
+                  {uploadingImage ? 'Carregando...' : 'Enviar Imagem'}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Grupos de Opcionais Builder */}
+          <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Grupos de Opcionais
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  const groups = [...(productForm.optionGroups || [])];
+                  groups.push({ name: '', required: false, minSelect: 0, maxSelect: 1, options: [] });
+                  setProductForm({ ...productForm, optionGroups: groups });
+                }}
+                className="px-3 py-1 bg-energy/10 text-energy text-xs font-bold rounded-lg hover:bg-energy/20 transition-colors"
+              >
+                + Adicionar Grupo
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {productForm.optionGroups?.map((group, gIdx) => (
+                <div key={gIdx} className="p-4 bg-slate-50 dark:bg-slate-850/40 rounded-2xl border border-slate-150 dark:border-slate-800 space-y-3 relative">
+                  {/* Botão Remover Grupo */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const groups = productForm.optionGroups.filter((_, idx) => idx !== gIdx);
+                      setProductForm({ ...productForm, optionGroups: groups });
+                    }}
+                    className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xs font-bold"
+                  >
+                    Excluir Grupo
+                  </button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Input
+                      label="Nome do Grupo *"
+                      placeholder="Ex: Escolha o ponto da carne"
+                      value={group.name}
+                      onChange={(e) => {
+                        const groups = [...productForm.optionGroups];
+                        groups[gIdx].name = e.target.value;
+                        setProductForm({ ...productForm, optionGroups: groups });
+                      }}
+                      required
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col justify-end pb-2">
+                        <label className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={group.required}
+                            onChange={(e) => {
+                              const groups = [...productForm.optionGroups];
+                              groups[gIdx].required = e.target.checked;
+                              setProductForm({ ...productForm, optionGroups: groups });
+                            }}
+                            className="rounded text-energy focus:ring-energy border-slate-300 dark:border-slate-850"
+                          />
+                          Obrigatório
+                        </label>
+                      </div>
+                      <Input
+                        label="Min"
+                        type="number"
+                        min="0"
+                        value={group.minSelect}
+                        onChange={(e) => {
+                          const groups = [...productForm.optionGroups];
+                          groups[gIdx].minSelect = Number(e.target.value);
+                          setProductForm({ ...productForm, optionGroups: groups });
+                        }}
+                        required
+                      />
+                      <Input
+                        label="Max"
+                        type="number"
+                        min="1"
+                        value={group.maxSelect}
+                        onChange={(e) => {
+                          const groups = [...productForm.optionGroups];
+                          groups[gIdx].maxSelect = Number(e.target.value);
+                          setProductForm({ ...productForm, optionGroups: groups });
+                        }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Options List */}
+                  <div className="space-y-2 pl-4 border-l border-slate-200 dark:border-slate-800">
+                    <div className="flex justify-between items-center">
+                      <h5 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                        Opções deste Grupo
+                      </h5>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const groups = [...productForm.optionGroups];
+                          groups[gIdx].options.push({ name: '', price: 0 });
+                          setProductForm({ ...productForm, optionGroups: groups });
+                        }}
+                        className="text-[10px] text-energy font-black hover:underline"
+                      >
+                        + Adicionar Opção
+                      </button>
+                    </div>
+
+                    {group.options.map((opt: any, oIdx: number) => (
+                      <div key={oIdx} className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            placeholder="Ex: Bem passado"
+                            value={opt.name}
+                            onChange={(e) => {
+                              const groups = [...productForm.optionGroups];
+                              groups[gIdx].options[oIdx].name = e.target.value;
+                              setProductForm({ ...productForm, optionGroups: groups });
+                            }}
+                            required
+                            className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-energy focus:ring-1 focus:ring-energy text-slate-800 dark:text-white"
+                          />
+                        </div>
+                        <div className="w-24">
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="R$ 0.00"
+                            value={opt.price === 0 ? '' : opt.price}
+                            onChange={(e) => {
+                              const groups = [...productForm.optionGroups];
+                              groups[gIdx].options[oIdx].price = Number(e.target.value);
+                              setProductForm({ ...productForm, optionGroups: groups });
+                            }}
+                            className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-energy focus:ring-1 focus:ring-energy text-slate-800 dark:text-white"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const groups = [...productForm.optionGroups];
+                            groups[gIdx].options = groups[gIdx].options.filter((_: any, idx: number) => idx !== oIdx);
+                            setProductForm({ ...productForm, optionGroups: groups });
+                          }}
+                          className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="pt-4 flex gap-3">

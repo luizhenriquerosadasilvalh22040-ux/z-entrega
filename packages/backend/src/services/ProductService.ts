@@ -4,7 +4,15 @@ import { Types } from 'mongoose';
 export class ProductService {
   public static async createProduct(
     merchantId: string,
-    data: { name: string; description: string; price: number; category: string; image?: string }
+    data: { 
+      name: string; 
+      description: string; 
+      price: number; 
+      category: string; 
+      image?: string;
+      stockQuantity?: number;
+      optionGroups?: any[];
+    }
   ): Promise<IProductDocument> {
     const product = new Product({
       merchantId: new Types.ObjectId(merchantId),
@@ -17,7 +25,16 @@ export class ProductService {
   public static async updateProduct(
     id: string,
     merchantId: string,
-    data: Partial<{ name: string; description: string; price: number; category: string; image: string; isAvailable: boolean }>
+    data: Partial<{ 
+      name: string; 
+      description: string; 
+      price: number; 
+      category: string; 
+      image: string; 
+      isAvailable: boolean;
+      stockQuantity: number;
+      optionGroups: any[];
+    }>
   ): Promise<IProductDocument | null> {
     return await Product.findOneAndUpdate(
       { _id: id, merchantId: new Types.ObjectId(merchantId) },

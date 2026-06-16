@@ -160,12 +160,17 @@ export const Modal: React.FC<ModalProps> = ({
       />
 
       {/* Box */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative z-10 border border-slate-100 dark:border-slate-850 animate-float-in">
+      <div 
+        className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative z-10 border border-slate-100 dark:border-slate-850 animate-float-in"
+        role="dialog"
+        aria-modal="true"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4">
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h3>
           <button 
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+            aria-label="Fechar"
           >
             <X size={20} />
           </button>

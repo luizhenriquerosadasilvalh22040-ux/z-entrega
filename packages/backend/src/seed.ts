@@ -52,7 +52,29 @@ async function seed() {
         description: 'Molho de tomate artesanal, mussarela, calabresa fatiada, cebola e orégano.',
         price: 45.00,
         category: 'Pizzas',
-        isAvailable: true
+        isAvailable: true,
+        optionGroups: [
+          {
+            name: 'Borda',
+            required: false,
+            minSelect: 0,
+            maxSelect: 1,
+            options: [
+              { name: 'Borda de Catupiry', price: 5.00 },
+              { name: 'Borda de Cheddar', price: 6.00 }
+            ]
+          },
+          {
+            name: 'Adicionais',
+            required: false,
+            minSelect: 0,
+            maxSelect: 2,
+            options: [
+              { name: 'Bacon extra', price: 4.00 },
+              { name: 'Queijo extra', price: 5.00 }
+            ]
+          }
+        ]
       },
       {
         merchantId: merchant._id,
@@ -60,7 +82,31 @@ async function seed() {
         description: 'Blend de costela 150g, queijo prato derretido, alface fresca, tomate e maionese da casa no pão brioche.',
         price: 25.00,
         category: 'Hambúrgueres',
-        isAvailable: true
+        isAvailable: true,
+        optionGroups: [
+          {
+            name: 'Ponto da Carne',
+            required: true,
+            minSelect: 1,
+            maxSelect: 1,
+            options: [
+              { name: 'Ao Ponto', price: 0.00 },
+              { name: 'Bem Passado', price: 0.00 },
+              { name: 'Mal Passado', price: 0.00 }
+            ]
+          },
+          {
+            name: 'Adicionais',
+            required: false,
+            minSelect: 0,
+            maxSelect: 3,
+            options: [
+              { name: 'Bacon extra', price: 3.00 },
+              { name: 'Queijo Cheddar adicional', price: 4.00 },
+              { name: 'Ovo frito', price: 2.00 }
+            ]
+          }
+        ]
       },
       {
         merchantId: merchant._id,
@@ -68,7 +114,8 @@ async function seed() {
         description: 'Refrigerante garrafa pet 2L trincando de gelada.',
         price: 10.00,
         category: 'Bebidas',
-        isAvailable: true
+        isAvailable: true,
+        optionGroups: []
       }
     ];
 

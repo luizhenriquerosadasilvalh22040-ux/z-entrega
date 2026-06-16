@@ -5,10 +5,16 @@ export interface IAddress {
   city: string;
   state: string;
   zipCode: string;
+  complement?: string;
+  referencePoint?: string;
   coordinates?: {
     lat: number;
     lng: number;
   };
+}
+
+export interface ISavedAddress extends IAddress {
+  nickname: string;
 }
 
 export interface IOperatingHours {

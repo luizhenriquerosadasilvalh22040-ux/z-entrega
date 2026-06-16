@@ -4,6 +4,36 @@ import { Customer } from '../models/Customer';
 import { Merchant } from '../models/Merchant';
 
 export class AuthController {
+  private static setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 1 dia
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
+    });
+  }
+
+  private static clearAuthCookies(res: Response): void {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'strict'
+    });
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'strict'
+    });
+  }
+
   public static async registerCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const customer = await AuthService.registerCustomer(req.body);
@@ -28,6 +58,8 @@ export class AuthController {
 
       const customerObj = customer.toObject();
       delete customerObj.passwordHash;
+
+      AuthController.setAuthCookies(res, accessToken, refreshToken);
 
       res.status(200).json({
         status: 'success',
@@ -66,6 +98,8 @@ export class AuthController {
       const merchantObj = merchant.toObject();
       delete merchantObj.passwordHash;
 
+      AuthController.setAuthCookies(res, accessToken, refreshToken);
+
       res.status(200).json({
         status: 'success',
         data: {
@@ -84,6 +118,8 @@ export class AuthController {
       const { email, password } = req.body;
       const { admin, accessToken, refreshToken } = await AuthService.loginAdmin(email, password);
 
+      AuthController.setAuthCookies(res, accessToken, refreshToken);
+
       res.status(200).json({
         status: 'success',
         data: {
@@ -99,8 +135,30 @@ export class AuthController {
 
   public static async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { refreshToken } = req.body;
+      let refreshToken = req.body.refreshToken;
+      
+      // Fallback para ler do cookie refreshToken
+      if (!refreshToken && req.headers.cookie) {
+        const cookies: { [key: string]: string } = {};
+        req.headers.cookie.split(';').forEach(c => {
+          const parts = c.split('=');
+          const name = parts[0].trim();
+          const val = parts.slice(1).join('=');
+          if (name && val) {
+            cookies[name] = decodeURIComponent(val);
+          }
+        });
+        refreshToken = cookies['refreshToken'];
+      }
+
+      if (!refreshToken) {
+        res.status(400).json({ status: 'fail', message: 'Refresh token não fornecido' });
+        return;
+      }
+
       const tokens = await AuthService.refreshAccessToken(refreshToken);
+
+      AuthController.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
       res.status(200).json({
         status: 'success',
@@ -113,8 +171,27 @@ export class AuthController {
 
   public static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { refreshToken } = req.body;
-      await AuthService.logout(refreshToken);
+      let refreshToken = req.body.refreshToken;
+
+      // Fallback para ler do cookie refreshToken
+      if (!refreshToken && req.headers.cookie) {
+        const cookies: { [key: string]: string } = {};
+        req.headers.cookie.split(';').forEach(c => {
+          const parts = c.split('=');
+          const name = parts[0].trim();
+          const val = parts.slice(1).join('=');
+          if (name && val) {
+            cookies[name] = decodeURIComponent(val);
+          }
+        });
+        refreshToken = cookies['refreshToken'];
+      }
+
+      if (refreshToken) {
+        await AuthService.logout(refreshToken);
+      }
+
+      AuthController.clearAuthCookies(res);
 
       res.status(200).json({
         status: 'success',
@@ -190,6 +267,8 @@ export class AuthController {
       const customerObj = customer.toObject();
       delete customerObj.passwordHash;
       delete customerObj.verificationCode;
+
+      AuthController.setAuthCookies(res, accessToken, refreshToken);
 
       res.status(200).json({
         status: 'success',

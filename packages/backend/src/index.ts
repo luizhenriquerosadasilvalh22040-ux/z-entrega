@@ -2,11 +2,25 @@ import dotenv from 'dotenv';
 // Carrega as variáveis de ambiente antes de qualquer importação de config
 dotenv.config();
 
+// Validação crítica de variáveis em produção para evitar texto claro inseguro
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET) {
+    console.error('❌ CRITICAL ERROR: JWT_SECRET environment variable is missing in production!');
+    process.exit(1);
+  }
+  if (!process.env.ENCRYPTION_KEY && !process.env.ENCRYPTION_SECRET) {
+    console.error('❌ CRITICAL ERROR: ENCRYPTION_KEY or ENCRYPTION_SECRET environment variable is missing in production!');
+    process.exit(1);
+  }
+}
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
+import { createAdapter } from '@socket.io/redis-adapter';
+import Redis from 'ioredis';
 import { connectDatabase } from './config/database';
 import logger from './config/logger';
 import { errorHandler } from './middlewares/errors';
@@ -20,22 +34,61 @@ import productRoutes from './routes/products';
 import promotionRoutes from './routes/promotions';
 import adminRoutes from './routes/admin';
 import bannerRoutes from './routes/banners';
+import uploadRoutes from './routes/upload';
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*', // Em produção restringimos ao domínio correto
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
+    origin: process.env.NODE_ENV === 'production' && process.env.FRONTEND_URL
+      ? process.env.FRONTEND_URL
+      : '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   }
 });
+
+// Configura adaptador Redis para Socket.io se houver REDIS_URL para escalabilidade
+if (process.env.REDIS_URL) {
+  try {
+    const pubClient = new Redis(process.env.REDIS_URL);
+    const subClient = pubClient.duplicate();
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('🔌 Socket.io Redis Adapter configurado com sucesso.');
+  } catch (err) {
+    logger.error('❌ Falha ao configurar Socket.io Redis Adapter:', err);
+  }
+}
 
 const PORT = process.env.PORT || 3000;
 
 // Middlewares Globais
 app.use(helmet());
-app.use(cors());
+
+const allowedOrigins = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Bloqueado pelas políticas de CORS do Traz Pra Cá'));
+  },
+  credentials: true
+}));
 app.use(express.json());
+
+// Configuração de diretório de uploads
+import path from 'path';
+import fs from 'fs';
+const uploadsPath = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsPath));
 
 // Log de requisições
 app.use((req, res, next) => {
@@ -57,6 +110,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/banners', bannerRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Configuração do Socket.io para Rastreamento em Tempo Real
 io.on('connection', (socket) => {
@@ -66,6 +120,12 @@ io.on('connection', (socket) => {
   socket.on('joinOrderRoom', (orderId: string) => {
     socket.join(`order:${orderId}`);
     logger.info(`🔌 Socket ${socket.id} joined room: order:${orderId}`);
+  });
+
+  // Entra na sala do lojista específico
+  socket.on('joinMerchantRoom', (merchantId: string) => {
+    socket.join(`merchant:${merchantId}`);
+    logger.info(`🔌 Socket ${socket.id} joined room: merchant:${merchantId}`);
   });
 
   socket.on('disconnect', () => {

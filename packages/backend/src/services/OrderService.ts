@@ -5,7 +5,8 @@ import { Merchant } from '../models/Merchant';
 import { Deliverer } from '../models/Deliverer';
 import { PromotionService } from './PromotionService';
 import { NotificationService } from './NotificationService';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
+import { IAddress } from '../types';
 
 export class OrderService {
   /**
@@ -14,193 +15,300 @@ export class OrderService {
   public static async createOrder(
     customerId: string,
     merchantId: string,
-    itemsData: { productId: string; quantity: number }[],
-    paymentMethod: string
+    itemsData: { 
+      productId: string; 
+      quantity: number; 
+      chosenOptions?: { groupName: string; optionName: string; price: number }[];
+      notes?: string;
+    }[],
+    paymentMethod: string,
+    deliveryAddress?: IAddress
   ): Promise<IOrderDocument> {
-    const customer = await Customer.findById(customerId);
-    if (!customer) throw new Error('Customer not found');
-
-    const merchant = await Merchant.findById(merchantId);
-    if (!merchant) throw new Error('Merchant not found');
-
-    // 1. Carrega produtos e calcula subtotal
-    const items = [];
-    let subtotal = 0;
-
-    // Obtém promoções ativas para ver se há desconto
-    const activePromotions = await PromotionService.getActivePromotions(merchantId);
-
-    for (const item of itemsData) {
-      const product = await Product.findOne({ _id: item.productId, merchantId: merchant._id });
-      if (!product) throw new Error(`Product not found: ${item.productId}`);
-      if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);
-
-      // Verifica se há desconto para este produto
-      let price = product.price;
-      const applicablePromo = activePromotions.find(
-        promo => promo.targetProducts.length === 0 || promo.targetProducts.some(id => id.equals(product._id))
-      );
-
-      if (applicablePromo) {
-        price = price * (1 - applicablePromo.discountPercentage / 100);
-      }
-
-      const itemTotal = price * item.quantity;
-      subtotal += itemTotal;
-
-      items.push({
-        productId: product._id,
-        name: product.name,
-        price,
-        quantity: item.quantity
-      });
+    let session: mongoose.ClientSession | null = null;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+    } catch (e) {
+      session = null;
     }
 
-    // 2. Calcula taxas
-    const commission = subtotal * 0.10; // 10% de comissão
-    const deliveryFee = 5.00; // Taxa fixa de entrega de R$ 5
-    const total = subtotal + deliveryFee;
-
-    const order = new Order({
-      customerId: customer._id,
-      merchantId: merchant._id,
-      items,
-      subtotal,
-      commission,
-      deliveryFee,
-      total,
-      status: 'PENDING',
-      statusHistory: [{ status: 'PENDING', changedAt: new Date() }],
-      paymentMethod,
-      deliveryAddress: customer.address
-    });
-
-    const savedOrder = await order.save();
+    const sessionOpts = session ? { session } : undefined;
 
     try {
-      await NotificationService.queueNotification({
+      const customer = await Customer.findById(customerId, null, sessionOpts);
+      if (!customer) throw new Error('Customer not found');
+
+      const merchant = await Merchant.findById(merchantId, null, sessionOpts);
+      if (!merchant) throw new Error('Merchant not found');
+
+      if (merchant.isForceClosed) {
+        throw new Error('O estabelecimento comercial está fechado manualmente pelo proprietário.');
+      }
+
+      // Verifica se o estabelecimento está aberto no horário atual
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const [openH, openM] = merchant.operatingHours.open.split(':').map(Number);
+      const [closeH, closeM] = merchant.operatingHours.close.split(':').map(Number);
+
+      const openMinutes = openH * 60 + openM;
+      const closeMinutes = closeH * 60 + closeM;
+
+      let isOpen = false;
+      if (closeMinutes < openMinutes) {
+        isOpen = (currentMinutes >= openMinutes || currentMinutes < closeMinutes);
+      } else {
+        isOpen = (currentMinutes >= openMinutes && currentMinutes < closeMinutes);
+      }
+
+      if (!isOpen) {
+        throw new Error('O estabelecimento comercial está fechado no momento e não está aceitando pedidos.');
+      }
+
+      // 1. Carrega produtos e calcula subtotal
+      const items = [];
+      let subtotal = 0;
+
+      // Obtém promoções ativas para ver se há desconto
+      const activePromotions = await PromotionService.getActivePromotions(merchantId);
+
+      for (const item of itemsData) {
+        const product = await Product.findOne({ _id: item.productId, merchantId: merchant._id }, null, sessionOpts);
+        if (!product) throw new Error(`Product not found: ${item.productId}`);
+        if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);
+
+        // Calcula o preço base + opcionais selecionados
+        const optionsPrice = item.chosenOptions
+          ? item.chosenOptions.reduce((sum, opt) => sum + opt.price, 0)
+          : 0;
+
+        let baseAndOptionsPrice = product.price + optionsPrice;
+
+        // Verifica se há desconto para este produto
+        const applicablePromo = activePromotions.find(
+          promo => promo.targetProducts.length === 0 || promo.targetProducts.some(id => id.equals(product._id))
+        );
+
+        if (applicablePromo) {
+          baseAndOptionsPrice = baseAndOptionsPrice * (1 - applicablePromo.discountPercentage / 100);
+        }
+
+        const itemTotal = baseAndOptionsPrice * item.quantity;
+        subtotal += itemTotal;
+
+        items.push({
+          productId: product._id,
+          name: product.name,
+          price: baseAndOptionsPrice,
+          quantity: item.quantity,
+          chosenOptions: item.chosenOptions || [],
+          notes: item.notes || ''
+        });
+      }
+
+      // 2. Calcula taxas
+      const commission = subtotal * 0.10; // 10% de comissão
+      const deliveryFee = 5.00; // Taxa fixa de entrega de R$ 5
+      const total = subtotal + deliveryFee;
+
+      const order = new Order({
+        customerId: customer._id,
+        merchantId: merchant._id,
+        items,
+        subtotal,
+        commission,
+        deliveryFee,
+        total,
+        status: 'PENDING',
+        statusHistory: [{ status: 'PENDING', changedAt: new Date() }],
+        paymentMethod,
+        deliveryAddress: deliveryAddress || customer.address
+      });
+
+      const savedOrder = await order.save(sessionOpts);
+
+      const notificationId = await NotificationService.queueNotification({
         userId: customer._id.toString(),
         userType: 'Customer',
         type: 'WhatsApp',
         target: customer.phone,
         content: `Olá, *${customer.name}*! Recebemos o seu pedido nº *${savedOrder._id}* no estabelecimento *${merchant.name}*. Total: R$ ${savedOrder.total.toFixed(2)}. Aguardando confirmação do lojista!`
-      });
-    } catch (err) {
-      console.error('Erro ao enfileirar notificação de criação de pedido:', err);
-    }
+      }, session);
 
-    return savedOrder;
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+        // Dispara o job de notificação na fila do Bull pós-commit
+        try {
+          await NotificationService.addJobToQueue(notificationId);
+        } catch (err) {
+          console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+        }
+      }
+
+      return savedOrder;
+    } catch (error) {
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
+      throw error;
+    }
   }
 
   /**
    * Atualiza o status do pedido e mantém histórico
    */
   public static async updateStatus(orderId: string, status: OrderStatus, actorId: string, actorRole: 'customer' | 'merchant'): Promise<IOrderDocument | null> {
-    const order = await Order.findById(orderId);
-    if (!order) throw new Error('Order not found');
-
-    // Verifica permissões básicas
-    if (actorRole === 'merchant' && order.merchantId.toString() !== actorId) {
-      throw new Error('Unauthorized');
-    }
-    if (actorRole === 'customer' && order.customerId.toString() !== actorId) {
-      throw new Error('Unauthorized');
-    }
-
-    // Se estiver pronto para entrega, escalamos um entregador do dia
-    if (status === 'READY') {
-      const activeDeliverers = await Deliverer.find({ isActiveToday: true, isActive: true });
-      if (activeDeliverers.length > 0) {
-        const driver = activeDeliverers[Math.floor(Math.random() * activeDeliverers.length)];
-        order.delivererId = driver._id;
-      }
-    }
-
-    order.status = status;
-    order.statusHistory.push({ status, changedAt: new Date() });
-
-    const savedOrder = await order.save();
-
-    // Dispara as notificações com base no status alterado
+    let session: mongoose.ClientSession | null = null;
     try {
-      const populatedOrder = await Order.findById(savedOrder._id)
-        .populate<{ customerId: any }>('customerId')
-        .populate<{ merchantId: any }>('merchantId')
-        .populate<{ delivererId: any }>('delivererId');
+      session = await mongoose.startSession();
+      session.startTransaction();
+    } catch (e) {
+      session = null;
+    }
 
-      if (populatedOrder) {
-        const customer = populatedOrder.customerId;
-        const merchant = populatedOrder.merchantId;
-        const deliverer = populatedOrder.delivererId;
+    const sessionOpts = session ? { session } : undefined;
 
-        if (status === 'ACCEPTED' || status === 'PREPARING') {
-          await NotificationService.queueNotification({
-            userId: customer._id.toString(),
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi aceito por *${merchant.name}* e já está em preparação!`
-          });
-        } else if (status === 'READY') {
-          if (deliverer) {
-            // Notifica entregador
-            await NotificationService.queueNotification({
-              userId: deliverer._id.toString(),
-              userType: 'Deliverer',
-              type: 'WhatsApp',
-              target: deliverer.phone,
-              content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${merchant.address.street}, ${merchant.address.number}). Destino: ${customer.address.street}, ${customer.address.number}. Taxa de entrega: R$ ${populatedOrder.deliveryFee.toFixed(2)}.`
-            });
-            
-            // Notifica cliente com nome do entregador
-            await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e o entregador *${deliverer.name}* foi acionado para a entrega!`
-            });
-          } else {
-            // Sem entregador escalado
-            await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e aguardando um entregador disponível.`
-            });
-          }
-        } else if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
-          await NotificationService.queueNotification({
-            userId: customer._id.toString(),
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* saiu para entrega e está a caminho do seu endereço!`
-          });
-        } else if (status === 'DELIVERED') {
-          await NotificationService.queueNotification({
-            userId: customer._id.toString(),
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi entregue! Agradecemos a preferência.`
-          });
-        } else if (status === 'CANCELLED') {
-          await NotificationService.queueNotification({
-            userId: customer._id.toString(),
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi cancelado.`
-          });
+    try {
+      const order = await Order.findById(orderId, null, { session: session || undefined });
+      if (!order) throw new Error('Order not found');
+
+      // Verifica permissões básicas
+      if (actorRole === 'merchant' && order.merchantId.toString() !== actorId) {
+        throw new Error('Unauthorized');
+      }
+      if (actorRole === 'customer' && order.customerId.toString() !== actorId) {
+        throw new Error('Unauthorized');
+      }
+
+      // Se estiver pronto para entrega, escalamos um entregador do dia
+      if (status === 'READY') {
+        const activeDeliverers = await Deliverer.find({ isActiveToday: true, isActive: true }, null, { session: session || undefined });
+        if (activeDeliverers.length > 0) {
+          const driver = activeDeliverers[Math.floor(Math.random() * activeDeliverers.length)];
+          order.delivererId = driver._id;
         }
       }
-    } catch (err) {
-      console.error('Erro ao processar notificações de alteração de status do pedido:', err);
-    }
 
-    return savedOrder;
+      order.status = status;
+      order.statusHistory.push({ status, changedAt: new Date() });
+
+      const savedOrder = await order.save(sessionOpts);
+
+      // Dispara as notificações com base no status alterado
+      const notificationsToQueue: string[] = [];
+      try {
+        const populatedOrder = await Order.findById(savedOrder._id, null, { session: session || undefined })
+          .populate<{ customerId: any }>('customerId')
+          .populate<{ merchantId: any }>('merchantId')
+          .populate<{ delivererId: any }>('delivererId');
+
+        if (populatedOrder) {
+          const customer = populatedOrder.customerId;
+          const merchant = populatedOrder.merchantId;
+          const deliverer = populatedOrder.delivererId;
+
+          if (status === 'ACCEPTED' || status === 'PREPARING') {
+            const nId = await NotificationService.queueNotification({
+              userId: customer._id.toString(),
+              userType: 'Customer',
+              type: 'WhatsApp',
+              target: customer.phone,
+              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi aceito por *${merchant.name}* e já está em preparação!`
+            }, session);
+            notificationsToQueue.push(nId);
+          } else if (status === 'READY') {
+            if (deliverer) {
+              const pickupAddr = `${merchant.address.street}, ${merchant.address.number} - ${merchant.address.neighborhood}, ${merchant.address.city}`;
+              const delivAddr = `${populatedOrder.deliveryAddress.street}, ${populatedOrder.deliveryAddress.number} - ${populatedOrder.deliveryAddress.neighborhood}, ${populatedOrder.deliveryAddress.city}` +
+                (populatedOrder.deliveryAddress.complement ? `, Complemento: ${populatedOrder.deliveryAddress.complement}` : '') +
+                (populatedOrder.deliveryAddress.referencePoint ? ` (Ref: ${populatedOrder.deliveryAddress.referencePoint})` : '');
+
+              // Notifica entregador
+              const nId1 = await NotificationService.queueNotification({
+                userId: deliverer._id.toString(),
+                userType: 'Deliverer',
+                type: 'WhatsApp',
+                target: deliverer.phone,
+                content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${populatedOrder.deliveryFee.toFixed(2)}.`
+              }, session);
+              notificationsToQueue.push(nId1);
+              
+              // Notifica cliente com nome do entregador
+              const nId2 = await NotificationService.queueNotification({
+                userId: customer._id.toString(),
+                userType: 'Customer',
+                type: 'WhatsApp',
+                target: customer.phone,
+                content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e o entregador *${deliverer.name}* foi acionado para a entrega!`
+              }, session);
+              notificationsToQueue.push(nId2);
+            } else {
+              // Sem entregador escalado
+              const nId = await NotificationService.queueNotification({
+                userId: customer._id.toString(),
+                userType: 'Customer',
+                type: 'WhatsApp',
+                target: customer.phone,
+                content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e aguardando um entregador disponível.`
+              }, session);
+              notificationsToQueue.push(nId);
+            }
+          } else if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
+            const nId = await NotificationService.queueNotification({
+              userId: customer._id.toString(),
+              userType: 'Customer',
+              type: 'WhatsApp',
+              target: customer.phone,
+              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* saiu para entrega e está a caminho do seu endereço!`
+            }, session);
+            notificationsToQueue.push(nId);
+          } else if (status === 'DELIVERED') {
+            const nId = await NotificationService.queueNotification({
+              userId: customer._id.toString(),
+              userType: 'Customer',
+              type: 'WhatsApp',
+              target: customer.phone,
+              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi entregue! Agradecemos a preferência.`
+            }, session);
+            notificationsToQueue.push(nId);
+          } else if (status === 'CANCELLED') {
+            const nId = await NotificationService.queueNotification({
+              userId: customer._id.toString(),
+              userType: 'Customer',
+              type: 'WhatsApp',
+              target: customer.phone,
+              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi cancelado.`
+            }, session);
+            notificationsToQueue.push(nId);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao processar notificações de alteração de status do pedido:', err);
+      }
+
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+        // Enfileira as notificações pós-commit
+        for (const nId of notificationsToQueue) {
+          try {
+            await NotificationService.addJobToQueue(nId);
+          } catch (err) {
+            console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+          }
+        }
+      }
+
+      return savedOrder;
+    } catch (error) {
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
+      throw error;
+    }
   }
 
   public static async getOrderById(orderId: string): Promise<IOrderDocument | null> {

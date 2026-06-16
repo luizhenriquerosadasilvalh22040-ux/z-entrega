@@ -12,10 +12,13 @@ router.get('/settings', AdminController.getSettings);
 router.put('/settings', AdminController.updateSettings);
 
 router.get('/deliverers', AdminController.listDeliverers);
+router.get('/deliverers/daily-report', AdminController.getDeliverersDailyReport);
 router.post('/deliverers', AdminController.createDeliverer);
 router.put('/deliverers/:id', AdminController.updateDeliverer);
 router.put('/deliverers/:id/active-today', AdminController.toggleActiveToday);
 router.delete('/deliverers/:id', AdminController.deleteDeliverer);
+
+router.get('/orders/active', AdminController.listActiveOrders);
 
 router.get('/merchants', AdminController.listMerchants);
 router.put('/merchants/:id/verify', AdminController.toggleVerifyMerchant);

@@ -12,7 +12,9 @@ const AddressSchema = Joi.object({
   city: Joi.string().required(),
   state: Joi.string().length(2).uppercase().required(),
   zipCode: Joi.string().required(),
-  coordinates: CoordinateSchema.optional()
+  coordinates: CoordinateSchema.optional(),
+  complement: Joi.string().allow('').optional(),
+  referencePoint: Joi.string().allow('').optional()
 });
 
 const OperatingHoursSchema = Joi.object({

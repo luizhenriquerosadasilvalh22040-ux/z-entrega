@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Button, Input, Card, Toast } from '../components/ui';
+import { Button, Input, Card, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
 import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight } from 'lucide-react';
 
 export const MerchantPortal: React.FC = () => {
-  const { login, registerMerchant } = useAuthStore();
+  const { login } = useAuthStore();
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -68,7 +68,6 @@ export const MerchantPortal: React.FC = () => {
     setLoading(true);
     try {
       // Registra
-      const res = await useAuthStore.getState().login // Wait, let's call the api directly or authStore register
       // In authStore we don't have a direct register action, so we can do it via apiClient directly!
       const registerRes = await apiClientPostRegister();
       if (registerRes.data?.status === 'success') {

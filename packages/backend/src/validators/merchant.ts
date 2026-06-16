@@ -8,7 +8,8 @@ const OperatingHoursSchema = Joi.object({
 export const updateMerchantProfileSchema = Joi.object({
   name: Joi.string().min(3).max(100).optional(),
   phone: Joi.string().optional(),
-  category: Joi.string().valid('Comida', 'Farmácia', 'Construção', 'Geral').optional()
+  category: Joi.string().valid('Comida', 'Farmácia', 'Construção', 'Geral').optional(),
+  isForceClosed: Joi.boolean().optional()
 });
 
 export const updateOperatingHoursSchema = OperatingHoursSchema;

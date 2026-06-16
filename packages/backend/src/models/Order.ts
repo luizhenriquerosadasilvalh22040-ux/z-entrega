@@ -11,11 +11,19 @@ export type OrderStatus =
   | 'DELIVERED' 
   | 'CANCELLED';
 
+export interface IChosenOption {
+  groupName: string;
+  optionName: string;
+  price: number;
+}
+
 export interface IOrderItem {
   productId: Types.ObjectId;
   name: string;
   price: number;
   quantity: number;
+  chosenOptions?: IChosenOption[];
+  notes?: string;
 }
 
 export interface IOrderStatusHistory {
@@ -40,11 +48,19 @@ export interface IOrderDocument extends Document {
   updatedAt: Date;
 }
 
+const ChosenOptionSchema = new Schema<IChosenOption>({
+  groupName: { type: String, required: true },
+  optionName: { type: String, required: true },
+  price: { type: Number, required: true, default: 0 }
+}, { _id: false });
+
 const OrderItemSchema = new Schema<IOrderItem>({
   productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
   name: { type: String, required: true },
   price: { type: Number, required: true },
-  quantity: { type: Number, required: true, min: 1 }
+  quantity: { type: Number, required: true, min: 1 },
+  chosenOptions: { type: [ChosenOptionSchema], default: [] },
+  notes: { type: String }
 }, { _id: false });
 
 const OrderStatusHistorySchema = new Schema<IOrderStatusHistory>({
@@ -63,6 +79,8 @@ const AddressSchema = new Schema<IAddress>({
   city: { type: String, required: true },
   state: { type: String, required: true },
   zipCode: { type: String, required: true },
+  complement: { type: String },
+  referencePoint: { type: String },
   coordinates: {
     lat: { type: Number },
     lng: { type: Number }

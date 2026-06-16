@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
 import { OrderStatus } from '../models/Order';
+import { Customer } from '../models/Customer';
 
 export class OrderController {
   public static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -10,13 +11,31 @@ export class OrderController {
         return;
       }
 
-      const { merchantId, items, paymentMethod } = req.body;
+      const { merchantId, items, paymentMethod, addressDetails, deliveryAddress } = req.body;
+
+      // Atualiza detalhes do endereço no cadastro do cliente se informados (mantido para compatibilidade)
+      if (addressDetails) {
+        const customer = await Customer.findById(req.user.userId);
+        if (customer) {
+          customer.address.complement = addressDetails.complement || '';
+          customer.address.referencePoint = addressDetails.referencePoint || '';
+          customer.markModified('address');
+          await customer.save();
+        }
+      }
+
       const order = await OrderService.createOrder(
         req.user.userId,
         merchantId,
         items,
-        paymentMethod
+        paymentMethod,
+        deliveryAddress
       );
+
+      const io = req.app.get('io');
+      if (io && order) {
+        io.to(`merchant:${merchantId}`).emit('newOrder', order);
+      }
 
       res.status(201).json({
         status: 'success',
