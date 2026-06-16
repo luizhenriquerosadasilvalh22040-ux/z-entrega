@@ -79,6 +79,24 @@ export class AuthController {
     }
   }
 
+  public static async loginAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, password } = req.body;
+      const { admin, accessToken, refreshToken } = await AuthService.loginAdmin(email, password);
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          admin,
+          accessToken,
+          refreshToken
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { refreshToken } = req.body;
@@ -129,6 +147,8 @@ export class AuthController {
           userObj = merchant.toObject();
           delete userObj.passwordHash;
         }
+      } else if (role === 'admin') {
+        userObj = { name: 'Administrador Geral', email: 'admin@trazpraca.com' };
       }
 
       if (!userObj) {

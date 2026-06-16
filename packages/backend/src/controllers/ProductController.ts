@@ -77,4 +77,25 @@ export class ProductController {
       next(error);
     }
   }
+
+  public static async updateStock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user || req.user.role !== 'merchant') {
+        res.status(403).json({ status: 'fail', message: 'Only merchants can manage product stock' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { stockQuantity, isPaused } = req.body;
+
+      const product = await ProductService.updateProductStock(id, req.user.userId, { stockQuantity, isPaused });
+      if (!product) {
+        res.status(404).json({ status: 'fail', message: 'Product not found' });
+        return;
+      }
+      res.status(200).json({ status: 'success', data: { product } });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

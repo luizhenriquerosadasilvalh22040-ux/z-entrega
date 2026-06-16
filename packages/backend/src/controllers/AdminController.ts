@@ -1,0 +1,239 @@
+import { Request, Response, NextFunction } from 'express';
+import { SystemConfig } from '../models/SystemConfig';
+import { Merchant } from '../models/Merchant';
+import { Deliverer } from '../models/Deliverer';
+import { Order } from '../models/Order';
+import bcrypt from 'bcrypt';
+
+export class AdminController {
+  /**
+   * Obtém estatísticas gerais do sistema
+   */
+  public static async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 1. Obter ou criar configuração padrão do sistema
+      let config = await SystemConfig.findOne();
+      if (!config) {
+        config = await SystemConfig.create({ defaultSubscriptionPrice: 150.00 });
+      }
+
+      // 2. Contagens básicas
+      const totalOrders = await Order.countDocuments();
+      const totalMerchants = await Merchant.countDocuments();
+      const verifiedMerchants = await Merchant.countDocuments({ isVerified: true });
+      const totalDeliverers = await Deliverer.countDocuments();
+      const activeDeliverersToday = await Deliverer.countDocuments({ isActiveToday: true });
+
+      // 3. Receita total e do dia
+      const orders = await Order.find({ status: { $ne: 'CANCELLED' } });
+      const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
+
+      // Pedidos entregues
+      const completedOrders = await Order.countDocuments({ status: 'DELIVERED' });
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          stats: {
+            totalOrders,
+            completedOrders,
+            totalMerchants,
+            verifiedMerchants,
+            totalDeliverers,
+            activeDeliverersToday,
+            totalSales,
+            defaultSubscriptionPrice: config.defaultSubscriptionPrice
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtém as configurações do sistema
+   */
+  public static async getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      let config = await SystemConfig.findOne();
+      if (!config) {
+        config = await SystemConfig.create({ defaultSubscriptionPrice: 150.00 });
+      }
+      res.status(200).json({
+        status: 'success',
+        data: { settings: config }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Atualiza as configurações do sistema (preço de assinatura)
+   */
+  public static async updateSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { defaultSubscriptionPrice } = req.body;
+      if (typeof defaultSubscriptionPrice !== 'number' || defaultSubscriptionPrice < 0) {
+        res.status(400).json({ status: 'fail', message: 'Preço de assinatura inválido' });
+        return;
+      }
+
+      let config = await SystemConfig.findOne();
+      if (!config) {
+        config = new SystemConfig({ defaultSubscriptionPrice });
+      } else {
+        config.defaultSubscriptionPrice = defaultSubscriptionPrice;
+      }
+
+      await config.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { settings: config }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Lista todos os entregadores cadastrados
+   */
+  public static async listDeliverers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const deliverers = await Deliverer.find().sort({ name: 1 });
+      res.status(200).json({
+        status: 'success',
+        data: { deliverers }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Adiciona um novo entregador
+   */
+  public static async createDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { name, email, phone, vehicle, plate, isActiveToday } = req.body;
+
+      if (!name || !email || !phone || !vehicle) {
+        res.status(400).json({ status: 'fail', message: 'Campos obrigatórios: nome, email, telefone, veículo' });
+        return;
+      }
+
+      const existing = await Deliverer.findOne({ email });
+      if (existing) {
+        res.status(400).json({ status: 'fail', message: 'E-mail de entregador já cadastrado' });
+        return;
+      }
+
+      const passwordHash = await bcrypt.hash('password123', 10); // Senha padrão para entregadores criados pelo admin
+
+      const deliverer = await Deliverer.create({
+        name,
+        email,
+        phone,
+        vehicle,
+        plate,
+        passwordHash,
+        isActive: true,
+        isAvailable: true,
+        isActiveToday: !!isActiveToday
+      });
+
+      res.status(201).json({
+        status: 'success',
+        data: { deliverer }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Atualiza dados de um entregador existente
+   */
+  public static async updateDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { name, email, phone, vehicle, plate, isActive } = req.body;
+
+      const deliverer = await Deliverer.findById(id);
+      if (!deliverer) {
+        res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
+        return;
+      }
+
+      if (name) deliverer.name = name;
+      if (email) deliverer.email = email;
+      if (phone) deliverer.phone = phone;
+      if (vehicle) deliverer.vehicle = vehicle;
+      if (plate !== undefined) deliverer.plate = plate;
+      if (isActive !== undefined) deliverer.isActive = isActive;
+
+      await deliverer.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { deliverer }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Alterna a escala de um entregador para o dia de hoje (isActiveToday)
+   */
+  public static async toggleActiveToday(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { isActiveToday } = req.body;
+
+      if (typeof isActiveToday !== 'boolean') {
+        res.status(400).json({ status: 'fail', message: 'Status isActiveToday deve ser booleano' });
+        return;
+      }
+
+      const deliverer = await Deliverer.findById(id);
+      if (!deliverer) {
+        res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
+        return;
+      }
+
+      deliverer.isActiveToday = isActiveToday;
+      await deliverer.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { deliverer }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Remove um entregador do sistema
+   */
+  public static async deleteDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const deliverer = await Deliverer.findByIdAndDelete(id);
+      if (!deliverer) {
+        res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
+        return;
+      }
+      res.status(200).json({
+        status: 'success',
+        message: 'Entregador removido com sucesso'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}

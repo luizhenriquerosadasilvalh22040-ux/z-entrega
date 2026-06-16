@@ -18,6 +18,7 @@ import merchantRoutes from './routes/merchants';
 import orderRoutes from './routes/orders';
 import productRoutes from './routes/products';
 import promotionRoutes from './routes/promotions';
+import adminRoutes from './routes/admin';
 
 const app = express();
 const server = http.createServer(app);
@@ -53,6 +54,7 @@ app.use('/api/merchants', merchantRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Configuração do Socket.io para Rastreamento em Tempo Real
 io.on('connection', (socket) => {

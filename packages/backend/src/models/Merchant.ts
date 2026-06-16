@@ -14,6 +14,7 @@ export interface IMerchantDocument extends Document {
   isVerified: boolean;
   isActive: boolean;
   logoImage?: string;
+  subscriptionPrice?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,7 +54,8 @@ const MerchantSchema = new Schema<IMerchantDocument>({
   address: { type: AddressSchema, required: true },
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
-  logoImage: { type: String }
+  logoImage: { type: String },
+  subscriptionPrice: { type: Number }
 }, {
   timestamps: true
 });

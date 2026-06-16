@@ -39,4 +39,23 @@ export class ProductService {
       { $text: { $search: query }, isAvailable: true }
     );
   }
+
+  public static async updateProductStock(
+    id: string,
+    merchantId: string,
+    data: { stockQuantity?: number; isPaused?: boolean }
+  ): Promise<IProductDocument | null> {
+    const updateData: any = {};
+    if (data.stockQuantity !== undefined) {
+      updateData.stockQuantity = data.stockQuantity;
+    }
+    if (data.isPaused !== undefined) {
+      updateData.isPaused = data.isPaused;
+    }
+    return await Product.findOneAndUpdate(
+      { _id: id, merchantId: new Types.ObjectId(merchantId) },
+      { $set: updateData },
+      { new: true }
+    );
+  }
 }

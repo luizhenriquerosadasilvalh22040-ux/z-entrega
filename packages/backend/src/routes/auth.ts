@@ -19,6 +19,9 @@ router.post('/customer/login', validate(loginSchema), AuthController.loginCustom
 router.post('/merchant/register', validate(merchantRegisterSchema), AuthController.registerMerchant);
 router.post('/merchant/login', validate(loginSchema), AuthController.loginMerchant);
 
+// Login de Administrador Geral
+router.post('/admin/login', validate(loginSchema), AuthController.loginAdmin);
+
 // Refresh token e logout
 router.post('/refresh', validate(refreshSchema), AuthController.refresh);
 router.post('/logout', validate(refreshSchema), AuthController.logout);
