@@ -15,7 +15,7 @@ export interface ITokenResponse {
 
 export interface IUserPayload {
   userId: string;
-  role: 'customer' | 'merchant';
+  role: 'customer' | 'merchant' | 'admin';
   email: string;
   name: string;
 }
@@ -207,6 +207,19 @@ export class AuthService {
     
     // Gera novos tokens
     return await this.generateTokens(payload);
+  }
+
+  public static async loginAdmin(email: string, password: string): Promise<{ admin: { name: string; email: string } } & ITokenResponse> {
+    if (email === 'admin@trazpraca.com' && password === 'admin123') {
+      const tokens = await this.generateTokens({
+        userId: 'admin-id-12345',
+        role: 'admin',
+        email: 'admin@trazpraca.com',
+        name: 'Administrador Geral'
+      });
+      return { admin: { name: 'Administrador Geral', email: 'admin@trazpraca.com' }, ...tokens };
+    }
+    throw new Error('Invalid email or password');
   }
 
   /**
