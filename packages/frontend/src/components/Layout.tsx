@@ -73,6 +73,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <LayoutDashboard size={16} /> Painel Lojista
               </Link>
             )}
+
+            {isAuthenticated && role === 'admin' && (
+              <Link to="/admin" className="text-sm font-medium text-slate-600 hover:text-energy dark:text-slate-300 dark:hover:text-energy flex items-center gap-1.5">
+                <LayoutDashboard size={16} /> Painel Admin
+              </Link>
+            )}
           </nav>
 
           {/* Action buttons */}
@@ -157,6 +163,16 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               className="block text-sm font-semibold text-slate-700 dark:text-slate-300"
             >
               Painel Lojista
+            </Link>
+          )}
+
+          {isAuthenticated && role === 'admin' && (
+            <Link 
+              to="/admin" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="block text-sm font-semibold text-slate-700 dark:text-slate-300"
+            >
+              Painel Admin
             </Link>
           )}
 

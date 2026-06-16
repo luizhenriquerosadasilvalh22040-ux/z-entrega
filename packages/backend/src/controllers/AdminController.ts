@@ -236,4 +236,85 @@ export class AdminController {
       next(error);
     }
   }
+
+  /**
+   * Lista todos os lojistas cadastrados
+   */
+  public static async listMerchants(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const merchants = await Merchant.find().sort({ name: 1 });
+      res.status(200).json({
+        status: 'success',
+        data: { merchants }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Alterna a verificação de um lojista (isVerified)
+   */
+  public static async toggleVerifyMerchant(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { isVerified } = req.body;
+
+      if (typeof isVerified !== 'boolean') {
+        res.status(400).json({ status: 'fail', message: 'Status isVerified deve ser booleano' });
+        return;
+      }
+
+      const merchant = await Merchant.findByIdAndUpdate(
+        id,
+        { $set: { isVerified } },
+        { new: true, select: { passwordHash: 0 } }
+      );
+
+      if (!merchant) {
+        res.status(404).json({ status: 'fail', message: 'Lojista não encontrado' });
+        return;
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: { merchant }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Define o preço da assinatura de um lojista específico
+   */
+  public static async updateMerchantSubscriptionPrice(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { subscriptionPrice } = req.body;
+
+      if (subscriptionPrice !== undefined && subscriptionPrice !== null && (typeof subscriptionPrice !== 'number' || subscriptionPrice < 0)) {
+        res.status(400).json({ status: 'fail', message: 'Preço de assinatura inválido' });
+        return;
+      }
+
+      const merchant = await Merchant.findByIdAndUpdate(
+        id,
+        { $set: { subscriptionPrice } },
+        { new: true, select: { passwordHash: 0 } }
+      );
+
+      if (!merchant) {
+        res.status(404).json({ status: 'fail', message: 'Lojista não encontrado' });
+        return;
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: { merchant }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

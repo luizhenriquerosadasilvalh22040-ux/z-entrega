@@ -8,7 +8,7 @@ export const Login: React.FC = () => {
   const { login, error, clearError } = useAuthStore();
   const navigate = useNavigate();
 
-  const [role, setRole] = useState<'customer' | 'merchant'>('customer');
+  const [role, setRole] = useState<'customer' | 'merchant' | 'admin'>('customer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,6 +29,8 @@ export const Login: React.FC = () => {
       setTimeout(() => {
         if (role === 'merchant') {
           navigate('/dashboard');
+        } else if (role === 'admin') {
+          navigate('/admin');
         } else {
           navigate('/');
         }
@@ -53,7 +55,7 @@ export const Login: React.FC = () => {
         </div>
 
         {/* Role Selector Tabs */}
-        <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl mb-6">
+        <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl mb-6">
           <button
             type="button"
             onClick={() => setRole('customer')}
@@ -63,7 +65,7 @@ export const Login: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
-            Sou Cliente
+            Cliente
           </button>
           <button
             type="button"
@@ -74,7 +76,18 @@ export const Login: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
-            Sou Lojista
+            Lojista
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('admin')}
+            className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              role === 'admin'
+                ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            Admin
           </button>
         </div>
 

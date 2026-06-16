@@ -21,11 +21,11 @@ export interface IUser {
 
 interface AuthState {
   user: IUser | null;
-  role: 'customer' | 'merchant' | null;
+  role: 'customer' | 'merchant' | 'admin' | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string, role: 'customer' | 'merchant') => Promise<void>;
+  login: (email: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -43,11 +43,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password, role) => {
     set({ isLoading: true, error: null });
     try {
-      const endpoint = role === 'customer' ? '/auth/customer/login' : '/auth/merchant/login';
+      let endpoint = '';
+      if (role === 'customer') endpoint = '/auth/customer/login';
+      else if (role === 'merchant') endpoint = '/auth/merchant/login';
+      else if (role === 'admin') endpoint = '/auth/admin/login';
+
       const response = await apiClient.post(endpoint, { email, password });
       
-      const { customer, merchant, accessToken, refreshToken } = response.data.data;
-      const user = role === 'customer' ? customer : merchant;
+      const { customer, merchant, admin, accessToken, refreshToken } = response.data.data;
+      let user = null;
+      if (role === 'customer') user = customer;
+      else if (role === 'merchant') user = merchant;
+      else if (role === 'admin') user = admin;
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
@@ -89,7 +96,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   checkAuth: async () => {
     const accessToken = localStorage.getItem('accessToken');
-    const role = localStorage.getItem('role') as 'customer' | 'merchant';
+    const role = localStorage.getItem('role') as 'customer' | 'merchant' | 'admin';
     
     if (!accessToken || !role) {
       set({ isAuthenticated: false, user: null, role: null });

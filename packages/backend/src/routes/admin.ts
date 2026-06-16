@@ -17,4 +17,8 @@ router.put('/deliverers/:id', AdminController.updateDeliverer);
 router.put('/deliverers/:id/active-today', AdminController.toggleActiveToday);
 router.delete('/deliverers/:id', AdminController.deleteDeliverer);
 
+router.get('/merchants', AdminController.listMerchants);
+router.put('/merchants/:id/verify', AdminController.toggleVerifyMerchant);
+router.put('/merchants/:id/subscription-price', AdminController.updateMerchantSubscriptionPrice);
+
 export default router;

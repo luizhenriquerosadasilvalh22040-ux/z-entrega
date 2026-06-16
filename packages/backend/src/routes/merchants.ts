@@ -24,6 +24,7 @@ router.use(authenticate);
 router.put('/:id/profile', validate(updateMerchantProfileSchema), MerchantController.updateProfile);
 router.put('/:id/operating-hours', validate(updateOperatingHoursSchema), MerchantController.updateOperatingHours);
 router.put('/:id/payment-method', validate(updatePaymentMethodsSchema), MerchantController.updatePaymentMethods);
+router.put('/:id/logo', MerchantController.updateLogo);
 router.delete('/:id', MerchantController.deactivate);
 router.post('/:id/reactivate', MerchantController.reactivate);
 
