@@ -232,11 +232,12 @@ export class AuthService {
    * Solicita um código OTP de verificação via WhatsApp para o cliente
    */
   public static async requestCustomerOtp(phone: string, name?: string, address?: IAddress): Promise<{ isNewUser: boolean }> {
-    let customer = await Customer.findOne({ phone });
+    const cleanPhone = phone.replace(/\D/g, '');
+    let customer = await Customer.findOne({ phone: cleanPhone });
     let isNewUser = false;
 
-    // Código fixo '1234' para facilitar os testes, ou código randômico em produção
-    const code = '1234'; 
+    // Código fixo '1234' para os testes semeados, ou randômico para números reais
+    const code = cleanPhone === '44999998888' ? '1234' : Math.floor(1000 + Math.random() * 9000).toString(); 
 
     if (customer) {
       customer.verificationCode = code;
@@ -248,7 +249,7 @@ export class AuthService {
       isNewUser = true;
       customer = new Customer({
         name,
-        phone,
+        phone: cleanPhone,
         address,
         verificationCode: code,
         isPhoneVerified: false,
@@ -277,7 +278,8 @@ export class AuthService {
    * Verifica o código OTP digitado pelo cliente
    */
   public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: ICustomerDocument } & ITokenResponse> {
-    const customer = await Customer.findOne({ phone });
+    const cleanPhone = phone.replace(/\D/g, '');
+    const customer = await Customer.findOne({ phone: cleanPhone });
     if (!customer) {
       throw new Error('Cliente não encontrado');
     }

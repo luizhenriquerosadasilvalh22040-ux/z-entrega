@@ -78,7 +78,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   requestOtp: async (phone, name, address) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await apiClient.post('/auth/customer/request-otp', { phone, name, address });
+      const cleanPhone = phone.replace(/\D/g, '');
+      const res = await apiClient.post('/auth/customer/request-otp', { phone: cleanPhone, name, address });
       set({ isLoading: false });
       return res.data.data;
     } catch (error: any) {
@@ -91,7 +92,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   verifyOtp: async (phone, code) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await apiClient.post('/auth/customer/verify-otp', { phone, code });
+      const cleanPhone = phone.replace(/\D/g, '');
+      const res = await apiClient.post('/auth/customer/verify-otp', { phone: cleanPhone, code });
       const { customer, accessToken, refreshToken } = res.data.data;
 
       localStorage.setItem('accessToken', accessToken);

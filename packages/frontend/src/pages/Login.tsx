@@ -11,6 +11,14 @@ export const Login: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
   const [code, setCode] = useState('');
+
+  const formatPhone = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  };
   
   // Detalhes do Cadastro (usado apenas se for novo usuário)
   const [name, setName] = useState('');
@@ -125,10 +133,11 @@ export const Login: React.FC = () => {
             <Input
               label="WhatsApp (com DDD)"
               type="tel"
-              placeholder="Ex: 44999998888"
+              placeholder="Ex: (44) 99999-8888"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(formatPhone(e.target.value))}
               required
+              maxLength={15}
             />
             <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
               {loading ? 'Enviando...' : 'Receber Código no WhatsApp'} <ArrowRight size={16} />

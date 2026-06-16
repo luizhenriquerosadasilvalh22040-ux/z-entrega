@@ -9,6 +9,23 @@ export const PartnerPortal: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'merchant_login' | 'merchant_register' | 'admin_login'>('merchant_login');
+
+  const formatPhone = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  };
+
+  const formatCNPJ = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
+  };
   
   // Merchant Login Form
   const [mEmail, setMEmail] = useState('');
@@ -95,7 +112,15 @@ export const PartnerPortal: React.FC = () => {
     setLoading(true);
     try {
       const { apiClient } = await import('../services/apiClient');
-      const registerRes = await apiClient.post('/auth/merchant/register', regForm);
+      const cleanPhone = phone.replace(/\D/g, '');
+      const cleanCnpj = cnpj.replace(/\D/g, '');
+      const payload = {
+        ...regForm,
+        phone: cleanPhone,
+        cnpj: cleanCnpj
+      };
+      
+      const registerRes = await apiClient.post('/auth/merchant/register', payload);
       if (registerRes.data?.status === 'success') {
         // Realiza login automático
         await login(email, password, 'merchant');
@@ -260,18 +285,20 @@ export const PartnerPortal: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <Input
-                    label="CNPJ (Somente números) *"
-                    placeholder="12345678000100"
+                    label="CNPJ *"
+                    placeholder="XX.XXX.XXX/XXXX-XX"
                     value={regForm.cnpj}
-                    onChange={(e) => setRegForm({ ...regForm, cnpj: e.target.value })}
+                    onChange={(e) => setRegForm({ ...regForm, cnpj: formatCNPJ(e.target.value) })}
                     required
+                    maxLength={18}
                   />
                   <Input
                     label="WhatsApp de Atendimento *"
-                    placeholder="Ex: 44999998888"
+                    placeholder="Ex: (44) 99999-8888"
                     value={regForm.phone}
-                    onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
+                    onChange={(e) => setRegForm({ ...regForm, phone: formatPhone(e.target.value) })}
                     required
+                    maxLength={15}
                   />
                 </div>
 
