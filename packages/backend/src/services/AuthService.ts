@@ -5,7 +5,7 @@ import { Customer, ICustomerDocument } from '../models/Customer';
 import { Merchant, IMerchantDocument } from '../models/Merchant';
 import { redisClient } from '../config/redis';
 import { authConfig } from '../config/auth';
-import { encrypt } from '../config/encryption';
+import { encrypt, encryptDeterministic } from '../config/encryption';
 import { IAddress, IOperatingHours } from '../types';
 import { NotificationService } from './NotificationService';
 
@@ -65,7 +65,7 @@ export class AuthService {
       throw new Error('Email already registered');
     }
 
-    const encryptedCpf = encrypt(data.cpf);
+    const encryptedCpf = encryptDeterministic(data.cpf);
     const cpfExists = await Customer.findOne({ cpf: encryptedCpf });
     if (cpfExists) {
       throw new Error('CPF already registered');
@@ -110,7 +110,7 @@ export class AuthService {
       throw new Error('Email already registered');
     }
 
-    const encryptedCnpj = encrypt(data.cnpj);
+    const encryptedCnpj = encryptDeterministic(data.cnpj);
     const cnpjExists = await Merchant.findOne({ cnpj: encryptedCnpj });
     if (cnpjExists) {
       throw new Error('CNPJ already registered');

@@ -16,6 +16,14 @@ export function encrypt(text: string): string {
   return `${iv.toString('hex')}:${encrypted}`;
 }
 
+export function encryptDeterministic(text: string): string {
+  const iv = Buffer.alloc(IV_LENGTH, 0); // Vetor de inicialização fixo para encriptação determinística
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return `${iv.toString('hex')}:${encrypted}`;
+}
+
 export function decrypt(text: string): string {
   const textParts = text.split(':');
   const ivHex = textParts.shift();

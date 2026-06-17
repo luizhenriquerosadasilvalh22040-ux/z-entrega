@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import { Merchant } from './models/Merchant';
 import { Product } from './models/Product';
 import { Customer } from './models/Customer';
-import { encrypt } from './config/encryption';
+import { encrypt, encryptDeterministic } from './config/encryption';
 import logger from './config/logger';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/trazpraca?replicaSet=rs0';
@@ -24,7 +24,7 @@ async function seed() {
       name: 'Pizzaria Rondon',
       email: 'merchant@example.com',
       passwordHash,
-      cnpj: encrypt('12345678000100'),
+      cnpj: encryptDeterministic('12345678000100'),
       phone: '44997158781',
       category: 'Comida',
       operatingHours: { open: '18:00', close: '23:30' },
@@ -127,7 +127,7 @@ async function seed() {
       name: 'João Silva',
       email: 'customer@example.com',
       passwordHash,
-      cpf: encrypt('12345678909'),
+      cpf: encryptDeterministic('12345678909'),
       phone: '44999998888',
       address: {
         street: 'Rua São Paulo',
