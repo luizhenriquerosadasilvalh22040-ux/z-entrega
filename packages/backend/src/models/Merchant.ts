@@ -15,6 +15,7 @@ export interface IMerchantDocument extends Document {
   isActive: boolean;
   isForceClosed?: boolean;
   logoImage?: string;
+  coverImage?: string;
   subscriptionPrice?: number;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +58,7 @@ const MerchantSchema = new Schema<IMerchantDocument>({
   isActive: { type: Boolean, default: true },
   isForceClosed: { type: Boolean, default: false },
   logoImage: { type: String },
+  coverImage: { type: String },
   subscriptionPrice: { type: Number }
 }, {
   timestamps: true

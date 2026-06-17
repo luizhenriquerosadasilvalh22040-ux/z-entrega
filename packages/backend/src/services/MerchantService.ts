@@ -17,7 +17,17 @@ export class MerchantService {
     return await Merchant.findById(id, { passwordHash: 0 });
   }
 
-  public static async updateProfile(id: string, data: { name?: string; phone?: string; category?: 'Comida' | 'Farmácia' | 'Construção' | 'Geral'; isForceClosed?: boolean }): Promise<IMerchantDocument | null> {
+  public static async updateProfile(
+    id: string,
+    data: {
+      name?: string;
+      phone?: string;
+      category?: 'Comida' | 'Farmácia' | 'Construção' | 'Geral';
+      isForceClosed?: boolean;
+      logoImage?: string;
+      coverImage?: string;
+    }
+  ): Promise<IMerchantDocument | null> {
     return await Merchant.findByIdAndUpdate(
       id,
       { $set: data },

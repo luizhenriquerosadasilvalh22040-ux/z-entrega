@@ -8,7 +8,7 @@ import { ShoppingBag, ArrowRight } from 'lucide-react';
 interface IOrder {
   _id: string;
   merchantId: { name: string };
-  items: { name: string; quantity: number; price: number }[];
+  items: { name: string; quantity: number; price: number; image?: string; description?: string }[];
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -96,10 +96,31 @@ export const MyOrders: React.FC = () => {
                 </div>
 
                 {/* Items preview */}
-                <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                <div className="space-y-2 mt-3">
                   {order.items.map((item, idx) => (
-                    <div key={idx}>
-                      {item.quantity}x {item.name}
+                    <div key={idx} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/40 max-w-md">
+                      {item.image && (
+                        <img 
+                          src={item.image} 
+                          alt={item.name} 
+                          className="w-12 h-12 rounded-lg object-cover bg-slate-100 flex-shrink-0 border border-slate-100 dark:border-slate-850"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline gap-2">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">
+                            {item.quantity}x {item.name}
+                          </span>
+                          <span className="text-xs font-black text-energy">
+                            R$ {(item.price * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                        {item.description && (
+                          <p className="text-[10px] text-slate-400 dark:text-slate-550 truncate mt-0.5">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

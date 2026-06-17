@@ -24,6 +24,7 @@ import Redis from 'ioredis';
 import { connectDatabase } from './config/database';
 import logger from './config/logger';
 import { errorHandler } from './middlewares/errors';
+import { OrderService } from './services/OrderService';
 
 // Importa Rotas
 import authRoutes from './routes/auth';
@@ -143,6 +144,15 @@ app.use(errorHandler);
 const startServer = async () => {
   await connectDatabase();
   
+  // Inicializa a rotina de cancelamento automático de pedidos de PIX expirados (10 min)
+  setInterval(async () => {
+    try {
+      await OrderService.cancelUnpaidPixOrders(io);
+    } catch (err) {
+      logger.error('Erro na rotina de cancelamento automático de PIX:', err);
+    }
+  }, 60 * 1000); // Roda a cada 60 segundos
+
   server.listen(PORT, () => {
     logger.info(`🚀 Server running on port ${PORT}`);
   });

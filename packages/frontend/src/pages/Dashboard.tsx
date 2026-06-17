@@ -5,7 +5,7 @@ import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
   AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
-  Volume2, VolumeX, Printer
+  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
@@ -13,13 +13,15 @@ import { useNavigate } from 'react-router-dom';
 interface IOrder {
   _id: string;
   customerId: { name: string; phone: string };
-  items: { name: string; quantity: number; price: number }[];
+  items: { name: string; quantity: number; price: number; image?: string; description?: string }[];
   subtotal: number;
   deliveryFee: number;
   total: number;
   status: string;
   createdAt: string;
   deliveryAddress: { street: string; number: string };
+  paymentMethod: string;
+  commission?: number;
 }
 
 interface IStats {
@@ -27,6 +29,10 @@ interface IStats {
   pendingOrders: number;
   revenue: number;
   averageTicket: number;
+  pixRevenue?: number;
+  cashRevenue?: number;
+  cardRevenue?: number;
+  totalCommission?: number;
 }
 
 interface IProduct {
@@ -46,8 +52,17 @@ export const Dashboard: React.FC = () => {
   const { isAuthenticated, role, user, checkAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings'>('orders');
-  const [stats, setStats] = useState<IStats>({ totalOrders: 0, pendingOrders: 0, revenue: 0, averageTicket: 0 });
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings' | 'finance'>('orders');
+  const [stats, setStats] = useState<IStats>({ 
+    totalOrders: 0, 
+    pendingOrders: 0, 
+    revenue: 0, 
+    averageTicket: 0,
+    pixRevenue: 0,
+    cashRevenue: 0,
+    cardRevenue: 0,
+    totalCommission: 0
+  });
   const [orders, setOrders] = useState<IOrder[]>([]);
   const [products, setProducts] = useState<IProduct[]>([]);
   
@@ -70,6 +85,7 @@ export const Dashboard: React.FC = () => {
   // Estados das Configurações do Lojista
   const [settingsForm, setSettingsForm] = useState({
     logoImage: '',
+    coverImage: '',
     open: '08:00',
     close: '22:00',
     paymentMethods: [] as string[]
@@ -77,6 +93,7 @@ export const Dashboard: React.FC = () => {
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('alarmMuted') === 'true');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -205,6 +222,29 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingCover(true);
+      const { compressImage } = await import('../utils/imageCompressor');
+      const compressedBase64 = await compressImage(file, 1200, 600, 0.7);
+
+      const response = await apiClient.post('/upload', { image: compressedBase64 });
+      if (response.data?.status === 'success') {
+        const fileUrl = response.data.data.url;
+        setSettingsForm(prev => ({ ...prev, coverImage: fileUrl }));
+        setToast({ message: 'Imagem de capa carregada com sucesso!', type: 'success' });
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Erro ao fazer upload da capa';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -253,6 +293,7 @@ export const Dashboard: React.FC = () => {
     if (user) {
       setSettingsForm({
         logoImage: (user as any).logoImage || '',
+        coverImage: (user as any).coverImage || '',
         open: user.operatingHours?.open || '08:00',
         close: user.operatingHours?.close || '22:00',
         paymentMethods: user.paymentMethods || ['PIX', 'Dinheiro']
@@ -370,6 +411,11 @@ export const Dashboard: React.FC = () => {
       // 3. Atualizar Logo
       await apiClient.put(`/merchants/${user._id}/logo`, {
         logoImage: settingsForm.logoImage
+      });
+
+      // 4. Atualizar Capa
+      await apiClient.put(`/merchants/${user._id}/cover`, {
+        coverImage: settingsForm.coverImage
       });
 
       setToast({ message: 'Configurações atualizadas com sucesso!', type: 'success' });
@@ -583,7 +629,6 @@ export const Dashboard: React.FC = () => {
             {user?.isForceClosed ? 'Loja Fechada (Clique para Abrir)' : 'Loja Aberta (Clique para Fechar)'}
           </button>
 
-          {/* Tab Selector Links */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/20">
             <button
               onClick={() => setActiveTab('orders')}
@@ -604,6 +649,16 @@ export const Dashboard: React.FC = () => {
               }`}
             >
               <MenuIcon size={14} /> Cardápio
+            </button>
+            <button
+              onClick={() => setActiveTab('finance')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'finance'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <DollarSign size={14} /> Financeiro
             </button>
             <button
               onClick={() => setActiveTab('settings')}
@@ -725,11 +780,27 @@ export const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl space-y-1">
+                      <div className="text-xs text-slate-650 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl space-y-2.5">
                         {order.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between">
-                            <span>{item.quantity}x {item.name}</span>
-                            <span className="font-semibold">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                          <div key={idx} className="flex gap-2.5 items-center bg-white dark:bg-slate-900/60 p-2 rounded-lg border border-slate-105/80 dark:border-slate-800/60">
+                            {item.image && (
+                              <img 
+                                src={item.image} 
+                                alt={item.name} 
+                                className="w-10 h-10 rounded object-cover flex-shrink-0 bg-slate-50 border border-slate-100"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-baseline gap-2">
+                                <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{item.quantity}x {item.name}</span>
+                                <span className="font-black text-energy text-[11px]">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                              </div>
+                              {item.description && (
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                  {item.description}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -783,10 +854,27 @@ export const Dashboard: React.FC = () => {
                               </Badge>
                             </div>
 
-                            <div className="text-xs text-slate-500 space-y-1 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg">
+                            <div className="text-xs text-slate-500 space-y-2 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg">
                               {order.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between">
-                                  <span>{item.quantity}x {item.name}</span>
+                                <div key={idx} className="flex gap-2.5 items-center bg-white dark:bg-slate-900/60 p-2 rounded-lg border border-slate-105/80 dark:border-slate-800/60">
+                                  {item.image && (
+                                    <img 
+                                      src={item.image} 
+                                      alt={item.name} 
+                                      className="w-10 h-10 rounded object-cover flex-shrink-0 bg-slate-50 border border-slate-100"
+                                    />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-baseline gap-2">
+                                      <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{item.quantity}x {item.name}</span>
+                                      <span className="font-black text-energy text-[11px]">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                                    </div>
+                                    {item.description && (
+                                      <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -915,42 +1003,85 @@ export const Dashboard: React.FC = () => {
               </h3>
 
               <form onSubmit={handleSaveSettings} className="space-y-5">
-                <div className="flex flex-col mb-4">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                    Imagem da Logo / Estabelecimento
-                  </label>
-                  <div className="flex gap-4 items-center">
-                    {settingsForm.logoImage ? (
-                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
-                        <img src={settingsForm.logoImage} alt="Logo Preview" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setSettingsForm({ ...settingsForm, logoImage: '' })}
-                          className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-xs">
-                        Sem Logo
-                      </div>
-                    )}
-                    
-                    <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                      uploadingLogo
-                        ? 'opacity-50 pointer-events-none'
-                        : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                    }`}>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                        disabled={uploadingLogo}
-                      />
-                      {uploadingLogo ? 'Carregando...' : 'Enviar Imagem'}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  {/* Imagem da Logo */}
+                  <div className="flex flex-col">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                      Imagem da Logo / Estabelecimento
                     </label>
+                    <div className="flex gap-4 items-center">
+                      {settingsForm.logoImage ? (
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                          <img src={settingsForm.logoImage} alt="Logo Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({ ...settingsForm, logoImage: '' })}
+                            className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-xs">
+                          Sem Logo
+                        </div>
+                      )}
+                      
+                      <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                        uploadingLogo
+                          ? 'opacity-50 pointer-events-none'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+                      }`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                        {uploadingLogo ? 'Carregando...' : 'Enviar Logo'}
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Imagem da Capa */}
+                  <div className="flex flex-col">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                      Imagem de Capa (Banner)
+                    </label>
+                    <div className="flex gap-4 items-center">
+                      {settingsForm.coverImage ? (
+                        <div className="relative w-28 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                          <img src={settingsForm.coverImage} alt="Cover Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({ ...settingsForm, coverImage: '' })}
+                            className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-28 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-xs">
+                          Sem Capa
+                        </div>
+                      )}
+                      
+                      <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                        uploadingCover
+                          ? 'opacity-50 pointer-events-none'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+                      }`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleCoverUpload}
+                          className="hidden"
+                          disabled={uploadingCover}
+                        />
+                        {uploadingCover ? 'Carregando...' : 'Enviar Capa'}
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -1001,6 +1132,189 @@ export const Dashboard: React.FC = () => {
                 </div>
               </form>
             </Card>
+          )}
+
+          {/* TAB: FINANCE */}
+          {activeTab === 'finance' && (
+            <div className="space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-white">
+                    Extrato de Comissões e Repasses
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    Monitore seu faturamento por método de pagamento e as comissões da plataforma.
+                  </p>
+                </div>
+              </div>
+
+              {/* Grid de Faturamento por Método de Pagamento */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="flex items-center gap-4 p-5 border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl">
+                  <div className="p-3 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-2xl text-emerald-600 dark:text-emerald-400">
+                    <DollarSign size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Total</span>
+                    <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
+                      R$ {(stats.revenue || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </Card>
+
+                <Card className="flex items-center gap-4 p-5 border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl">
+                  <div className="p-3 bg-cyan-500/10 dark:bg-cyan-500/20 rounded-2xl text-cyan-600 dark:text-cyan-400">
+                    <TrendingUp size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento PIX</span>
+                    <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
+                      R$ {(stats.pixRevenue || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </Card>
+
+                <Card className="flex items-center gap-4 p-5 border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl">
+                  <div className="p-3 bg-amber-500/10 dark:bg-amber-500/20 rounded-2xl text-amber-600 dark:text-amber-400">
+                    <DollarSign size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Dinheiro</span>
+                    <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
+                      R$ {(stats.cashRevenue || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </Card>
+
+                <Card className="flex items-center gap-4 p-5 border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl">
+                  <div className="p-3 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-2xl text-indigo-600 dark:text-indigo-400">
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Cartão</span>
+                    <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
+                      R$ {(stats.cardRevenue || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Destaque de Comissões e Repasses */}
+              <Card className="p-6 border border-energy/20 bg-gradient-to-br from-energy/5 to-energy/10 dark:from-energy/10 dark:to-energy/5 shadow-md rounded-2xl">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-energy/20 rounded-2xl text-energy mt-1">
+                      <Percent size={24} />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800 dark:text-white">
+                        Comissão e Repasse (Traz Pra Cá)
+                      </h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 max-w-2xl leading-relaxed">
+                        A comissão da plataforma Traz Pra Cá é de <strong className="text-energy">10%</strong> calculada sobre o subtotal dos pedidos aceitos ou concluídos (excluindo taxas de entrega e pedidos pendentes/cancelados).
+                      </p>
+                      <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-550 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+                          PIX Online: Repasse retido/descontado automaticamente.
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          Dinheiro/Cartão na Entrega: Comissão a ser faturada para pagamento posterior.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-energy/10 shadow-sm flex flex-col items-center md:items-end min-w-[200px] justify-center">
+                    <span className="text-xs text-slate-450 font-semibold uppercase tracking-wider">Total em Comissão Devida</span>
+                    <span className="text-3xl font-black text-energy mt-1">
+                      R$ {(stats.totalCommission || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Tabela Detalhada de Histórico de Pedidos */}
+              <Card className="border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl overflow-hidden">
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <FileText size={18} className="text-energy" /> Detalhes dos Pedidos Faturados
+                  </h4>
+                  <Badge variant="orange">
+                    {orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length} Pedidos Válidos
+                  </Badge>
+                </div>
+
+                <div className="overflow-x-auto">
+                  {orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 dark:text-slate-500">
+                      Nenhum pedido faturado neste período.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 dark:text-slate-550 uppercase tracking-wider">
+                          <th className="py-3 px-5">Cód. Pedido</th>
+                          <th className="py-3 px-5">Cliente</th>
+                          <th className="py-3 px-5">Data / Hora</th>
+                          <th className="py-3 px-5">Forma de Pagamento</th>
+                          <th className="py-3 px-5 text-right">Faturamento</th>
+                          <th className="py-3 px-5 text-right">Comissão (10%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-150 dark:divide-slate-800 text-sm">
+                        {orders
+                          .filter(order => order.status !== 'PENDING' && order.status !== 'CANCELLED')
+                          .map((order) => {
+                            const date = new Date(order.createdAt).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            });
+                            
+                            const individualCommission = order.commission || (order.subtotal * 0.10);
+
+                            return (
+                              <tr key={order._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/50 text-slate-700 dark:text-slate-300 font-semibold transition-colors">
+                                <td className="py-4.5 px-5 font-mono text-xs text-slate-400 dark:text-slate-500">
+                                  #{order._id.substring(order._id.length - 6).toUpperCase()}
+                                </td>
+                                <td className="py-4.5 px-5 text-slate-800 dark:text-white">
+                                  {order.customerId?.name || 'Cliente Anonimizado'}
+                                </td>
+                                <td className="py-4.5 px-5 text-xs text-slate-400 dark:text-slate-500">
+                                  {date}
+                                </td>
+                                <td className="py-4.5 px-5">
+                                  <Badge 
+                                    variant={
+                                      order.paymentMethod === 'PIX' 
+                                        ? 'green' 
+                                        : order.paymentMethod === 'Dinheiro' 
+                                          ? 'orange' 
+                                          : 'blue'
+                                    }
+                                  >
+                                    {order.paymentMethod}
+                                  </Badge>
+                                </td>
+                                <td className="py-4.5 px-5 text-right text-slate-800 dark:text-white font-bold">
+                                  R$ {order.subtotal.toFixed(2)}
+                                </td>
+                                <td className="py-4.5 px-5 text-right text-energy font-bold">
+                                  R$ {individualCommission.toFixed(2)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            </div>
           )}
         </div>
       )}

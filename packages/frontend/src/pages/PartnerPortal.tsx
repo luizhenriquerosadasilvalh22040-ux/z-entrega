@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Button, Input, Card, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus } from 'lucide-react';
+import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus, Sparkles } from 'lucide-react';
 
 export const PartnerPortal: React.FC = () => {
   const { login } = useAuthStore();
@@ -142,14 +142,31 @@ export const PartnerPortal: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-gradient-to-tr from-slate-950 via-slate-900 to-black text-white rounded-3xl p-8 md:p-12 relative overflow-hidden border border-slate-800 shadow-2xl">
         <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full filter blur-3xl"></div>
         
+        {/* Floating 3D Emojis */}
+        <div className="absolute top-4 left-1/2 text-2xl animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.4s', animationDuration: '4s' }}>🍕</div>
+        <div className="absolute bottom-8 left-1/3 text-3xl animate-float opacity-25 select-none hidden md:block" style={{ animationDelay: '1.0s', animationDuration: '4.8s' }}>🍔</div>
+        <div className="absolute top-10 right-1/3 text-2xl animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.7s', animationDuration: '3.6s' }}>📦</div>
+        <div className="absolute bottom-4 right-1/2 text-3xl animate-float opacity-20 select-none hidden md:block" style={{ animationDelay: '1.5s', animationDuration: '5.2s' }}>🛍️</div>
+        
+        {/* Elemento 3D de Destaque no Background do Hero */}
+        <div className="absolute -bottom-6 -right-6 text-[100px] lg:text-[140px] animate-float select-none opacity-20 lg:opacity-30 filter drop-shadow-[0_15px_15px_rgba(249,115,22,0.4)] hidden sm:block" style={{ animationDuration: '4s' }}>
+          🛵
+        </div>
+        
         {/* Left Info Column */}
-        <div className="lg:col-span-7 space-y-6">
-          <Badge variant="orange">🚀 Portal de Parceiros & Administração</Badge>
+        <div className="lg:col-span-7 space-y-6 relative z-10">
+          <Badge variant="orange">
+            <span className="flex items-center gap-1.5 font-bold text-[10px]">
+              <Sparkles size={11} className="animate-spin text-orange-400" style={{ animationDuration: '4s' }} /> Portal de Parceiros & Administração
+            </span>
+          </Badge>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
-            Impulsione seu negócio com o <span className="text-energy">Traz Pra Cá</span>
+            Pediu? <span className="text-energy bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">O Traz Pra Cá entrega.</span>
+            <br />
+            Vendeu? <span className="text-slate-200">O Traz Pra Cá leva!</span>
           </h1>
-          <p className="text-slate-300 text-sm md:text-base max-w-xl">
-            A plataforma local desenvolvida para conectar restaurantes, farmácias e comércios locais a milhares de clientes na região de Rondon-PR. 
+          <p className="text-slate-300 text-sm md:text-base max-w-xl font-medium leading-relaxed">
+            Vendeu? Nós levamos! A plataforma local desenvolvida para conectar restaurantes, farmácias e comércios locais a milhares de clientes na região de Rondon-PR. Comece a vender online hoje mesmo e deixe a entrega com a gente! 🚀
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-800">

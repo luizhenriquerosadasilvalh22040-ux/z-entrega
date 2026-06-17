@@ -102,7 +102,9 @@ export class OrderService {
           price: baseAndOptionsPrice,
           quantity: item.quantity,
           chosenOptions: item.chosenOptions || [],
-          notes: item.notes || ''
+          notes: item.notes || '',
+          image: product.image || '',
+          description: product.description || ''
         });
       }
 
@@ -341,29 +343,79 @@ export class OrderService {
     pendingOrders: number;
     revenue: number;
     averageTicket: number;
+    pixRevenue: number;
+    cashRevenue: number;
+    cardRevenue: number;
+    totalCommission: number;
   }> {
     const mId = new Types.ObjectId(merchantId);
     
-    // Todos os pedidos não cancelados
-    const orders = await Order.find({ merchantId: mId, status: { $ne: 'CANCELLED' } });
+    // Todos os pedidos do lojista
+    const orders = await Order.find({ merchantId: mId });
     const pendingOrders = await Order.countDocuments({ merchantId: mId, status: 'PENDING' });
 
     let revenue = 0;
+    let pixRevenue = 0;
+    let cashRevenue = 0;
+    let cardRevenue = 0;
+    let totalCommission = 0;
+
     orders.forEach(order => {
-      // Se já foi aceito ou concluído, conta como receita para a loja
-      if (order.status !== 'PENDING') {
+      // Se não for PENDING nem CANCELLED, conta como receita e calcula financeiro
+      if (order.status !== 'PENDING' && order.status !== 'CANCELLED') {
         revenue += order.subtotal;
+        totalCommission += order.commission || (order.subtotal * 0.10);
+        
+        if (order.paymentMethod === 'PIX') {
+          pixRevenue += order.subtotal;
+        } else if (order.paymentMethod === 'Dinheiro') {
+          cashRevenue += order.subtotal;
+        } else if (order.paymentMethod === 'Cartão') {
+          cardRevenue += order.subtotal;
+        }
       }
     });
 
-    const completedOrdersCount = orders.filter(o => o.status !== 'PENDING').length;
+    const completedOrdersCount = orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length;
     const averageTicket = completedOrdersCount > 0 ? revenue / completedOrdersCount : 0;
 
     return {
       totalOrders: orders.length,
       pendingOrders,
       revenue,
-      averageTicket
+      averageTicket,
+      pixRevenue,
+      cashRevenue,
+      cardRevenue,
+      totalCommission
     };
+  }
+
+  /**
+   * Cancelamento automático de pedidos de PIX não pagos após 10 minutos
+   */
+  public static async cancelUnpaidPixOrders(io?: any): Promise<void> {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const unpaidPixOrders = await Order.find({
+      status: 'PENDING',
+      paymentMethod: 'PIX',
+      createdAt: { $lt: tenMinutesAgo }
+    });
+
+    for (const order of unpaidPixOrders) {
+      try {
+        console.log(`[Auto-Cancel] Expirando pedido PIX não pago: ${order._id}`);
+        await this.updateStatus(order._id.toString(), 'CANCELLED', order.merchantId.toString(), 'merchant');
+        
+        if (io) {
+          io.to(`order:${order._id}`).emit('orderStatusUpdated', {
+            orderId: order._id.toString(),
+            status: 'CANCELLED'
+          });
+        }
+      } catch (err) {
+        console.error(`[Auto-Cancel] Erro ao cancelar automaticamente pedido PIX ${order._id}:`, err);
+      }
+    }
   }
 }

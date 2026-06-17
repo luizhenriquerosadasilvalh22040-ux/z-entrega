@@ -60,7 +60,7 @@ export class OrderController {
         id,
         status as OrderStatus,
         req.user.userId,
-        req.user.role
+        req.user.role as any
       );
 
       const io = req.app.get('io');

@@ -9,7 +9,7 @@ import { MapPin, ShieldAlert, CheckCircle2, Clock, Truck, ChefHat, Check } from 
 interface IOrder {
   _id: string;
   merchantId: { name: string; phone: string; address: { street: string } };
-  items: { name: string; quantity: number; price: number }[];
+  items: { name: string; quantity: number; price: number; image?: string; description?: string }[];
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -197,9 +197,29 @@ export const Tracking: React.FC = () => {
               </h3>
               <div className="space-y-2">
                 {order.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-xs text-slate-600 dark:text-slate-350">
-                    <span>{item.quantity}x {item.name}</span>
-                    <span className="font-semibold">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                  <div key={idx} className="flex gap-3 bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/40">
+                    {item.image && (
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="w-12 h-12 rounded-lg object-cover bg-slate-100 flex-shrink-0 border border-slate-100 dark:border-slate-850"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">
+                          {item.quantity}x {item.name}
+                        </span>
+                        <span className="text-xs font-black text-energy">
+                          R$ {(item.price * item.quantity).toFixed(2)}
+                        </span>
+                      </div>
+                      {item.description && (
+                        <p className="text-[10px] text-slate-400 dark:text-slate-550 truncate mt-0.5">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
                 <hr className="border-slate-100 dark:border-slate-800" />

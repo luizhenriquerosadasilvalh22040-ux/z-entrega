@@ -24,6 +24,8 @@ export interface IOrderItem {
   quantity: number;
   chosenOptions?: IChosenOption[];
   notes?: string;
+  image?: string;
+  description?: string;
 }
 
 export interface IOrderStatusHistory {
@@ -60,7 +62,9 @@ const OrderItemSchema = new Schema<IOrderItem>({
   price: { type: Number, required: true },
   quantity: { type: Number, required: true, min: 1 },
   chosenOptions: { type: [ChosenOptionSchema], default: [] },
-  notes: { type: String }
+  notes: { type: String },
+  image: { type: String },
+  description: { type: String }
 }, { _id: false });
 
 const OrderStatusHistorySchema = new Schema<IOrderStatusHistory>({

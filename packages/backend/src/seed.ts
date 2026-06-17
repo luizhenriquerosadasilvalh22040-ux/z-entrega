@@ -29,6 +29,8 @@ async function seed() {
       category: 'Comida',
       operatingHours: { open: '18:00', close: '23:30' },
       paymentMethods: ['PIX', 'Dinheiro', 'Cartão'],
+      logoImage: 'https://images.unsplash.com/photo-1590842211124-9676b2253b37?w=200&auto=format&fit=crop&q=80',
+      coverImage: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
       address: {
         street: 'Avenida Paraná',
         number: '1500',
@@ -53,6 +55,7 @@ async function seed() {
         price: 45.00,
         category: 'Pizzas',
         isAvailable: true,
+        image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&auto=format&fit=crop&q=80',
         optionGroups: [
           {
             name: 'Borda',
@@ -83,6 +86,7 @@ async function seed() {
         price: 25.00,
         category: 'Hambúrgueres',
         isAvailable: true,
+        image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&auto=format&fit=crop&q=80',
         optionGroups: [
           {
             name: 'Ponto da Carne',
@@ -115,6 +119,7 @@ async function seed() {
         price: 10.00,
         category: 'Bebidas',
         isAvailable: true,
+        image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&auto=format&fit=crop&q=80',
         optionGroups: []
       }
     ];

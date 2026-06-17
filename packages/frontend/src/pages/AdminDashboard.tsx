@@ -1133,25 +1133,39 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-xs text-slate-455 font-bold uppercase mb-2">Itens do Pedido</p>
               <div className="space-y-2">
                 {selectedOrderForModal.items.map((item: any, idx: number) => (
-                  <div key={idx} className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl space-y-1">
-                    <div className="flex justify-between font-bold text-slate-705 dark:text-slate-300">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span>R$ {(item.price * item.quantity).toFixed(2)}</span>
-                    </div>
-                    {item.chosenOptions && item.chosenOptions.length > 0 && (
-                      <div className="text-xs text-slate-455 pl-4">
-                        {item.chosenOptions.map((opt: any, oIdx: number) => (
-                          <div key={oIdx}>
-                            + {opt.groupName}: {opt.optionName} {opt.price > 0 ? `(+R$ ${opt.price.toFixed(2)})` : ''}
-                          </div>
-                        ))}
+                  <div key={idx} className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl flex gap-3">
+                    {item.image && (
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="w-12 h-12 rounded-lg object-cover bg-slate-100 flex-shrink-0 border border-slate-200"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex justify-between font-bold text-slate-705 dark:text-slate-300">
+                        <span className="truncate text-xs">{item.quantity}x {item.name}</span>
+                        <span className="text-xs">R$ {(item.price * item.quantity).toFixed(2)}</span>
                       </div>
-                    )}
-                    {item.notes && (
-                      <p className="text-xs italic text-amber-600 dark:text-amber-450 bg-amber-500/5 px-2 py-1 rounded border border-amber-500/10 mt-1 pl-4">
-                        Obs: {item.notes}
-                      </p>
-                    )}
+                      {item.description && (
+                        <p className="text-[10px] text-slate-450 dark:text-slate-500 truncate">
+                          {item.description}
+                        </p>
+                      )}
+                      {item.chosenOptions && item.chosenOptions.length > 0 && (
+                        <div className="text-[10px] text-slate-455">
+                          {item.chosenOptions.map((opt: any, oIdx: number) => (
+                            <div key={oIdx}>
+                              + {opt.groupName}: {opt.optionName} {opt.price > 0 ? `(+R$ ${opt.price.toFixed(2)})` : ''}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {item.notes && (
+                        <p className="text-[10px] italic text-amber-600 dark:text-amber-450 bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 mt-1">
+                          Obs: {item.notes}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -13,6 +13,7 @@ interface IMerchant {
   operatingHours: { open: string; close: string };
   address: { street: string; number: string; neighborhood: string; city: string };
   logoImage?: string;
+  coverImage?: string;
   isForceClosed?: boolean;
 }
 
@@ -443,58 +444,70 @@ export const Store: React.FC = () => {
       </button>
 
       {/* Store Profile Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-slate-100 dark:border-slate-800/80 shadow-sm flex flex-col md:flex-row gap-6 items-center md:items-start justify-between relative overflow-hidden">
-        {/* Banner Deco */}
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-500 to-amber-500"></div>
-        
-        <div className="flex flex-col md:flex-row gap-6 items-center md:items-start text-center md:text-left">
-          {/* Store Logo */}
-          {merchant.logoImage ? (
-            <img 
-              src={merchant.logoImage} 
-              alt={merchant.name} 
-              className="w-24 h-24 rounded-2xl object-cover border-2 border-orange-500/20 shadow-md bg-slate-50"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-2xl bg-orange-500/10 text-energy flex items-center justify-center font-black text-3xl shadow-sm border border-orange-500/10">
-              {merchant.name.substring(0, 2).toUpperCase()}
-            </div>
-          )}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800/80 shadow-sm overflow-hidden flex flex-col">
+        {/* Cover Banner */}
+        {merchant.coverImage ? (
+          <img 
+            src={merchant.coverImage} 
+            alt="Estabelecimento Capa" 
+            className="w-full h-40 md:h-48 object-cover"
+          />
+        ) : (
+          <div className="w-full h-40 md:h-48 bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white/30 font-black tracking-widest text-lg">
+            TRAZ PRA CÁ DELIVERY
+          </div>
+        )}
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">{merchant.name}</h1>
-              <Badge variant={merchant.category === 'Comida' ? 'orange' : merchant.category === 'Farmácia' ? 'blue' : merchant.category === 'Construção' ? 'green' : 'gray'}>
-                {merchant.category}
-              </Badge>
-              <Badge variant={isStoreOpen() ? 'green' : 'red'}>
-                {isStoreOpen() ? 'Aberto Agora' : 'Fechado no Momento'}
-              </Badge>
-            </div>
-            
-            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 justify-center md:justify-start">
-              <MapPin size={15} className="text-slate-400" />
-              {merchant.address.street}, {merchant.address.number} - {merchant.address.neighborhood}, {merchant.address.city}
-            </p>
+        <div className="p-6 md:p-8 pt-0 relative flex flex-col md:flex-row gap-6 items-center md:items-start justify-between">
+          <div className="flex flex-col md:flex-row gap-6 items-center md:items-start text-center md:text-left">
+            {/* Store Logo Overlapping */}
+            {merchant.logoImage ? (
+              <img 
+                src={merchant.logoImage} 
+                alt={merchant.name} 
+                className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-slate-900 shadow-md bg-slate-50 -mt-12 z-10 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-orange-500/10 text-energy flex items-center justify-center font-black text-3xl shadow-md border-4 border-white dark:border-slate-900 -mt-12 z-10 flex-shrink-0">
+                {merchant.name.substring(0, 2).toUpperCase()}
+              </div>
+            )}
 
-            <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-2 pt-2 text-xs text-slate-600 dark:text-slate-300">
-              <span className="flex items-center gap-1">
-                <Clock size={14} className="text-orange-500" />
-                Aberto das {merchant.operatingHours.open} às {merchant.operatingHours.close}
-              </span>
-              <span className="flex items-center gap-1">
-                <Phone size={14} className="text-orange-500" />
-                {merchant.phone}
-              </span>
+            <div className="space-y-2 pt-2 md:pt-0">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
+                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">{merchant.name}</h1>
+                <Badge variant={merchant.category === 'Comida' ? 'orange' : merchant.category === 'Farmácia' ? 'blue' : merchant.category === 'Construção' ? 'green' : 'gray'}>
+                  {merchant.category}
+                </Badge>
+                <Badge variant={isStoreOpen() ? 'green' : 'red'}>
+                  {isStoreOpen() ? 'Aberto Agora' : 'Fechado no Momento'}
+                </Badge>
+              </div>
+              
+              <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 justify-center md:justify-start">
+                <MapPin size={15} className="text-slate-400" />
+                {merchant.address.street}, {merchant.address.number} - {merchant.address.neighborhood}, {merchant.address.city}
+              </p>
+
+              <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-2 pt-2 text-xs text-slate-600 dark:text-slate-300">
+                <span className="flex items-center gap-1">
+                  <Clock size={14} className="text-orange-500" />
+                  Aberto das {merchant.operatingHours.open} às {merchant.operatingHours.close}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Phone size={14} className="text-orange-500" />
+                  {merchant.phone}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Quick Stats Block */}
-        <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl text-center min-w-[150px] border border-slate-100 dark:border-slate-800/60">
-          <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">Taxa de Entrega</p>
-          <p className="text-xl font-black text-energy mt-1">R$ 5,00</p>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Tempo estimado: 30-50 min</p>
+          {/* Quick Stats Block */}
+          <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl text-center min-w-[150px] border border-slate-100 dark:border-slate-800/60 mt-4 md:mt-0 flex-shrink-0">
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">Pedido Mínimo</p>
+            <p className="text-xl font-black text-energy mt-1">Não possui</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Tempo estimado: 30-50 min</p>
+          </div>
         </div>
       </div>
 
@@ -636,7 +649,7 @@ export const Store: React.FC = () => {
 
             <div className="flex items-center gap-4">
               <span className="text-xs text-slate-400 dark:text-slate-500 hidden md:block">
-                Taxa de entrega R$ 5,00 inclusa no checkout
+                Sem pedido mínimo
               </span>
               <Button 
                 size="lg" 
