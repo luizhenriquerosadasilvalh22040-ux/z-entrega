@@ -1,9 +1,8 @@
 import Queue from 'bull';
+import prisma from '../config/prisma';
 import { getRedisConnectionOptions } from '../config/redis';
-import { Notification } from '../models/Notification';
 import { WhatsAppService } from './WhatsAppService';
 import logger from '../config/logger';
-import { Types } from 'mongoose';
 
 const REDIS_OPTIONS = getRedisConnectionOptions();
 
@@ -27,36 +26,37 @@ export class NotificationService {
       target: string;
       content: string;
     },
-    session?: any
+    tx?: any // Aceita transação do Prisma opcional
   ): Promise<string> {
-    // 1. Cria o registro de notificação pendente no MongoDB
-    const notification = new Notification({
-      userId: new Types.ObjectId(data.userId),
-      userType: data.userType,
-      type: data.type,
-      target: data.target,
-      content: data.content,
-      status: 'PENDING',
-      attempts: 0
+    const db = tx || prisma;
+
+    // 1. Cria o registro de notificação no banco de dados (Supabase)
+    const notification = await db.notification.create({
+      data: {
+        userId: data.userId,
+        userType: data.userType,
+        type: data.type,
+        target: data.target,
+        content: data.content,
+        status: 'QUEUED'
+      }
     });
 
-    await notification.save(session ? { session } : undefined);
-
     // 2. Só enfileira no Bull imediatamente se não houver transação ativa
-    if (!session) {
+    if (!tx) {
       await notificationQueue.add(
-        { notificationId: notification._id.toString() },
+        { notificationId: notification.id },
         {
           attempts: 5,
           backoff: {
             type: 'exponential',
-            delay: 1000 // 1s, 2s, 4s, 8s, 16s...
+            delay: 1000
           }
         }
       );
     }
 
-    return notification._id.toString();
+    return notification.id;
   }
 
   /**
@@ -79,36 +79,41 @@ export class NotificationService {
 // 3. Processador de jobs da fila
 notificationQueue.process(async (job) => {
   const { notificationId } = job.data;
-  const notification = await Notification.findById(notificationId);
+  const notification = await prisma.notification.findUnique({
+    where: { id: notificationId }
+  });
+  
   if (!notification) {
     throw new Error(`Notification not found: ${notificationId}`);
   }
 
   try {
-    notification.attempts += 1;
-    await notification.save();
-
     if (notification.type === 'WhatsApp') {
       await WhatsAppService.sendMessage(notification.target, notification.content);
     } else {
       logger.warn(`Unsupported notification type: ${notification.type}`);
     }
 
-    notification.status = 'SENT';
-    await notification.save();
+    await prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status: 'SENT',
+        sentAt: new Date()
+      }
+    });
   } catch (error: any) {
     logger.error(`Error processing job for notification ${notificationId}: %s`, error.message);
     
-    // Registra o log de erro
-    notification.errorLog = notification.errorLog || [];
-    notification.errorLog.push(`${new Date().toISOString()} - ${error.message}`);
+    const isLastAttempt = job.attemptsMade === job.opts.attempts;
+    await prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status: isLastAttempt ? 'FAILED' : 'QUEUED',
+        errorMessage: error.message
+      }
+    });
     
-    if (job.attemptsMade === job.opts.attempts) {
-      notification.status = 'FAILED';
-    }
-    
-    await notification.save();
-    throw error; // Lança o erro para o Bull agendar o retry
+    throw error;
   }
 });
 

@@ -1,11 +1,12 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { Customer, ICustomerDocument } from '../models/Customer';
-import { Merchant, IMerchantDocument } from '../models/Merchant';
+import prisma from '../config/prisma';
+import { formatCustomer } from './CustomerService';
+import { formatMerchant } from './MerchantService';
 import { redisClient } from '../config/redis';
 import { authConfig } from '../config/auth';
-import { encrypt, encryptDeterministic } from '../config/encryption';
+import { encryptDeterministic } from '../config/encryption';
 import { IAddress, IOperatingHours } from '../types';
 import { NotificationService } from './NotificationService';
 
@@ -34,7 +35,6 @@ export class AuthService {
 
     const refreshToken = crypto.randomBytes(40).toString('hex');
     
-    // Salva o refresh token no Redis com expiração
     const redisKey = `refreshToken:${refreshToken}`;
     const value = JSON.stringify(payload);
     const ttlSeconds = authConfig.refreshExpirationDays * 24 * 60 * 60;
@@ -54,36 +54,61 @@ export class AuthService {
     cpf: string;
     phone: string;
     address: IAddress;
-  }): Promise<ICustomerDocument> {
-    // Validações básicas de negócio
+  }): Promise<any> {
     if (data.name.length < 3) {
       throw new Error('Name must be at least 3 characters long');
     }
 
-    const emailExists = await Customer.findOne({ email: data.email });
+    const emailExists = await prisma.customer.findUnique({ where: { email: data.email } });
     if (emailExists) {
       throw new Error('Email already registered');
     }
 
     const encryptedCpf = encryptDeterministic(data.cpf);
-    const cpfExists = await Customer.findOne({ cpf: encryptedCpf });
+    const cpfExists = await prisma.customer.findUnique({ where: { cpf: encryptedCpf } });
     if (cpfExists) {
       throw new Error('CPF already registered');
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    const customer = new Customer({
-      name: data.name,
-      email: data.email,
-      passwordHash,
-      cpf: encryptedCpf,
-      phone: data.phone,
-      address: data.address,
-      isActive: true,
+    const customer = await prisma.$transaction(async (tx) => {
+      const c = await tx.customer.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          passwordHash,
+          cpf: encryptedCpf,
+          phone: data.phone,
+          isActive: true,
+        }
+      });
+
+      await tx.customerAddress.create({
+        data: {
+          customerId: c.id,
+          nickname: 'Principal',
+          street: data.address.street,
+          number: data.address.number,
+          neighborhood: data.address.neighborhood,
+          city: data.address.city,
+          state: data.address.state || 'PR',
+          zipCode: data.address.zipCode,
+          complement: data.address.complement || '',
+          referencePoint: data.address.referencePoint || '',
+          latitude: data.address.coordinates?.lat,
+          longitude: data.address.coordinates?.lng,
+          isPrimary: true
+        }
+      });
+
+      return await tx.customer.findUnique({
+        where: { id: c.id },
+        include: { addresses: true }
+      });
     });
 
-    return await customer.save();
+    return formatCustomer(customer);
   }
 
   /**
@@ -99,44 +124,58 @@ export class AuthService {
     operatingHours: IOperatingHours;
     paymentMethods: string[];
     address: IAddress;
-  }): Promise<IMerchantDocument> {
+  }): Promise<any> {
     const validCategories = ['Comida', 'Farmácia', 'Construção', 'Geral'];
     if (!validCategories.includes(data.category)) {
       throw new Error('Invalid merchant category');
     }
 
-    const emailExists = await Merchant.findOne({ email: data.email });
+    const emailExists = await prisma.merchant.findUnique({ where: { email: data.email } });
     if (emailExists) {
       throw new Error('Email already registered');
     }
 
     const encryptedCnpj = encryptDeterministic(data.cnpj);
-    const cnpjExists = await Merchant.findOne({ cnpj: encryptedCnpj });
+    const cnpjExists = await prisma.merchant.findUnique({ where: { cnpj: encryptedCnpj } });
     if (cnpjExists) {
       throw new Error('CNPJ already registered');
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    const merchant = new Merchant({
-      name: data.name,
-      email: data.email,
-      passwordHash,
-      cnpj: encryptedCnpj,
-      phone: data.phone,
-      category: data.category,
-      operatingHours: data.operatingHours,
-      paymentMethods: data.paymentMethods,
-      address: data.address,
-      isVerified: false,
-      isActive: true,
+    const merchant = await prisma.merchant.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        cnpj: encryptedCnpj,
+        phone: data.phone,
+        category: data.category,
+        openTime: data.operatingHours.open,
+        closeTime: data.operatingHours.close,
+        paymentMethods: data.paymentMethods,
+        street: data.address.street,
+        number: data.address.number,
+        neighborhood: data.address.neighborhood,
+        city: data.address.city,
+        state: data.address.state || 'PR',
+        zipCode: data.address.zipCode,
+        latitude: data.address.coordinates?.lat,
+        longitude: data.address.coordinates?.lng,
+        isVerified: false,
+        isActive: true,
+      }
     });
 
-    return await merchant.save();
+    return formatMerchant(merchant);
   }
 
-  public static async loginCustomer(email: string, password: string): Promise<{ customer: ICustomerDocument } & ITokenResponse> {
-    const customer = await Customer.findOne({ email });
+  public static async loginCustomer(email: string, password: string): Promise<{ customer: any } & ITokenResponse> {
+    const customer = await prisma.customer.findUnique({
+      where: { email },
+      include: { addresses: true }
+    });
+    
     if (!customer || !customer.passwordHash) {
       throw new Error('Invalid email or password');
     }
@@ -151,20 +190,23 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens({
-      userId: customer._id.toString(),
+      userId: customer.id,
       role: 'customer',
       email: customer.email || '',
       name: customer.name,
     });
 
-    return { customer, ...tokens };
+    return { customer: formatCustomer(customer), ...tokens };
   }
 
   /**
    * Login do lojista
    */
-  public static async loginMerchant(email: string, password: string): Promise<{ merchant: IMerchantDocument } & ITokenResponse> {
-    const merchant = await Merchant.findOne({ email });
+  public static async loginMerchant(email: string, password: string): Promise<{ merchant: any } & ITokenResponse> {
+    const merchant = await prisma.merchant.findUnique({
+      where: { email }
+    });
+    
     if (!merchant) {
       throw new Error('Invalid email or password');
     }
@@ -179,17 +221,17 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens({
-      userId: merchant._id.toString(),
+      userId: merchant.id,
       role: 'merchant',
       email: merchant.email,
       name: merchant.name,
     });
 
-    return { merchant, ...tokens };
+    return { merchant: formatMerchant(merchant), ...tokens };
   }
 
   /**
-   * Renova o token de acesso através do refresh token
+   * Renova o token de acesso
    */
   public static async refreshAccessToken(refreshToken: string): Promise<ITokenResponse> {
     const redisKey = `refreshToken:${refreshToken}`;
@@ -198,12 +240,9 @@ export class AuthService {
       throw new Error('Invalid or expired refresh token');
     }
 
-    // Exclui o refresh token antigo (rotação de refresh tokens)
     await redisClient.del(redisKey);
 
     const payload: IUserPayload = JSON.parse(value);
-    
-    // Gera novos tokens
     return await this.generateTokens(payload);
   }
 
@@ -220,9 +259,6 @@ export class AuthService {
     throw new Error('Invalid email or password');
   }
 
-  /**
-   * Realiza logout removendo o refresh token do Redis
-   */
   public static async logout(refreshToken: string): Promise<void> {
     const redisKey = `refreshToken:${refreshToken}`;
     await redisClient.del(redisKey);
@@ -233,38 +269,70 @@ export class AuthService {
    */
   public static async requestCustomerOtp(phone: string, name?: string, address?: IAddress): Promise<{ isNewUser: boolean }> {
     const cleanPhone = phone.replace(/\D/g, '');
-    let customer = await Customer.findOne({ phone: cleanPhone });
+    let customer = await prisma.customer.findUnique({
+      where: { phone: cleanPhone },
+      include: { addresses: true }
+    });
     let isNewUser = false;
 
-    // Código fixo '1234' para os testes semeados, ou randômico para números reais
     const code = cleanPhone === '44999998888' ? '1234' : Math.floor(1000 + Math.random() * 9000).toString(); 
 
     if (customer) {
-      customer.verificationCode = code;
-      await customer.save();
+      const updated = await prisma.customer.update({
+        where: { id: customer.id },
+        data: { verificationCode: code },
+        include: { addresses: true }
+      });
+      customer = updated;
     } else {
       if (!name || !address) {
         throw new Error('Customer does not exist and registration details are missing');
       }
       isNewUser = true;
-      customer = new Customer({
-        name,
-        phone: cleanPhone,
-        address,
-        verificationCode: code,
-        isPhoneVerified: false,
-        isActive: true
+
+      const created = await prisma.$transaction(async (tx) => {
+        const c = await tx.customer.create({
+          data: {
+            name,
+            phone: cleanPhone,
+            verificationCode: code,
+            isPhoneVerified: false,
+            isActive: true
+          }
+        });
+
+        await tx.customerAddress.create({
+          data: {
+            customerId: c.id,
+            nickname: 'Principal',
+            street: address.street,
+            number: address.number,
+            neighborhood: address.neighborhood,
+            city: address.city,
+            state: address.state || 'PR',
+            zipCode: address.zipCode,
+            complement: address.complement || '',
+            referencePoint: address.referencePoint || '',
+            latitude: address.coordinates?.lat,
+            longitude: address.coordinates?.lng,
+            isPrimary: true
+          }
+        });
+
+        return await tx.customer.findUnique({
+          where: { id: c.id },
+          include: { addresses: true }
+        });
       });
-      await customer.save();
+      customer = created;
     }
 
-    // Enfileira notificação de WhatsApp com o código OTP
     try {
       await NotificationService.queueNotification({
-        userId: customer._id.toString(),
+        userId: customer!.id,
         userType: 'Customer',
         type: 'WhatsApp',
-        target: customer.phone,
+        target: customer!.phone,
         content: `Olá! Seu código de verificação Traz Pra Cá é: *${code}*.`
       });
     } catch (err) {
@@ -277,9 +345,13 @@ export class AuthService {
   /**
    * Verifica o código OTP digitado pelo cliente
    */
-  public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: ICustomerDocument } & ITokenResponse> {
+  public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: any } & ITokenResponse> {
     const cleanPhone = phone.replace(/\D/g, '');
-    const customer = await Customer.findOne({ phone: cleanPhone });
+    const customer = await prisma.customer.findUnique({
+      where: { phone: cleanPhone },
+      include: { addresses: true }
+    });
+    
     if (!customer) {
       throw new Error('Cliente não encontrado');
     }
@@ -288,17 +360,22 @@ export class AuthService {
       throw new Error('Código de verificação inválido');
     }
 
-    customer.isPhoneVerified = true;
-    customer.verificationCode = undefined; // Limpa o código utilizado
-    await customer.save();
-
-    const tokens = await this.generateTokens({
-      userId: customer._id.toString(),
-      role: 'customer',
-      email: customer.email || '',
-      name: customer.name,
+    const updated = await prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        isPhoneVerified: true,
+        verificationCode: null
+      },
+      include: { addresses: true }
     });
 
-    return { customer, ...tokens };
+    const tokens = await this.generateTokens({
+      userId: updated.id,
+      role: 'customer',
+      email: updated.email || '',
+      name: updated.name,
+    });
+
+    return { customer: formatCustomer(updated), ...tokens };
   }
 }

@@ -2,70 +2,66 @@ import logger from '../config/logger';
 
 export class WhatsAppService {
   /**
-   * Envia uma mensagem de WhatsApp real pelo Twilio ou simula em desenvolvimento
+   * Envia uma mensagem pelo WhatsApp Cloud API Oficial da Meta ou simula em desenvolvimento
    */
   public static async sendMessage(to: string, message: string): Promise<string> {
     // Limpa caracteres especiais do telefone
-    let cleanedPhone = to.replace(/\D/g, '');
-    
-    // Adiciona o código do país (+55 para Brasil) caso não exista
-    let formattedTo = cleanedPhone;
-    if (!formattedTo.startsWith('55') && formattedTo.length <= 11) {
-      formattedTo = `55${formattedTo}`;
-    }
-    const finalTo = `+${formattedTo}`;
+    const cleanPhone = to.replace(/\D/g, '');
 
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const fromNumber = process.env.TWILIO_FROM_NUMBER || '+14155238886'; // Número Sandbox padrão
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 
-    if (accountSid && authToken) {
-      logger.info(`📱 [Twilio WhatsApp] Enviando mensagem real para ${finalTo}...`);
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-      const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    if (phoneNumberId && accessToken) {
+      logger.info(`📱 [WhatsApp Meta API] Enviando mensagem real para ${cleanPhone}...`);
+      const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
 
-      const bodyParams = new URLSearchParams({
-        From: `whatsapp:${fromNumber}`,
-        To: `whatsapp:${finalTo}`,
-        Body: message
-      });
+      const body = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: cleanPhone,
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: message
+        }
+      };
 
       try {
         const response = await fetch(url, {
           method: 'POST',
           headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
           },
-          body: bodyParams.toString()
+          body: JSON.stringify(body)
         });
 
+        const resData: any = await response.json();
+
         if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Erro na API do Twilio: ${response.status} - ${errText}`);
+          throw new Error(`Erro na API Oficial do WhatsApp: ${JSON.stringify(resData.error)}`);
         }
 
-        const resData: any = await response.json();
-        logger.info(`📱 [Twilio WhatsApp] Mensagem enviada com sucesso! SID: ${resData.sid}`);
-        return resData.sid;
+        logger.info(`📱 [WhatsApp Meta API] Mensagem enviada! ID: ${resData.messages?.[0]?.id}`);
+        return resData.messages?.[0]?.id || 'success';
       } catch (err: any) {
-        logger.error(`❌ [Twilio WhatsApp] Falha ao enviar mensagem real: ${err.message}`);
+        logger.error(`❌ [WhatsApp Meta API] Falha ao enviar mensagem: ${err.message}`);
         throw err;
       }
     } else {
-      logger.info('📱 [WhatsApp Twilio Mock] (Credenciais ausentes no .env) Enviando para %s: "%s"', finalTo, message);
+      logger.info(`📱 [WhatsApp Meta Mock] (Credenciais Meta ausentes no .env) Enviando para ${cleanPhone}: "${message}"`);
       
       // Simula tempo de resposta da API
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // 5% de chance de falha simulada para testar o Bull
+      // 5% de chance de falha simulada para testar retry no Bull
       if (Math.random() < 0.05) {
-        throw new Error('Twilio API network timeout (Simulado)');
+        throw new Error('Meta API network timeout (Simulado)');
       }
 
-      const sid = `SMmock_${Math.random().toString(36).substr(2, 9)}`;
-      logger.info('📱 [WhatsApp Twilio Mock] Mensagem simulada enviada! SID: %s', sid);
-      return sid;
+      const mockMessageId = `wamid.HBgMNTU0NDk5OTk5ODg4OBUCABEYEkQ0QkU1NzBDRURDM0U0Q0RERAA=`;
+      logger.info('📱 [WhatsApp Meta Mock] Mensagem simulada enviada! ID: %s', mockMessageId);
+      return mockMessageId;
     }
   }
 }

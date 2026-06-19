@@ -1,0 +1,279 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Merchant {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  cnpj              String    @unique // Criptografado
+  phone             String
+  category          String?   // 'Comida', 'Farmácia', 'Construção', 'Geral'
+  openTime          String    @default("08:00") @map("open_time")
+  closeTime         String    @default("22:00") @map("close_time")
+  paymentMethods    String[]  @map("payment_methods")
+  street            String
+  number            String
+  neighborhood      String
+  city              String
+  state             String    @default("PR")
+  zipCode           String    @map("zip_code")
+  latitude          Float?
+  longitude         Float?
+  isVerified        Boolean   @default(false) @map("is_verified")
+  isActive          Boolean   @default(true) @map("is_active")
+  isForceClosed     Boolean   @default(false) @map("is_force_closed")
+  logoImage         String?   @map("logo_image")
+  coverImage        String?   @map("cover_image")
+  subscriptionPrice Float?    @map("subscription_price")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  products          Product[]
+  orders            Order[]
+  promotions        Promotion[]
+
+  @@map("merchants")
+}
+
+model Customer {
+  id              String            @id @default(uuid()) @db.Uuid
+  name            String
+  email           String?           @unique
+  passwordHash    String?           @map("password_hash")
+  cpf             String?           @unique
+  phone           String            @unique
+  isPhoneVerified Boolean           @default(false) @map("is_phone_verified")
+  verificationCode String?          @map("verification_code")
+  asaasCustomerId String?           @map("asaas_customer_id")
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  addresses       CustomerAddress[]
+  orders          Order[]
+
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  nickname       String
+  street         String
+  number         String
+  neighborhood   String
+  city           String
+  state          String   @default("PR")
+  zipCode        String   @map("zip_code")
+  complement     String?
+  referencePoint String?  @map("reference_point")
+  latitude       Float?
+  longitude      Float?
+  isPrimary      Boolean  @default(false) @map("is_primary")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_addresses")
+}
+
+model Deliverer {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  phone         String   @unique
+  vehicleType   String   @map("vehicle_type")
+  licensePlate  String?  @map("license_plate")
+  isActive      Boolean  @default(true) @map("is_active")
+  isActiveToday Boolean  @default(false) @map("is_active_today")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  orders        Order[]
+
+  @@map("deliverers")
+}
+
+model Product {
+  id            String               @id @default(uuid()) @db.Uuid
+  merchantId    String               @map("merchant_id") @db.Uuid
+  name          String
+  description   String
+  price         Float
+  category      String
+  image         String?
+  isAvailable   Boolean              @default(true) @map("is_available")
+  stockQuantity Int                  @default(99) @map("stock_quantity")
+  isPaused      Boolean              @default(false) @map("is_paused")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  merchant      Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  optionGroups  ProductOptionGroup[]
+  orderItems    OrderItem[]
+
+  @@map("products")
+}
+
+model ProductOptionGroup {
+  id         String          @id @default(uuid()) @db.Uuid
+  productId  String          @map("product_id") @db.Uuid
+  name       String
+  required   Boolean         @default(false)
+  minSelect  Int             @default(0) @map("min_select")
+  maxSelect  Int             @default(1) @map("max_select")
+
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options    ProductOption[]
+
+  @@map("product_option_groups")
+}
+
+model ProductOption {
+  id      String             @id @default(uuid()) @db.Uuid
+  groupId String             @map("group_id") @db.Uuid
+  name    String
+  price   Float              @default(0.00)
+
+  group   ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("product_options")
+}
+
+model Order {
+  id                 String               @id @default(uuid()) @db.Uuid
+  customerId         String               @map("customer_id") @db.Uuid
+  merchantId         String               @map("merchant_id") @db.Uuid
+  delivererId        String?              @map("deliverer_id") @db.Uuid
+  subtotal           Float
+  commission         Float
+  deliveryFee        Float                @default(5.00) @map("delivery_fee")
+  total              Float
+  status             String               @default("PENDING")
+  paymentMethod      String               @map("payment_method")
+  deliveryStreet     String               @map("delivery_street")
+  deliveryNumber     String               @map("delivery_number")
+  deliveryNeighborhood String             @map("delivery_neighborhood")
+  deliveryCity       String               @map("delivery_city")
+  deliveryState      String               @map("delivery_state")
+  deliveryZip        String               @map("delivery_zip")
+  deliveryComplement String?              @map("delivery_complement")
+  deliveryReference  String?              @map("delivery_reference")
+  asaasPaymentId     String?              @map("asaas_payment_id")
+  paymentStatus      String?              @default("PENDING") @map("payment_status")
+  pixQrCode          String?              @map("pix_qr_code")
+  pixCopyAndPaste    String?              @map("pix_copy_and_paste")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  customer           Customer             @relation(fields: [customerId], references: [id])
+  merchant           Merchant             @relation(fields: [merchantId], references: [id])
+  deliverer          Deliverer?           @relation(fields: [delivererId], references: [id])
+  statusHistory      OrderStatusHistory[]
+  items              OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  status    String
+  changedAt DateTime @default(now()) @map("changed_at")
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_history")
+}
+
+model OrderItem {
+  id        String             @id @default(uuid()) @db.Uuid
+  orderId   String             @map("order_id") @db.Uuid
+  productId String             @map("product_id") @db.Uuid
+  name      String
+  price     Float
+  quantity  Int
+  notes     String?
+
+  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product            @relation(fields: [productId], references: [id])
+  options   OrderItemOption[]
+
+  @@map("order_items")
+}
+
+model OrderItemOption {
+  id          String    @id @default(uuid()) @db.Uuid
+  orderItemId String    @map("order_item_id") @db.Uuid
+  groupName   String    @map("group_name")
+  optionName  String    @map("option_name")
+  price       Float
+
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_item_options")
+}
+
+model Notification {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  userType     String    @map("user_type")
+  type         String
+  target       String
+  content      String
+  status       String    @default("QUEUED")
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  sentAt       DateTime? @map("sent_at")
+
+  @@map("notifications")
+}
+
+model Promotion {
+  id                 String   @id @default(uuid()) @db.Uuid
+  merchantId         String   @map("merchant_id") @db.Uuid
+  discountPercentage Float    @map("discount_percentage")
+  expirationDate     DateTime @map("expiration_date")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  merchant           Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("promotions")
+}
+
+model Banner {
+  id        String   @id @default(uuid()) @db.Uuid
+  imageUrl  String   @map("image_url")
+  title     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("banners")
+}
+
+model SystemConfig {
+  id                       String   @id @default(uuid()) @db.Uuid
+  defaultSubscriptionPrice Float    @default(150.00) @map("default_subscription_price")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}
+
+model SystemAdmin {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("system_admins")
+}

@@ -1,14 +1,104 @@
-import { Order, IOrderDocument, OrderStatus } from '../models/Order';
-import { Product } from '../models/Product';
-import { Customer } from '../models/Customer';
-import { Merchant } from '../models/Merchant';
-import { Deliverer } from '../models/Deliverer';
-import { PromotionService } from './PromotionService';
-import { NotificationService } from './NotificationService';
-import mongoose, { Types } from 'mongoose';
-import { IAddress } from '../types';
+import prisma from '../config/prisma';
 import { AsaasService } from './AsaasService';
+import { NotificationService } from './NotificationService';
+import { IAddress } from '../types';
 import logger from '../config/logger';
+import { formatCustomer } from './CustomerService';
+
+export const formatOrder = (order: any) => {
+  if (!order) return null;
+  return {
+    _id: order.id,
+    id: order.id,
+    customerId: order.customer ? {
+      _id: order.customer.id,
+      id: order.customer.id,
+      name: order.customer.name,
+      phone: order.customer.phone
+    } : order.customerId,
+    merchantId: order.merchant ? {
+      _id: order.merchant.id,
+      id: order.merchant.id,
+      name: order.merchant.name,
+      phone: order.merchant.phone,
+      address: {
+        street: order.merchant.street,
+        number: order.merchant.number,
+        neighborhood: order.merchant.neighborhood,
+        city: order.merchant.city
+      }
+    } : order.merchantId,
+    delivererId: order.deliverer ? {
+      _id: order.deliverer.id,
+      id: order.deliverer.id,
+      name: order.deliverer.name,
+      phone: order.deliverer.phone
+    } : order.delivererId,
+    items: order.items?.map((item: any) => ({
+      productId: item.productId,
+      name: item.name,
+      price: Number(item.price),
+      quantity: item.quantity,
+      chosenOptions: item.options?.map((o: any) => ({
+        groupName: o.groupName,
+        optionName: o.optionName,
+        price: Number(o.price)
+      })) || [],
+      notes: item.notes || '',
+      image: item.product?.image || '',
+      description: item.product?.description || ''
+    })) || [],
+    subtotal: Number(order.subtotal),
+    commission: Number(order.commission),
+    deliveryFee: Number(order.deliveryFee),
+    total: Number(order.total),
+    status: order.status,
+    statusHistory: order.statusHistory?.map((h: any) => ({
+      status: h.status,
+      changedAt: h.changedAt
+    })) || [],
+    paymentMethod: order.paymentMethod,
+    deliveryAddress: {
+      street: order.deliveryStreet,
+      number: order.deliveryNumber,
+      neighborhood: order.deliveryNeighborhood,
+      city: order.deliveryCity,
+      state: order.deliveryState,
+      zipCode: order.deliveryZip,
+      complement: order.deliveryComplement || '',
+      referencePoint: order.deliveryReference || ''
+    },
+    asaasPaymentId: order.asaasPaymentId || undefined,
+    paymentStatus: order.paymentStatus || undefined,
+    pixQrCode: order.pixQrCode || undefined,
+    pixCopyAndPaste: order.pixCopyAndPaste || undefined,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    save: async function() {
+      const updated = await prisma.order.update({
+        where: { id: this.id },
+        data: {
+          status: this.status,
+          paymentStatus: this.paymentStatus
+        },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
+            }
+          }
+        }
+      });
+      Object.assign(this, formatOrder(updated));
+      return this;
+    }
+  };
+};
 
 export class OrderService {
   /**
@@ -25,22 +115,17 @@ export class OrderService {
     }[],
     paymentMethod: string,
     deliveryAddress?: IAddress
-  ): Promise<IOrderDocument> {
-    let session: mongoose.ClientSession | null = null;
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-    } catch (e) {
-      session = null;
-    }
-
-    const sessionOpts = session ? { session } : undefined;
-
-    try {
-      const customer = await Customer.findById(customerId, null, sessionOpts);
+  ): Promise<any> {
+    const savedOrder = await prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+        include: { addresses: true }
+      });
       if (!customer) throw new Error('Customer not found');
 
-      const merchant = await Merchant.findById(merchantId, null, sessionOpts);
+      const merchant = await tx.merchant.findUnique({
+        where: { id: merchantId }
+      });
       if (!merchant) throw new Error('Merchant not found');
 
       if (merchant.isForceClosed) {
@@ -50,8 +135,8 @@ export class OrderService {
       // Verifica se o estabelecimento está aberto no horário atual
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const [openH, openM] = merchant.operatingHours.open.split(':').map(Number);
-      const [closeH, closeM] = merchant.operatingHours.close.split(':').map(Number);
+      const [openH, openM] = merchant.openTime.split(':').map(Number);
+      const [closeH, closeM] = merchant.closeTime.split(':').map(Number);
 
       const openMinutes = openH * 60 + openM;
       const closeMinutes = closeH * 60 + closeM;
@@ -67,29 +152,33 @@ export class OrderService {
         throw new Error('O estabelecimento comercial está fechado no momento e não está aceitando pedidos.');
       }
 
-      // 1. Carrega produtos e calcula subtotal
+      // Carrega produtos e calcula subtotal
       const items = [];
       let subtotal = 0;
 
       // Obtém promoções ativas para ver se há desconto
-      const activePromotions = await PromotionService.getActivePromotions(merchantId);
+      const activePromotions = await tx.promotion.findMany({
+        where: {
+          merchantId,
+          expirationDate: { gte: now }
+        }
+      });
 
       for (const item of itemsData) {
-        const product = await Product.findOne({ _id: item.productId, merchantId: merchant._id }, null, sessionOpts);
-        if (!product) throw new Error(`Product not found: ${item.productId}`);
+        const product = await tx.product.findUnique({
+          where: { id: item.productId }
+        });
+        
+        if (!product || product.merchantId !== merchantId) throw new Error(`Product not found: ${item.productId}`);
         if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);
 
-        // Calcula o preço base + opcionais selecionados
         const optionsPrice = item.chosenOptions
           ? item.chosenOptions.reduce((sum, opt) => sum + opt.price, 0)
           : 0;
 
         let baseAndOptionsPrice = product.price + optionsPrice;
 
-        // Verifica se há desconto para este produto
-        const applicablePromo = activePromotions.find(
-          promo => promo.targetProducts.length === 0 || promo.targetProducts.some(id => id.equals(product._id))
-        );
+        const applicablePromo = activePromotions.find(() => true);
 
         if (applicablePromo) {
           baseAndOptionsPrice = baseAndOptionsPrice * (1 - applicablePromo.discountPercentage / 100);
@@ -99,34 +188,84 @@ export class OrderService {
         subtotal += itemTotal;
 
         items.push({
-          productId: product._id,
+          productId: product.id,
           name: product.name,
           price: baseAndOptionsPrice,
           quantity: item.quantity,
           chosenOptions: item.chosenOptions || [],
-          notes: item.notes || '',
-          image: product.image || '',
-          description: product.description || ''
+          notes: item.notes || ''
         });
       }
 
-      // 2. Calcula taxas
-      const commission = subtotal * 0.10; // 10% de comissão
-      const deliveryFee = 5.00; // Taxa fixa de entrega de R$ 5
+      const commission = subtotal * 0.10;
+      const deliveryFee = 5.00;
       const total = subtotal + deliveryFee;
 
-      const orderId = new mongoose.Types.ObjectId();
-      
+      const finalAddress = deliveryAddress || formatCustomer(customer)?.address;
+
       let asaasPaymentId = undefined;
       let pixQrCode = undefined;
       let pixCopyAndPaste = undefined;
-      let paymentStatus: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'REFUNDED' | 'OVERDUE' = 'PENDING';
+
+      const createdOrder = await tx.order.create({
+        data: {
+          customerId,
+          merchantId,
+          subtotal,
+          commission,
+          deliveryFee,
+          total,
+          status: 'PENDING',
+          paymentMethod,
+          deliveryStreet: finalAddress.street,
+          deliveryNumber: finalAddress.number,
+          deliveryNeighborhood: finalAddress.neighborhood,
+          deliveryCity: finalAddress.city,
+          deliveryState: finalAddress.state || 'PR',
+          deliveryZip: finalAddress.zipCode,
+          deliveryComplement: finalAddress.complement || '',
+          deliveryReference: finalAddress.referencePoint || '',
+          paymentStatus: 'PENDING'
+        }
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: createdOrder.id,
+          status: 'PENDING'
+        }
+      });
+
+      for (const item of items) {
+        const orderItem = await tx.orderItem.create({
+          data: {
+            orderId: createdOrder.id,
+            productId: item.productId,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            notes: item.notes
+          }
+        });
+
+        if (item.chosenOptions && item.chosenOptions.length > 0) {
+          await tx.orderItemOption.createMany({
+            data: item.chosenOptions.map(opt => ({
+              orderItemId: orderItem.id,
+              groupName: opt.groupName,
+              optionName: opt.optionName,
+              price: opt.price
+            }))
+          });
+        }
+      }
 
       if (paymentMethod === 'PIX') {
+        const asaasCustomer = formatCustomer(customer)!;
         if (process.env.ASAAS_API_KEY) {
-          const asaasCustomerId = await AsaasService.getOrCreateCustomer(customer);
+          const asaasCustomerId = await AsaasService.getOrCreateCustomer(asaasCustomer as any);
           const pixPayment = await AsaasService.createPixPayment(
-            orderId.toString(),
+            createdOrder.id,
             total,
             asaasCustomerId
           );
@@ -139,238 +278,268 @@ export class OrderService {
           pixQrCode = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
           pixCopyAndPaste = '00020101021226830014br.gov.bcb.pix256100000000000000000000000000000005204000053039865802BR5920Traz Pra Ca Delivery6009Sao Paulo62070503***6304ABCD';
         }
+
+        await tx.order.update({
+          where: { id: createdOrder.id },
+          data: {
+            asaasPaymentId,
+            pixQrCode,
+            pixCopyAndPaste
+          }
+        });
       }
 
-      const order = new Order({
-        _id: orderId,
-        customerId: customer._id,
-        merchantId: merchant._id,
-        items,
-        subtotal,
-        commission,
-        deliveryFee,
-        total,
-        status: 'PENDING',
-        statusHistory: [{ status: 'PENDING', changedAt: new Date() }],
-        paymentMethod,
-        deliveryAddress: deliveryAddress || customer.address,
-        asaasPaymentId,
-        paymentStatus,
-        pixQrCode,
-        pixCopyAndPaste
-      });
-
-      const savedOrder = await order.save(sessionOpts);
-
       const notificationId = await NotificationService.queueNotification({
-        userId: customer._id.toString(),
+        userId: customer.id,
         userType: 'Customer',
         type: 'WhatsApp',
         target: customer.phone,
-        content: `Olá, *${customer.name}*! Recebemos o seu pedido nº *${savedOrder._id}* no estabelecimento *${merchant.name}*. Total: R$ ${savedOrder.total.toFixed(2)}. Aguardando confirmação do lojista!`
-      }, session);
+        content: `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do lojista!`
+      }, tx);
 
-      if (session) {
-        await session.commitTransaction();
-        session.endSession();
-        // Dispara o job de notificação na fila do Bull pós-commit
-        try {
-          await NotificationService.addJobToQueue(notificationId);
-        } catch (err) {
-          console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+      const order = await tx.order.findUnique({
+        where: { id: createdOrder.id },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
+            }
+          }
         }
-      }
+      });
 
-      return savedOrder;
-    } catch (error) {
-      if (session) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      throw error;
+      return { order, notificationId };
+    });
+
+    try {
+      await NotificationService.addJobToQueue(savedOrder.notificationId);
+    } catch (err) {
+      console.error('Erro ao adicionar notificação pós-commit à fila:', err);
     }
+
+    return formatOrder(savedOrder.order);
   }
 
   /**
    * Atualiza o status do pedido e mantém histórico
    */
-  public static async updateStatus(orderId: string, status: OrderStatus, actorId: string, actorRole: 'customer' | 'merchant'): Promise<IOrderDocument | null> {
-    let session: mongoose.ClientSession | null = null;
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-    } catch (e) {
-      session = null;
-    }
+  public static async updateStatus(
+    orderId: string, 
+    status: any, 
+    actorId: string, 
+    actorRole: 'customer' | 'merchant'
+  ): Promise<any | null> {
+    const notificationsToQueue: string[] = [];
 
-    const sessionOpts = session ? { session } : undefined;
-
-    try {
-      const order = await Order.findById(orderId, null, { session: session || undefined });
+    const savedOrder = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId }
+      });
       if (!order) throw new Error('Order not found');
 
-      // Verifica permissões básicas
-      if (actorRole === 'merchant' && order.merchantId.toString() !== actorId) {
+      if (actorRole === 'merchant' && order.merchantId !== actorId) {
         throw new Error('Unauthorized');
       }
-      if (actorRole === 'customer' && order.customerId.toString() !== actorId) {
+      if (actorRole === 'customer' && order.customerId !== actorId) {
         throw new Error('Unauthorized');
       }
 
-      // Se estiver pronto para entrega, escalamos um entregador do dia
+      let delivererId = order.delivererId;
       if (status === 'READY') {
-        const activeDeliverers = await Deliverer.find({ isActiveToday: true, isActive: true }, null, { session: session || undefined });
+        const activeDeliverers = await tx.deliverer.findMany({
+          where: { isActiveToday: true, isActive: true }
+        });
         if (activeDeliverers.length > 0) {
           const driver = activeDeliverers[Math.floor(Math.random() * activeDeliverers.length)];
-          order.delivererId = driver._id;
+          delivererId = driver.id;
         }
       }
 
-      order.status = status;
-      order.statusHistory.push({ status, changedAt: new Date() });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status
+        }
+      });
 
-      const savedOrder = await order.save(sessionOpts);
-
-      // Dispara as notificações com base no status alterado
-      const notificationsToQueue: string[] = [];
-      try {
-        const populatedOrder = await Order.findById(savedOrder._id, null, { session: session || undefined })
-          .populate<{ customerId: any }>('customerId')
-          .populate<{ merchantId: any }>('merchantId')
-          .populate<{ delivererId: any }>('delivererId');
-
-        if (populatedOrder) {
-          const customer = populatedOrder.customerId;
-          const merchant = populatedOrder.merchantId;
-          const deliverer = populatedOrder.delivererId;
-
-          if (status === 'ACCEPTED' || status === 'PREPARING') {
-            const nId = await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi aceito por *${merchant.name}* e já está em preparação!`
-            }, session);
-            notificationsToQueue.push(nId);
-          } else if (status === 'READY') {
-            if (deliverer) {
-              const pickupAddr = `${merchant.address.street}, ${merchant.address.number} - ${merchant.address.neighborhood}, ${merchant.address.city}`;
-              const delivAddr = `${populatedOrder.deliveryAddress.street}, ${populatedOrder.deliveryAddress.number} - ${populatedOrder.deliveryAddress.neighborhood}, ${populatedOrder.deliveryAddress.city}` +
-                (populatedOrder.deliveryAddress.complement ? `, Complemento: ${populatedOrder.deliveryAddress.complement}` : '') +
-                (populatedOrder.deliveryAddress.referencePoint ? ` (Ref: ${populatedOrder.deliveryAddress.referencePoint})` : '');
-
-              // Notifica entregador
-              const nId1 = await NotificationService.queueNotification({
-                userId: deliverer._id.toString(),
-                userType: 'Deliverer',
-                type: 'WhatsApp',
-                target: deliverer.phone,
-                content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${populatedOrder.deliveryFee.toFixed(2)}.`
-              }, session);
-              notificationsToQueue.push(nId1);
-              
-              // Notifica cliente com nome do entregador
-              const nId2 = await NotificationService.queueNotification({
-                userId: customer._id.toString(),
-                userType: 'Customer',
-                type: 'WhatsApp',
-                target: customer.phone,
-                content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e o entregador *${deliverer.name}* foi acionado para a entrega!`
-              }, session);
-              notificationsToQueue.push(nId2);
-            } else {
-              // Sem entregador escalado
-              const nId = await NotificationService.queueNotification({
-                userId: customer._id.toString(),
-                userType: 'Customer',
-                type: 'WhatsApp',
-                target: customer.phone,
-                content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* está pronto e aguardando um entregador disponível.`
-              }, session);
-              notificationsToQueue.push(nId);
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status,
+          delivererId
+        },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
             }
-          } else if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
-            const nId = await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* saiu para entrega e está a caminho do seu endereço!`
-            }, session);
-            notificationsToQueue.push(nId);
-          } else if (status === 'DELIVERED') {
-            const nId = await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi entregue! Agradecemos a preferência.`
-            }, session);
-            notificationsToQueue.push(nId);
-          } else if (status === 'CANCELLED') {
-            const nId = await NotificationService.queueNotification({
-              userId: customer._id.toString(),
-              userType: 'Customer',
-              type: 'WhatsApp',
-              target: customer.phone,
-              content: `Olá, *${customer.name}*! Seu pedido nº *${populatedOrder._id}* foi cancelado.`
-            }, session);
-            notificationsToQueue.push(nId);
           }
         }
+      });
+
+      const customer = updatedOrder.customer;
+      const merchant = updatedOrder.merchant;
+      const deliverer = updatedOrder.deliverer;
+
+      if (status === 'ACCEPTED' || status === 'PREPARING') {
+        const nId = await NotificationService.queueNotification({
+          userId: customer.id,
+          userType: 'Customer',
+          type: 'WhatsApp',
+          target: customer.phone,
+          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi aceito por *${merchant.name}* e já está em preparação!`
+        }, tx);
+        notificationsToQueue.push(nId);
+      } else if (status === 'READY') {
+        if (deliverer) {
+          const pickupAddr = `${merchant.street}, ${merchant.number} - ${merchant.neighborhood}, ${merchant.city}`;
+          const delivAddr = `${updatedOrder.deliveryStreet}, ${updatedOrder.deliveryNumber} - ${updatedOrder.deliveryNeighborhood}, ${updatedOrder.deliveryCity}` +
+            (updatedOrder.deliveryComplement ? `, Complemento: ${updatedOrder.deliveryComplement}` : '') +
+            (updatedOrder.deliveryReference ? ` (Ref: ${updatedOrder.deliveryReference})` : '');
+
+          const nId1 = await NotificationService.queueNotification({
+            userId: deliverer.id,
+            userType: 'Deliverer',
+            type: 'WhatsApp',
+            target: deliverer.phone,
+            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.`
+          }, tx);
+          notificationsToQueue.push(nId1);
+
+          const nId2 = await NotificationService.queueNotification({
+            userId: customer.id,
+            userType: 'Customer',
+            type: 'WhatsApp',
+            target: customer.phone,
+            content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* está pronto e o entregador *${deliverer.name}* foi acionado para a entrega!`
+          }, tx);
+          notificationsToQueue.push(nId2);
+        } else {
+          const nId = await NotificationService.queueNotification({
+            userId: customer.id,
+            userType: 'Customer',
+            type: 'WhatsApp',
+            target: customer.phone,
+            content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* está pronto e aguardando um entregador disponível.`
+          }, tx);
+          notificationsToQueue.push(nId);
+        }
+      } else if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
+        const nId = await NotificationService.queueNotification({
+          userId: customer.id,
+          userType: 'Customer',
+          type: 'WhatsApp',
+          target: customer.phone,
+          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* saiu para entrega e está a caminho do seu endereço!`
+        }, tx);
+        notificationsToQueue.push(nId);
+      } else if (status === 'DELIVERED') {
+        const nId = await NotificationService.queueNotification({
+          userId: customer.id,
+          userType: 'Customer',
+          type: 'WhatsApp',
+          target: customer.phone,
+          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi entregue! Agradecemos a preferência.`
+        }, tx);
+        notificationsToQueue.push(nId);
+      } else if (status === 'CANCELLED') {
+        const nId = await NotificationService.queueNotification({
+          userId: customer.id,
+          userType: 'Customer',
+          type: 'WhatsApp',
+          target: customer.phone,
+          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi cancelado.`
+        }, tx);
+        notificationsToQueue.push(nId);
+      }
+
+      return updatedOrder;
+    });
+
+    for (const nId of notificationsToQueue) {
+      try {
+        await NotificationService.addJobToQueue(nId);
       } catch (err) {
-        console.error('Erro ao processar notificações de alteração de status do pedido:', err);
+        console.error('Erro ao adicionar notificação pós-commit à fila:', err);
       }
+    }
 
-      if (session) {
-        await session.commitTransaction();
-        session.endSession();
-        // Enfileira as notificações pós-commit
-        for (const nId of notificationsToQueue) {
-          try {
-            await NotificationService.addJobToQueue(nId);
-          } catch (err) {
-            console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+    return formatOrder(savedOrder);
+  }
+
+  public static async getOrderById(orderId: string): Promise<any | null> {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        customer: true,
+        merchant: true,
+        deliverer: true,
+        statusHistory: true,
+        items: {
+          include: {
+            options: true,
+            product: true
           }
         }
       }
-
-      return savedOrder;
-    } catch (error) {
-      if (session) {
-        await session.abortTransaction();
-        session.endSession();
-      }
-      throw error;
-    }
+    });
+    return formatOrder(order);
   }
 
-  public static async getOrderById(orderId: string): Promise<IOrderDocument | null> {
-    return await Order.findById(orderId)
-      .populate('customerId', 'name phone')
-      .populate('merchantId', 'name phone address');
+  public static async listCustomerOrders(customerId: string): Promise<any[]> {
+    const orders = await prisma.order.findMany({
+      where: { customerId },
+      include: {
+        customer: true,
+        merchant: true,
+        deliverer: true,
+        statusHistory: true,
+        items: {
+          include: {
+            options: true,
+            product: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    return orders.map(o => formatOrder(o));
   }
 
-  public static async listCustomerOrders(customerId: string): Promise<IOrderDocument[]> {
-    return await Order.find({ customerId: new Types.ObjectId(customerId) })
-      .populate('merchantId', 'name')
-      .sort({ createdAt: -1 });
-  }
-
-  public static async listMerchantOrders(merchantId: string, status?: OrderStatus): Promise<IOrderDocument[]> {
-    const query: any = { merchantId: new Types.ObjectId(merchantId) };
+  public static async listMerchantOrders(merchantId: string, status?: any): Promise<any[]> {
+    const where: any = { merchantId };
     if (status) {
-      query.status = status;
+      where.status = status;
     }
-    return await Order.find(query)
-      .populate('customerId', 'name phone address')
-      .sort({ createdAt: -1 });
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        customer: true,
+        merchant: true,
+        deliverer: true,
+        statusHistory: true,
+        items: {
+          include: {
+            options: true,
+            product: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    return orders.map(o => formatOrder(o));
   }
 
-  /**
-   * Obtém estatísticas financeiras e contagem de pedidos para um lojista
-   */
   public static async getMerchantStats(merchantId: string): Promise<{
     totalOrders: number;
     pendingOrders: number;
@@ -381,11 +550,12 @@ export class OrderService {
     cardRevenue: number;
     totalCommission: number;
   }> {
-    const mId = new Types.ObjectId(merchantId);
-    
-    // Todos os pedidos do lojista
-    const orders = await Order.find({ merchantId: mId });
-    const pendingOrders = await Order.countDocuments({ merchantId: mId, status: 'PENDING' });
+    const orders = await prisma.order.findMany({
+      where: { merchantId }
+    });
+    const pendingOrders = await prisma.order.count({
+      where: { merchantId, status: 'PENDING' }
+    });
 
     let revenue = 0;
     let pixRevenue = 0;
@@ -394,10 +564,9 @@ export class OrderService {
     let totalCommission = 0;
 
     orders.forEach(order => {
-      // Se não for PENDING nem CANCELLED, conta como receita e calcula financeiro
       if (order.status !== 'PENDING' && order.status !== 'CANCELLED') {
         revenue += order.subtotal;
-        totalCommission += order.commission || (order.subtotal * 0.10);
+        totalCommission += order.commission;
         
         if (order.paymentMethod === 'PIX') {
           pixRevenue += order.subtotal;
@@ -429,25 +598,27 @@ export class OrderService {
    */
   public static async cancelUnpaidPixOrders(io?: any): Promise<void> {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const unpaidPixOrders = await Order.find({
-      status: 'PENDING',
-      paymentMethod: 'PIX',
-      createdAt: { $lt: tenMinutesAgo }
+    const unpaidPixOrders = await prisma.order.findMany({
+      where: {
+        status: 'PENDING',
+        paymentMethod: 'PIX',
+        createdAt: { lt: tenMinutesAgo }
+      }
     });
 
     for (const order of unpaidPixOrders) {
       try {
-        console.log(`[Auto-Cancel] Expirando pedido PIX não pago: ${order._id}`);
-        await this.updateStatus(order._id.toString(), 'CANCELLED', order.merchantId.toString(), 'merchant');
+        console.log(`[Auto-Cancel] Expirando pedido PIX não pago: ${order.id}`);
+        await this.updateStatus(order.id, 'CANCELLED', order.merchantId, 'merchant');
         
         if (io) {
-          io.to(`order:${order._id}`).emit('orderStatusUpdated', {
-            orderId: order._id.toString(),
+          io.to(`order:${order.id}`).emit('orderStatusUpdated', {
+            orderId: order.id,
             status: 'CANCELLED'
           });
         }
       } catch (err) {
-        console.error(`[Auto-Cancel] Erro ao cancelar automaticamente pedido PIX ${order._id}:`, err);
+        console.error(`[Auto-Cancel] Erro ao cancelar automaticamente pedido PIX ${order.id}:`, err);
       }
     }
   }
