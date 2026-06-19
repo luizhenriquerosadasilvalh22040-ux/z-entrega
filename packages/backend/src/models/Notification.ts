@@ -1,29 +1,57 @@
-import { Schema, model, Document, Types } from 'mongoose';
+import prisma from '../config/prisma';
+import { QueryPromise } from './helpers';
 
-export interface INotificationDocument extends Document {
-  userId: Types.ObjectId;
-  userType: 'Customer' | 'Merchant' | 'Deliverer';
-  type: 'WhatsApp' | 'Email' | 'SMS';
-  target: string; // e.g. Telefone ou Email
-  content: string;
-  status: 'PENDING' | 'SENT' | 'FAILED';
-  attempts: number;
-  errorLog?: string[];
-  createdAt: Date;
-  updatedAt: Date;
+export const formatNotification = (n: any) => {
+  if (!n) return null;
+  return {
+    _id: n.id,
+    id: n.id,
+    userId: n.userId,
+    userType: n.userType,
+    type: n.type,
+    target: n.target,
+    content: n.content,
+    status: n.status,
+    errorMessage: n.errorMessage,
+    createdAt: n.createdAt,
+    sentAt: n.sentAt,
+    save: async function() {
+      const updated = await prisma.notification.update({
+        where: { id: this.id },
+        data: {
+          status: this.status,
+          errorMessage: this.errorMessage,
+          sentAt: this.sentAt
+        }
+      });
+      Object.assign(this, formatNotification(updated));
+      return this;
+    }
+  };
+};
+
+export class Notification {
+  public static async deleteMany(query: any = {}) {
+    return await prisma.notification.deleteMany({});
+  }
+
+  public static find(query: any = {}) {
+    const where: any = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.userType) where.userType = query.userType;
+    if (query.status) where.status = query.status;
+    const promise = prisma.notification.findMany({ where }).then(list => list.map(n => formatNotification(n)));
+    return new QueryPromise(promise);
+  }
+
+  public static async findOne(query: any = {}) {
+    const where: any = {};
+    if (query.userId) where.userId = query.userId;
+    if (query.userType) where.userType = query.userType;
+    if (query.status) where.status = query.status;
+    const n = await prisma.notification.findFirst({ where });
+    return formatNotification(n);
+  }
 }
 
-const NotificationSchema = new Schema<INotificationDocument>({
-  userId: { type: Schema.Types.ObjectId, required: true, index: true },
-  userType: { type: String, required: true, enum: ['Customer', 'Merchant', 'Deliverer'] },
-  type: { type: String, required: true, enum: ['WhatsApp', 'Email', 'SMS'] },
-  target: { type: String, required: true },
-  content: { type: String, required: true },
-  status: { type: String, required: true, enum: ['PENDING', 'SENT', 'FAILED'], default: 'PENDING', index: true },
-  attempts: { type: Number, default: 0 },
-  errorLog: [{ type: String }]
-}, {
-  timestamps: true
-});
-
-export const Notification = model<INotificationDocument>('Notification', NotificationSchema);
+export type INotificationDocument = any;

@@ -66,6 +66,13 @@ export const formatMerchant = (merchant: any) => {
       });
       Object.assign(this, formatMerchant(updated));
       return this;
+    },
+    toObject: function() {
+      const { save, toObject, markModified, ...rest } = this;
+      return rest;
+    },
+    markModified: function(path: string) {
+      // no-op para compatibilidade Mongoose
     }
   };
 };

@@ -1,27 +1,24 @@
-import { Schema, model, Document, Types } from 'mongoose';
+import prisma from '../config/prisma';
+import { formatPromotion } from '../services/PromotionService';
+import { QueryPromise } from './helpers';
 
-export interface IPromotionDocument extends Document {
-  merchantId: Types.ObjectId;
-  name: string;
-  discountPercentage: number;
-  startDate: Date;
-  endDate: Date;
-  isActive: boolean;
-  targetProducts: Types.ObjectId[]; // IDs de produtos afetados (se vazio, afeta toda a loja)
-  createdAt: Date;
-  updatedAt: Date;
+export class Promotion {
+  public static async findById(id: string) {
+    const p = await prisma.promotion.findUnique({
+      where: { id }
+    });
+    return formatPromotion(p);
+  }
+
+  public static find(query: any = {}) {
+    const where: any = {};
+    if (query.merchantId) where.merchantId = query.merchantId;
+    if (query.isActive !== undefined && query.isActive === true) {
+      where.expirationDate = { gte: new Date() };
+    }
+    const promise = prisma.promotion.findMany({ where }).then(list => list.map(p => formatPromotion(p)));
+    return new QueryPromise(promise);
+  }
 }
 
-const PromotionSchema = new Schema<IPromotionDocument>({
-  merchantId: { type: Schema.Types.ObjectId, ref: 'Merchant', required: true, index: true },
-  name: { type: String, required: true },
-  discountPercentage: { type: Number, required: true, min: 0, max: 100 },
-  startDate: { type: Date, required: true },
-  endDate: { type: Date, required: true },
-  isActive: { type: Boolean, default: true },
-  targetProducts: [{ type: Schema.Types.ObjectId, ref: 'Product' }]
-}, {
-  timestamps: true
-});
-
-export const Promotion = model<IPromotionDocument>('Promotion', PromotionSchema);
+export type IPromotionDocument = any;

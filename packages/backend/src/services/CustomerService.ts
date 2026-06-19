@@ -77,6 +77,13 @@ export const formatCustomer = (customer: any) => {
       
       Object.assign(this, formatCustomer(updated));
       return this;
+    },
+    toObject: function() {
+      const { save, toObject, markModified, ...rest } = this;
+      return rest;
+    },
+    markModified: function(path: string) {
+      // no-op para compatibilidade Mongoose
     }
   };
 };

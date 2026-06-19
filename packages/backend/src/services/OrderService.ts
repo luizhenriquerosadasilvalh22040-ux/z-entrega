@@ -202,6 +202,9 @@ export class OrderService {
       const total = subtotal + deliveryFee;
 
       const finalAddress = deliveryAddress || formatCustomer(customer)?.address;
+      if (!finalAddress) {
+        throw new Error('Endereço de entrega não definido.');
+      }
 
       let asaasPaymentId = undefined;
       let pixQrCode = undefined;

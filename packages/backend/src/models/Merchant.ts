@@ -1,67 +1,59 @@
-import { Schema, model, Document } from 'mongoose';
-import { IAddress, IOperatingHours } from '../types';
+import prisma from '../config/prisma';
+import { formatMerchant } from '../services/MerchantService';
+import { QueryPromise } from './helpers';
 
-export interface IMerchantDocument extends Document {
-  name: string;
-  email: string;
-  passwordHash: string;
-  cnpj: string; // Salvo encriptado
-  phone: string;
-  category: 'Comida' | 'Farmácia' | 'Construção' | 'Geral';
-  operatingHours: IOperatingHours;
-  paymentMethods: string[];
-  address: IAddress;
-  isVerified: boolean;
-  isActive: boolean;
-  isForceClosed?: boolean;
-  logoImage?: string;
-  coverImage?: string;
-  subscriptionPrice?: number;
-  createdAt: Date;
-  updatedAt: Date;
+export class Merchant {
+  public static async findById(id: string): Promise<any> {
+    const merchant = await prisma.merchant.findUnique({
+      where: { id }
+    });
+    return formatMerchant(merchant)!;
+  }
+
+  public static async findOne(query: any): Promise<any> {
+    const where: any = {};
+    if (query.email) where.email = query.email;
+    if (query.cnpj) where.cnpj = query.cnpj;
+    const merchant = await prisma.merchant.findFirst({
+      where
+    });
+    return formatMerchant(merchant)!;
+  }
+
+  public static find(query: any = {}) {
+    const where: any = {};
+    if (query.isActive !== undefined) where.isActive = query.isActive;
+    const promise = prisma.merchant.findMany({ where }).then(list => list.map(m => formatMerchant(m)!));
+    return new QueryPromise(promise);
+  }
+
+  public static async countDocuments(query: any = {}) {
+    const where: any = {};
+    if (query.isVerified !== undefined) where.isVerified = query.isVerified;
+    if (query.isActive !== undefined) where.isActive = query.isActive;
+    return await prisma.merchant.count({ where });
+  }
+
+  public static async findByIdAndUpdate(id: string, update: any, options: any = {}) {
+    const updateData = update.$set || update;
+    const data: any = {};
+    if (updateData.isVerified !== undefined) data.isVerified = updateData.isVerified;
+    if (updateData.subscriptionPrice !== undefined) data.subscriptionPrice = updateData.subscriptionPrice;
+    if (updateData.isActive !== undefined) data.isActive = updateData.isActive;
+    if (updateData.name !== undefined) data.name = updateData.name;
+    if (updateData.phone !== undefined) data.phone = updateData.phone;
+    
+    const merchant = await prisma.merchant.update({
+      where: { id },
+      data
+    });
+    return formatMerchant(merchant);
+  }
+
+  public static async deleteMany(query: any = {}) {
+    return await prisma.merchant.deleteMany({});
+  }
 }
 
-const AddressSchema = new Schema<IAddress>({
-  street: { type: String, required: true },
-  number: { type: String, required: true },
-  neighborhood: { type: String, required: true },
-  city: { type: String, required: true },
-  state: { type: String, required: true },
-  zipCode: { type: String, required: true },
-  coordinates: {
-    lat: { type: Number },
-    lng: { type: Number }
-  }
-}, { _id: false });
-
-const OperatingHoursSchema = new Schema<IOperatingHours>({
-  open: { type: String, required: true, default: "08:00" },
-  close: { type: String, required: true, default: "22:00" }
-}, { _id: false });
-
-const MerchantSchema = new Schema<IMerchantDocument>({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true, index: true },
-  passwordHash: { type: String, required: true },
-  cnpj: { type: String, required: true, unique: true },
-  phone: { type: String, required: true },
-  category: { 
-    type: String, 
-    required: true, 
-    enum: ['Comida', 'Farmácia', 'Construção', 'Geral'],
-    index: true
-  },
-  operatingHours: { type: OperatingHoursSchema, required: true },
-  paymentMethods: [{ type: String, required: true }],
-  address: { type: AddressSchema, required: true },
-  isVerified: { type: Boolean, default: false },
-  isActive: { type: Boolean, default: true },
-  isForceClosed: { type: Boolean, default: false },
-  logoImage: { type: String },
-  coverImage: { type: String },
-  subscriptionPrice: { type: Number }
-}, {
-  timestamps: true
-});
-
-export const Merchant = model<IMerchantDocument>('Merchant', MerchantSchema);
+export type IMerchantDocument = any;
+export type IOperatingHours = any;

@@ -70,10 +70,13 @@ CREATE TABLE customer_addresses (
 CREATE TABLE deliverers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
     phone VARCHAR(50) UNIQUE NOT NULL,
     vehicle_type VARCHAR(50) NOT NULL,
     license_plate VARCHAR(20),
     is_active BOOLEAN DEFAULT TRUE,
+    is_available BOOLEAN DEFAULT FALSE,
     is_active_today BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -206,4 +209,23 @@ CREATE TABLE banners (
     title VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 15. Configurações do Sistema
+CREATE TABLE system_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    default_subscription_price DECIMAL(10, 2) NOT NULL DEFAULT 150.00,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 16. Administradores do Sistema
+CREATE TABLE system_admins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

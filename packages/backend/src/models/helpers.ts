@@ -39,4 +39,9 @@ export class QueryPromise<T> implements PromiseLike<T> {
     });
     return this;
   }
+
+  populate(path: any, select?: any) {
+    // no-op, relations are already eagerly loaded in Prisma config
+    return this;
+  }
 }

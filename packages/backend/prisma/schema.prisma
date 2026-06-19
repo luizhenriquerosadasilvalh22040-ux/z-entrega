@@ -87,10 +87,13 @@ model CustomerAddress {
 model Deliverer {
   id            String   @id @default(uuid()) @db.Uuid
   name          String
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
   phone         String   @unique
   vehicleType   String   @map("vehicle_type")
   licensePlate  String?  @map("license_plate")
   isActive      Boolean  @default(true) @map("is_active")
+  isAvailable   Boolean  @default(false) @map("is_available")
   isActiveToday Boolean  @default(false) @map("is_active_today")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

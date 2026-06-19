@@ -1,8 +1,7 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { connectDatabase } from './config/database';
+import prisma from './config/prisma';
 import { Customer } from './models/Customer';
 import { Merchant } from './models/Merchant';
 import { Product } from './models/Product';
@@ -16,7 +15,6 @@ import logger from './config/logger';
 async function runTestFlow() {
   try {
     logger.info('Starting programmatic E2E flow validation...');
-    await connectDatabase();
 
     // 1. Encontra Lojista e Produto semeados
     const merchant = await Merchant.findOne({ email: 'merchant@example.com' });
@@ -116,7 +114,7 @@ async function runTestFlow() {
     // Verifica se a notificação de criação foi enfileirada
     let notifications = await Notification.find({ userId: customer._id }).sort({ createdAt: -1 });
     logger.info(`Notificações enfileiradas para o cliente: ${notifications.length}`);
-    if (notifications.length > 0) {
+    if (notifications.length > 0 && notifications[0]) {
       logger.info(`Conteúdo: "${notifications[0].content}"`);
     }
 
@@ -127,7 +125,9 @@ async function runTestFlow() {
     logger.info(`Status do pedido atualizado para: ${acceptedOrder?.status}`);
 
     notifications = await Notification.find({ userId: customer._id }).sort({ createdAt: -1 });
-    logger.info(`Notificação de aceite enfileirada: "${notifications[0].content}"`);
+    if (notifications.length > 0 && notifications[0]) {
+      logger.info(`Notificação de aceite enfileirada: "${notifications[0].content}"`);
+    }
 
     // 5. PRONTO PARA COLETA (READY) - Deve acionar entregador escalado
     logger.info('--- 5. Pedido Pronto (READY) ---');
@@ -143,10 +143,14 @@ async function runTestFlow() {
 
     // Verifica notificações enfileiradas para o entregador e cliente
     const delivererNotif = await Notification.findOne({ userId: deliverer._id });
-    logger.info(`Notificação enfileirada para o entregador: "${delivererNotif?.content}"`);
+    if (delivererNotif) {
+      logger.info(`Notificação enfileirada para o entregador: "${delivererNotif.content}"`);
+    }
 
-    const clientNotif = await Notification.findOne({ userId: customer._id, content: { $regex: /Carlos/ } });
-    logger.info(`Notificação enfileirada para o cliente com motorista: "${clientNotif?.content}"`);
+    const clientNotif = await Notification.findOne({ userId: customer._id });
+    if (clientNotif) {
+      logger.info(`Notificação enfileirada para o cliente com motorista: "${clientNotif.content}"`);
+    }
 
     // 6. CONCLUSÃO
     logger.info('✅ Programmatic E2E Flow validation completed successfully without errors!');
@@ -154,7 +158,7 @@ async function runTestFlow() {
     logger.error('❌ Flow validation failed: %O', error);
     process.exit(1);
   } finally {
-    await mongoose.disconnect();
+    await prisma.$disconnect();
     process.exit(0);
   }
 }

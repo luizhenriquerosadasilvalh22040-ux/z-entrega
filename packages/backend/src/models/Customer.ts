@@ -2,15 +2,15 @@ import prisma from '../config/prisma';
 import { formatCustomer } from '../services/CustomerService';
 
 export class Customer {
-  public static async findById(id: string) {
+  public static async findById(id: string): Promise<any> {
     const customer = await prisma.customer.findUnique({
       where: { id },
       include: { addresses: true }
     });
-    return formatCustomer(customer);
+    return formatCustomer(customer)!;
   }
 
-  public static async findOne(query: any) {
+  public static async findOne(query: any): Promise<any> {
     const where: any = {};
     if (query.email) where.email = query.email;
     if (query.phone) where.phone = query.phone;
@@ -19,7 +19,7 @@ export class Customer {
       where,
       include: { addresses: true }
     });
-    return formatCustomer(customer);
+    return formatCustomer(customer)!;
   }
 }
 
