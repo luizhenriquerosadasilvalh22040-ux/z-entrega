@@ -46,6 +46,10 @@ export interface IOrderDocument extends Document {
   statusHistory: IOrderStatusHistory[];
   paymentMethod: string;
   deliveryAddress: IAddress;
+  asaasPaymentId?: string;
+  paymentStatus?: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'REFUNDED' | 'OVERDUE';
+  pixQrCode?: string;
+  pixCopyAndPaste?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -109,7 +113,16 @@ const OrderSchema = new Schema<IOrderDocument>({
   },
   statusHistory: [OrderStatusHistorySchema],
   paymentMethod: { type: String, required: true },
-  deliveryAddress: { type: AddressSchema, required: true }
+  deliveryAddress: { type: AddressSchema, required: true },
+  asaasPaymentId: { type: String, index: true },
+  paymentStatus: { 
+    type: String, 
+    enum: ['PENDING', 'RECEIVED', 'CONFIRMED', 'REFUNDED', 'OVERDUE'],
+    default: 'PENDING',
+    index: true
+  },
+  pixQrCode: { type: String },
+  pixCopyAndPaste: { type: String }
 }, {
   timestamps: true
 });

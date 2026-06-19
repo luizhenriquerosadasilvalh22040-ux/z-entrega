@@ -36,6 +36,7 @@ import promotionRoutes from './routes/promotions';
 import adminRoutes from './routes/admin';
 import bannerRoutes from './routes/banners';
 import uploadRoutes from './routes/upload';
+import paymentRoutes from './routes/payments';
 
 const app = express();
 const server = http.createServer(app);
@@ -112,6 +113,7 @@ app.use('/api/promotions', promotionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Configuração do Socket.io para Rastreamento em Tempo Real
 io.on('connection', (socket) => {

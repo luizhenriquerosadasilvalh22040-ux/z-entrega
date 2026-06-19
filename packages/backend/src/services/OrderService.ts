@@ -7,6 +7,8 @@ import { PromotionService } from './PromotionService';
 import { NotificationService } from './NotificationService';
 import mongoose, { Types } from 'mongoose';
 import { IAddress } from '../types';
+import { AsaasService } from './AsaasService';
+import logger from '../config/logger';
 
 export class OrderService {
   /**
@@ -113,7 +115,34 @@ export class OrderService {
       const deliveryFee = 5.00; // Taxa fixa de entrega de R$ 5
       const total = subtotal + deliveryFee;
 
+      const orderId = new mongoose.Types.ObjectId();
+      
+      let asaasPaymentId = undefined;
+      let pixQrCode = undefined;
+      let pixCopyAndPaste = undefined;
+      let paymentStatus: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'REFUNDED' | 'OVERDUE' = 'PENDING';
+
+      if (paymentMethod === 'PIX') {
+        if (process.env.ASAAS_API_KEY) {
+          const asaasCustomerId = await AsaasService.getOrCreateCustomer(customer);
+          const pixPayment = await AsaasService.createPixPayment(
+            orderId.toString(),
+            total,
+            asaasCustomerId
+          );
+          asaasPaymentId = pixPayment.asaasPaymentId;
+          pixQrCode = pixPayment.qrCodeBase64;
+          pixCopyAndPaste = pixPayment.copyAndPaste;
+        } else {
+          logger.warn('⚠️ [Asaas Mock] Chave ASAAS_API_KEY ausente no .env. Gerando dados de PIX fictícios para teste local.');
+          asaasPaymentId = `pay_mock_${Math.random().toString(36).substr(2, 9)}`;
+          pixQrCode = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+          pixCopyAndPaste = '00020101021226830014br.gov.bcb.pix256100000000000000000000000000000005204000053039865802BR5920Traz Pra Ca Delivery6009Sao Paulo62070503***6304ABCD';
+        }
+      }
+
       const order = new Order({
+        _id: orderId,
         customerId: customer._id,
         merchantId: merchant._id,
         items,
@@ -124,7 +153,11 @@ export class OrderService {
         status: 'PENDING',
         statusHistory: [{ status: 'PENDING', changedAt: new Date() }],
         paymentMethod,
-        deliveryAddress: deliveryAddress || customer.address
+        deliveryAddress: deliveryAddress || customer.address,
+        asaasPaymentId,
+        paymentStatus,
+        pixQrCode,
+        pixCopyAndPaste
       });
 
       const savedOrder = await order.save(sessionOpts);

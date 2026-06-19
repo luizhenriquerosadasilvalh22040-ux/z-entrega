@@ -11,6 +11,7 @@ export interface ICustomerDocument extends Document {
   savedAddresses: ISavedAddress[];
   isPhoneVerified: boolean;
   verificationCode?: string;
+  asaasCustomerId?: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -55,6 +56,7 @@ const CustomerSchema = new Schema<ICustomerDocument>({
   }, { _id: false })], default: [] },
   isPhoneVerified: { type: Boolean, default: false },
   verificationCode: { type: String },
+  asaasCustomerId: { type: String, index: true },
   isActive: { type: Boolean, default: true }
 }, {
   timestamps: true
