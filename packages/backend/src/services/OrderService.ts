@@ -164,10 +164,17 @@ export class OrderService {
         }
       });
 
+      // Busca todos os produtos do pedido de uma vez só (evita N+1 queries em loop)
+      const productIds = itemsData.map(item => item.productId);
+      const dbProducts = await tx.product.findMany({
+        where: { id: { in: productIds } }
+      });
+
+      // Cria um mapa para facilitar a busca rápida em memória
+      const productMap = new Map(dbProducts.map(p => [p.id, p]));
+
       for (const item of itemsData) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId }
-        });
+        const product = productMap.get(item.productId);
         
         if (!product || product.merchantId !== merchantId) throw new Error(`Product not found: ${item.productId}`);
         if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);

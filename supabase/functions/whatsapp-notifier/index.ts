@@ -20,7 +20,13 @@ serve(async (req) => {
     const { id, target, content } = record;
 
     // Limpa caracteres especiais do telefone de destino
-    const cleanedTarget = target.replace(/\D/g, "");
+    let cleanedTarget = target.replace(/\D/g, "");
+
+    // Se o número possuir 10 ou 11 dígitos, é o formato nacional brasileiro (sem DDI)
+    // Adiciona o DDI '55' no início para a Meta Graph API aceitar corretamente
+    if (cleanedTarget.length === 10 || cleanedTarget.length === 11) {
+      cleanedTarget = `55${cleanedTarget}`;
+    }
 
     console.info(`📱 Disparando WhatsApp oficial para ${cleanedTarget}...`);
 
