@@ -904,13 +904,19 @@ export const Store: React.FC = () => {
                     onChange={(e) => setAddressNickname(e.target.value)}
                     required
                   />
-                  <Input
-                    label="CEP *"
-                    placeholder="Ex: 87103-000"
-                    value={zipCode}
-                    onChange={(e) => setZipCode(e.target.value)}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      label="CEP *"
+                      placeholder="Ex: 87103-000"
+                      value={zipCode}
+                      onChange={(e) => handleCepChange(e.target.value)}
+                      disabled={isSearchingCep}
+                      required
+                    />
+                    {isSearchingCep && (
+                      <Loader2 className="absolute right-3 bottom-8 h-4 w-4 animate-spin text-energy" />
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-4 gap-3">
                   <div className="col-span-3">
@@ -919,6 +925,7 @@ export const Store: React.FC = () => {
                       placeholder="Ex: Av. Brasil"
                       value={street}
                       onChange={(e) => setStreet(e.target.value)}
+                      disabled={isSearchingCep}
                       required
                     />
                   </div>
@@ -928,6 +935,7 @@ export const Store: React.FC = () => {
                       placeholder="Ex: 123"
                       value={number}
                       onChange={(e) => setNumber(e.target.value)}
+                      disabled={isSearchingCep}
                       required
                     />
                   </div>
@@ -938,6 +946,7 @@ export const Store: React.FC = () => {
                     placeholder="Ex: Centro"
                     value={neighborhood}
                     onChange={(e) => setNeighborhood(e.target.value)}
+                    disabled={isSearchingCep}
                     required
                   />
                   <Input
@@ -945,6 +954,7 @@ export const Store: React.FC = () => {
                     placeholder="Ex: Maringá"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
+                    disabled={isSearchingCep}
                     required
                   />
                   <Input
@@ -953,6 +963,7 @@ export const Store: React.FC = () => {
                     maxLength={2}
                     value={stateCode}
                     onChange={(e) => setStateCode(e.target.value.toUpperCase())}
+                    disabled={isSearchingCep}
                     required
                   />
                 </div>
@@ -1291,6 +1302,93 @@ export const Store: React.FC = () => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* PIX Modal */}
+      <Modal isOpen={isPixModalOpen} onClose={() => {
+        setIsPixModalOpen(false);
+        navigate('/orders');
+      }} title="Pagamento via PIX">
+        {pixData && (
+          <div className="flex flex-col items-center justify-center p-4 space-y-6 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Escaneie o QR Code abaixo ou copie a chave PIX para realizar o pagamento. O seu pedido será confirmado automaticamente após o pagamento.
+            </p>
+
+            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-center relative">
+              {pixTimeLeft > 0 ? (
+                <img
+                  src={`data:image/png;base64,${pixData.qrCode}`}
+                  alt="QR Code PIX"
+                  className="w-48 h-48 md:w-56 md:h-56 object-contain"
+                />
+              ) : (
+                <div className="w-48 h-48 md:w-56 md:h-56 flex flex-col items-center justify-center text-red-500 font-bold bg-slate-50 rounded-2xl">
+                  <Ban size={40} className="mb-2" />
+                  <span>Tempo Expirado</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">Tempo restante</span>
+              <span className={`text-2xl font-black ${pixTimeLeft > 60 ? 'text-energy' : 'text-red-500 animate-pulse'}`}>
+                {formatPixTime(pixTimeLeft)}
+              </span>
+            </div>
+
+            <div className="w-full space-y-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 text-left">
+                Código Copia e Cola
+              </label>
+              <div className="w-full bg-slate-50 dark:bg-slate-850/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/50 flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-650 dark:text-slate-350 truncate max-w-[220px] sm:max-w-sm text-left">
+                  {pixData.copyAndPaste}
+                </span>
+                <Button 
+                  size="sm"
+                  disabled={pixTimeLeft <= 0}
+                  onClick={() => {
+                    navigator.clipboard.writeText(pixData.copyAndPaste);
+                    setIsPixCopied(true);
+                    setToast({ message: 'Código PIX copiado para a área de transferência!', type: 'success' });
+                    setTimeout(() => setIsPixCopied(false), 2000);
+                  }}
+                  className="flex-shrink-0"
+                >
+                  {isPixCopied ? (
+                    <span className="flex items-center gap-1">
+                      <Check size={14} /> Copiado
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Copy size={14} /> Copiar
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="w-full border-t border-slate-100 dark:border-slate-800 pt-4 flex flex-col gap-2">
+              <Button fullWidth onClick={() => {
+                setIsPixModalOpen(false);
+                navigate('/orders');
+              }}>
+                Acompanhar Pedido
+              </Button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setIsPixModalOpen(false);
+                  navigate('/orders');
+                }} 
+                className="text-xs text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 transition-colors font-bold py-1"
+              >
+                Voltar mais tarde
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Toast notifications */}
