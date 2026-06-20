@@ -117,6 +117,7 @@ export const Store: React.FC = () => {
 
   // CEP Search State
   const [isSearchingCep, setIsSearchingCep] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   // Timer PIX Effect
   useEffect(() => {
@@ -417,6 +418,7 @@ export const Store: React.FC = () => {
     }
 
     try {
+      setIsSubmittingOrder(true);
       const targetAddress = {
         street,
         number,
@@ -431,6 +433,7 @@ export const Store: React.FC = () => {
       if (selectedAddressId === 'custom' && saveThisAddress) {
         if (!addressNickname) {
           setToast({ message: 'Digite um apelido para o novo endereço (Ex: Trabalho)', type: 'error' });
+          setIsSubmittingOrder(false);
           return;
         }
 
@@ -484,6 +487,8 @@ export const Store: React.FC = () => {
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erro ao finalizar pedido';
       setToast({ message: msg, type: 'error' });
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
