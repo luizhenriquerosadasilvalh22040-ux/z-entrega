@@ -1,12 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { SystemConfig } from '../models/SystemConfig';
-import { Merchant } from '../models/Merchant';
-import { Deliverer } from '../models/Deliverer';
-import { Order } from '../models/Order';
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma';
 import { formatMerchant } from '../services/MerchantService';
 import { formatOrder } from '../services/OrderService';
+import { formatDeliverer } from '../services/DelivererService';
 
 export class AdminController {
   /**
@@ -15,32 +12,45 @@ export class AdminController {
   public static async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // 1. Obter ou criar configuração padrão do sistema
-      let config = await SystemConfig.findOne();
+      let config = await prisma.systemConfig.findFirst();
       if (!config) {
-        config = await SystemConfig.create({ defaultSubscriptionPrice: 150.00 });
+        config = await prisma.systemConfig.create({
+          data: { defaultSubscriptionPrice: 150.00 }
+        });
       }
 
       // 2. Contagens básicas
-      const totalOrders = await Order.countDocuments();
-      const totalMerchants = await Merchant.countDocuments();
-      const verifiedMerchants = await Merchant.countDocuments({ isVerified: true });
-      const totalDeliverers = await Deliverer.countDocuments();
-      const activeDeliverersToday = await Deliverer.countDocuments({ isActiveToday: true });
+      const totalOrders = await prisma.order.count();
+      const totalMerchants = await prisma.merchant.count();
+      const verifiedMerchants = await prisma.merchant.count({ where: { isVerified: true } });
+      const totalDeliverers = await prisma.deliverer.count();
+      const activeDeliverersToday = await prisma.deliverer.count({ where: { isActiveToday: true } });
 
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
-      const dailyOrdersVolume = await Order.countDocuments({
-        createdAt: { $gte: startOfToday, $lte: endOfToday }
+      const dailyOrdersVolume = await prisma.order.count({
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lte: endOfToday
+          }
+        }
       });
 
       // 3. Receita total e do dia
-      const orders = await Order.find({ status: { $ne: 'CANCELLED' } });
-      const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
+      const orders = await prisma.order.findMany({
+        where: {
+          status: {
+            not: 'CANCELLED'
+          }
+        }
+      });
+      const totalSales = orders.reduce((sum, order) => sum + Number(order.total), 0);
 
       // Pedidos entregues
-      const completedOrders = await Order.countDocuments({ status: 'DELIVERED' });
+      const completedOrders = await prisma.order.count({ where: { status: 'DELIVERED' } });
 
       res.status(200).json({
         status: 'success',
@@ -54,7 +64,7 @@ export class AdminController {
             activeDeliverersToday,
             totalSales,
             dailyOrdersVolume,
-            defaultSubscriptionPrice: config.defaultSubscriptionPrice
+            defaultSubscriptionPrice: Number(config.defaultSubscriptionPrice)
           }
         }
       });
@@ -68,9 +78,11 @@ export class AdminController {
    */
   public static async getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      let config = await SystemConfig.findOne();
+      let config = await prisma.systemConfig.findFirst();
       if (!config) {
-        config = await SystemConfig.create({ defaultSubscriptionPrice: 150.00 });
+        config = await prisma.systemConfig.create({
+          data: { defaultSubscriptionPrice: 150.00 }
+        });
       }
       res.status(200).json({
         status: 'success',
@@ -92,14 +104,17 @@ export class AdminController {
         return;
       }
 
-      let config = await SystemConfig.findOne();
+      let config = await prisma.systemConfig.findFirst();
       if (!config) {
-        config = new SystemConfig({ defaultSubscriptionPrice });
+        config = await prisma.systemConfig.create({
+          data: { defaultSubscriptionPrice }
+        });
       } else {
-        config.defaultSubscriptionPrice = defaultSubscriptionPrice;
+        config = await prisma.systemConfig.update({
+          where: { id: config.id },
+          data: { defaultSubscriptionPrice }
+        });
       }
-
-      await config.save();
 
       res.status(200).json({
         status: 'success',
@@ -115,7 +130,10 @@ export class AdminController {
    */
   public static async listDeliverers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const deliverers = await Deliverer.find().sort({ name: 1 });
+      const dbDeliverers = await prisma.deliverer.findMany({
+        orderBy: { name: 'asc' }
+      });
+      const deliverers = dbDeliverers.map(d => formatDeliverer(d));
       res.status(200).json({
         status: 'success',
         data: { deliverers }
@@ -137,7 +155,9 @@ export class AdminController {
         return;
       }
 
-      const existing = await Deliverer.findOne({ email });
+      const existing = await prisma.deliverer.findFirst({
+        where: { email }
+      });
       if (existing) {
         res.status(400).json({ status: 'fail', message: 'E-mail de entregador já cadastrado' });
         return;
@@ -145,17 +165,22 @@ export class AdminController {
 
       const passwordHash = await bcrypt.hash('password123', 10); // Senha padrão para entregadores criados pelo admin
 
-      const deliverer = await Deliverer.create({
-        name,
-        email,
-        phone,
-        vehicle,
-        plate,
-        passwordHash,
-        isActive: true,
-        isAvailable: true,
-        isActiveToday: !!isActiveToday
+      const dbDeliverer = await prisma.deliverer.create({
+        data: {
+          name,
+          email,
+          phone,
+          vehicleType: vehicle,
+          licensePlate: plate || null,
+          passwordHash,
+          isActive: true,
+          isAvailable: true,
+          isActiveToday: !!isActiveToday,
+          deliveryStatus: 'AVAILABLE'
+        }
       });
+
+      const deliverer = formatDeliverer(dbDeliverer);
 
       res.status(201).json({
         status: 'success',
@@ -174,20 +199,28 @@ export class AdminController {
       const { id } = req.params;
       const { name, email, phone, vehicle, plate, isActive } = req.body;
 
-      const deliverer = await Deliverer.findById(id);
-      if (!deliverer) {
+      const existing = await prisma.deliverer.findUnique({
+        where: { id }
+      });
+      if (!existing) {
         res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
         return;
       }
 
-      if (name) deliverer.name = name;
-      if (email) deliverer.email = email;
-      if (phone) deliverer.phone = phone;
-      if (vehicle) deliverer.vehicle = vehicle;
-      if (plate !== undefined) deliverer.plate = plate;
-      if (isActive !== undefined) deliverer.isActive = isActive;
+      const data: any = {};
+      if (name !== undefined) data.name = name;
+      if (email !== undefined) data.email = email;
+      if (phone !== undefined) data.phone = phone;
+      if (vehicle !== undefined) data.vehicleType = vehicle;
+      if (plate !== undefined) data.licensePlate = plate;
+      if (isActive !== undefined) data.isActive = isActive;
 
-      await deliverer.save();
+      const updated = await prisma.deliverer.update({
+        where: { id },
+        data
+      });
+
+      const deliverer = formatDeliverer(updated);
 
       res.status(200).json({
         status: 'success',
@@ -211,14 +244,20 @@ export class AdminController {
         return;
       }
 
-      const deliverer = await Deliverer.findById(id);
-      if (!deliverer) {
+      const existing = await prisma.deliverer.findUnique({
+        where: { id }
+      });
+      if (!existing) {
         res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
         return;
       }
 
-      deliverer.isActiveToday = isActiveToday;
-      await deliverer.save();
+      const updated = await prisma.deliverer.update({
+        where: { id },
+        data: { isActiveToday }
+      });
+
+      const deliverer = formatDeliverer(updated);
 
       res.status(200).json({
         status: 'success',
@@ -235,11 +274,18 @@ export class AdminController {
   public static async deleteDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const deliverer = await Deliverer.findByIdAndDelete(id);
-      if (!deliverer) {
+      const existing = await prisma.deliverer.findUnique({
+        where: { id }
+      });
+      if (!existing) {
         res.status(404).json({ status: 'fail', message: 'Entregador não encontrado' });
         return;
       }
+
+      await prisma.deliverer.delete({
+        where: { id }
+      });
+
       res.status(200).json({
         status: 'success',
         message: 'Entregador removido com sucesso'
@@ -254,7 +300,10 @@ export class AdminController {
    */
   public static async listMerchants(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const merchants = await Merchant.find().sort({ name: 1 });
+      const dbMerchants = await prisma.merchant.findMany({
+        orderBy: { name: 'asc' }
+      });
+      const merchants = dbMerchants.map(m => formatMerchant(m));
       res.status(200).json({
         status: 'success',
         data: { merchants }

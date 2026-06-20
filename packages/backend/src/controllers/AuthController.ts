@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/AuthService';
-import { Customer } from '../models/Customer';
-import { Merchant } from '../models/Merchant';
+import { formatCustomer } from '../services/CustomerService';
+import { formatMerchant } from '../services/MerchantService';
+import prisma from '../config/prisma';
 
 export class AuthController {
   private static setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
@@ -39,7 +40,7 @@ export class AuthController {
       const customer = await AuthService.registerCustomer(req.body);
       
       // Remove a senha do objeto de retorno
-      const response = customer.toObject();
+      const response = customer.toObject ? customer.toObject() : customer;
       delete response.passwordHash;
 
       res.status(201).json({
@@ -56,7 +57,7 @@ export class AuthController {
       const { email, password } = req.body;
       const { customer, accessToken, refreshToken } = await AuthService.loginCustomer(email, password);
 
-      const customerObj = customer.toObject();
+      const customerObj = customer.toObject ? customer.toObject() : customer;
       delete customerObj.passwordHash;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
@@ -78,7 +79,7 @@ export class AuthController {
     try {
       const merchant = await AuthService.registerMerchant(req.body);
 
-      const response = merchant.toObject();
+      const response = merchant.toObject ? merchant.toObject() : merchant;
       delete response.passwordHash;
 
       res.status(201).json({
@@ -95,7 +96,7 @@ export class AuthController {
       const { email, password } = req.body;
       const { merchant, accessToken, refreshToken } = await AuthService.loginMerchant(email, password);
 
-      const merchantObj = merchant.toObject();
+      const merchantObj = merchant.toObject ? merchant.toObject() : merchant;
       delete merchantObj.passwordHash;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
@@ -213,16 +214,27 @@ export class AuthController {
       
       let userObj: any = null;
       if (role === 'customer') {
-        const customer = await Customer.findById(userId);
-        if (customer) {
-          userObj = customer.toObject();
-          delete userObj.passwordHash;
+        const dbCustomer = await prisma.customer.findUnique({
+          where: { id: userId },
+          include: { addresses: true }
+        });
+        if (dbCustomer) {
+          const customer = formatCustomer(dbCustomer);
+          userObj = customer ? (customer.toObject ? customer.toObject() : customer) : null;
+          if (userObj) {
+            delete userObj.passwordHash;
+          }
         }
       } else if (role === 'merchant') {
-        const merchant = await Merchant.findById(userId);
-        if (merchant) {
-          userObj = merchant.toObject();
-          delete userObj.passwordHash;
+        const dbMerchant = await prisma.merchant.findUnique({
+          where: { id: userId }
+        });
+        if (dbMerchant) {
+          const merchant = formatMerchant(dbMerchant);
+          userObj = merchant ? (merchant.toObject ? merchant.toObject() : merchant) : null;
+          if (userObj) {
+            delete userObj.passwordHash;
+          }
         }
       } else if (role === 'admin') {
         userObj = { name: 'Administrador Geral', email: 'admin@trazpraca.com' };
@@ -264,7 +276,7 @@ export class AuthController {
       const { phone, code } = req.body;
       const { customer, accessToken, refreshToken } = await AuthService.verifyCustomerOtp(phone, code);
 
-      const customerObj = customer.toObject();
+      const customerObj = customer.toObject ? customer.toObject() : customer;
       delete customerObj.passwordHash;
       delete customerObj.verificationCode;
       delete customerObj.verificationCodeExpires;
