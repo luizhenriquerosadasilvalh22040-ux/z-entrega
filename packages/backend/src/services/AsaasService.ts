@@ -156,6 +156,10 @@ export class AsaasService {
         copyAndPaste: qrData.payload,
         qrCodeBase64: qrData.encodedImage
       };
+    } catch (err: any) {
+      logger.error(`❌ [Asaas] Falha ao processar pagamento Pix: ${err.message}`);
+      throw err;
+    }
   }
 
   /**
