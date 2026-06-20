@@ -23,6 +23,12 @@ async function runTest() {
       throw new Error('Dados de seed ausentes no banco. Por favor, execute o seed do banco de dados primeiro.');
     }
 
+    // Garante que o lojista está aberto no teste
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: { openTime: '00:00', closeTime: '23:59' }
+    });
+
     console.log(`\n✅ Lojista: ${merchant.name} (ID: ${merchant.id})`);
     console.log(`✅ Cliente: ${customer.name} (ID: ${customer.id})`);
     console.log(`✅ Produto: ${product.name} (ID: ${product.id})`);
