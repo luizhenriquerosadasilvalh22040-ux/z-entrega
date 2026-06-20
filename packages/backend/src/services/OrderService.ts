@@ -434,7 +434,7 @@ export class OrderService {
     orderId: string, 
     status: any, 
     actorId: string, 
-    actorRole: 'customer' | 'merchant'
+    actorRole: 'customer' | 'merchant' | 'deliverer'
   ): Promise<any | null> {
     const notificationsToQueue: string[] = [];
 
@@ -450,15 +450,42 @@ export class OrderService {
       if (actorRole === 'customer' && order.customerId !== actorId) {
         throw new Error('Unauthorized');
       }
+      if (actorRole === 'deliverer' && order.delivererId !== actorId) {
+        throw new Error('Unauthorized');
+      }
 
       let delivererId = order.delivererId;
+      let delivererStatus = order.delivererStatus;
+
       if (status === 'READY') {
         const activeDeliverers = await tx.deliverer.findMany({
-          where: { isActiveToday: true, isActive: true }
+          where: { isActiveToday: true, isActive: true, isAvailable: true }
         });
         if (activeDeliverers.length > 0) {
-          const driver = activeDeliverers[Math.floor(Math.random() * activeDeliverers.length)];
+          const delivererIds = activeDeliverers.map(d => d.id);
+          const activeDeliveriesCounts = await tx.order.groupBy({
+            by: ['delivererId'],
+            where: {
+              delivererId: { in: delivererIds },
+              status: { in: ['READY', 'DISPATCHED', 'IN_TRANSIT'] }
+            },
+            _count: { id: true }
+          });
+
+          const countsMap = new Map<string, number>();
+          activeDeliveriesCounts.forEach(c => {
+            if (c.delivererId) countsMap.set(c.delivererId, c._count.id);
+          });
+
+          activeDeliverers.sort((a, b) => {
+            const countA = countsMap.get(a.id) || 0;
+            const countB = countsMap.get(b.id) || 0;
+            return countA - countB;
+          });
+
+          const driver = activeDeliverers[0];
           delivererId = driver.id;
+          delivererStatus = 'PENDING';
         }
       }
 
@@ -473,7 +500,8 @@ export class OrderService {
         where: { id: orderId },
         data: {
           status,
-          delivererId
+          delivererId,
+          delivererStatus
         },
         include: {
           customer: true,
@@ -492,6 +520,21 @@ export class OrderService {
       const customer = updatedOrder.customer;
       const merchant = updatedOrder.merchant;
       const deliverer = updatedOrder.deliverer;
+
+      // Sincroniza o status do entregador baseado na transição
+      if (deliverer) {
+        if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
+          await tx.deliverer.update({
+            where: { id: deliverer.id },
+            data: { deliveryStatus: 'DELIVERING' }
+          });
+        } else if (status === 'DELIVERED' || status === 'CANCELLED') {
+          await tx.deliverer.update({
+            where: { id: deliverer.id },
+            data: { deliveryStatus: 'AVAILABLE' }
+          });
+        }
+      }
 
       if (status === 'ACCEPTED' || status === 'PREPARING') {
         const nId = await NotificationService.queueNotification({
@@ -514,7 +557,7 @@ export class OrderService {
             userType: 'Deliverer',
             type: 'WhatsApp',
             target: deliverer.phone,
-            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.`
+            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: http://localhost:3000/api/orders/${updatedOrder.id}/delivery-response?delivererId=${deliverer.id}&action=accept\nRecusar: http://localhost:3000/api/orders/${updatedOrder.id}/delivery-response?delivererId=${deliverer.id}&action=reject`
           }, tx);
           notificationsToQueue.push(nId1);
 
@@ -573,6 +616,19 @@ export class OrderService {
         await NotificationService.addJobToQueue(nId);
       } catch (err) {
         console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+      }
+    }
+
+    // Agenda o timeout fora da transação
+    if (status === 'READY' && savedOrder.delivererId) {
+      try {
+        await deliveryTimeoutQueue.add(
+          { orderId: savedOrder.id, delivererId: savedOrder.delivererId },
+          { delay: 5 * 60 * 1000 }
+        );
+        logger.info(`⏰ [Timeout Scheduled] Timeout de 5 minutos agendado para o pedido ${savedOrder.id} (Entregador: ${savedOrder.delivererId})`);
+      } catch (err) {
+        logger.error('Erro ao agendar timeout de entrega na fila Bull:', err);
       }
     }
 
