@@ -75,6 +75,7 @@ export const formatOrder = (order: any) => {
     pixCopyAndPaste: order.pixCopyAndPaste || undefined,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+    delivererStatus: order.delivererStatus || undefined,
     review: order.review ? {
       id: order.review.id,
       rating: order.review.rating,
@@ -85,7 +86,8 @@ export const formatOrder = (order: any) => {
         where: { id: this.id },
         data: {
           status: this.status,
-          paymentStatus: this.paymentStatus
+          paymentStatus: this.paymentStatus,
+          delivererStatus: this.delivererStatus
         },
         include: {
           customer: true,
