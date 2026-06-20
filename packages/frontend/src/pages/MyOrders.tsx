@@ -1,14 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useCartStore } from '../store/cartStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Toast, Modal } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, ArrowRight } from 'lucide-react';
+import { ShoppingBag, ArrowRight, Star } from 'lucide-react';
+import io from 'socket.io-client';
 
 interface IOrder {
   _id: string;
-  merchantId: { name: string };
-  items: { name: string; quantity: number; price: number; image?: string; description?: string }[];
+  merchantId: { id: string; name: string };
+  items: {
+    productId: string;
+    name: string;
+    quantity: number;
+    price: number;
+    image?: string;
+    description?: string;
+    chosenOptions?: { groupName: string; optionName: string; price: number }[];
+    notes?: string;
+  }[];
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -23,10 +34,11 @@ interface IOrder {
 
 export const MyOrders: React.FC = () => {
   const { isAuthenticated, role } = useAuthStore();
+  const { addToCart, clearCart } = useCartStore();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<IOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // States for Reviews
   const [selectedOrderForReview, setSelectedOrderForReview] = useState<IOrder | null>(null);
@@ -61,6 +73,38 @@ export const MyOrders: React.FC = () => {
     fetchOrders();
   }, [isAuthenticated, role, navigate]);
 
+  // Socket.io real-time status updates
+  useEffect(() => {
+    if (orders.length === 0) return;
+
+    const activeOrders = orders.filter(
+      (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED'
+    );
+    if (activeOrders.length === 0) return;
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    const socketUrl = API_URL.replace('/api', '');
+    const socket = io(socketUrl);
+
+    activeOrders.forEach((o) => {
+      socket.emit('joinOrderRoom', o._id);
+    });
+
+    socket.on('orderStatusUpdated', (data: { orderId: string; status: string }) => {
+      setOrders((prev) =>
+        prev.map((o) => (o._id === data.orderId ? { ...o, status: data.status } : o))
+      );
+      setToast({
+        message: `Status de um pedido foi atualizado!`,
+        type: 'info'
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [orders.map(o => `${o._id}-${o.status}`).join(',')]);
+
   const getStatusBadge = (status: string) => {
     const statuses: { [key: string]: { text: string; variant: 'orange' | 'green' | 'blue' | 'red' | 'gray' } } = {
       PENDING: { text: 'Aguardando Aprovação', variant: 'gray' },
@@ -75,6 +119,42 @@ export const MyOrders: React.FC = () => {
 
     const current = statuses[status] || { text: status, variant: 'gray' };
     return <Badge variant={current.variant}>{current.text}</Badge>;
+  };
+
+  const handleReorder = (order: IOrder) => {
+    try {
+      clearCart();
+      order.items.forEach((item) => {
+        const productFake = {
+          _id: item.productId,
+          name: item.name,
+          description: item.description || '',
+          price: item.price,
+          category: '',
+          isAvailable: true,
+          stockQuantity: 999,
+          isPaused: false,
+          image: item.image,
+          optionGroups: []
+        };
+
+        addToCart(
+          productFake,
+          item.quantity,
+          item.chosenOptions || [],
+          item.notes || '',
+          order.merchantId.id,
+          order.merchantId.name
+        );
+      });
+
+      setToast({ message: 'Itens adicionados ao carrinho! Redirecionando...', type: 'success' });
+      setTimeout(() => {
+        navigate(`/store/${order.merchantId.id}`);
+      }, 1200);
+    } catch (err) {
+      setToast({ message: 'Erro ao refazer o pedido.', type: 'error' });
+    }
   };
 
   return (
@@ -104,18 +184,13 @@ export const MyOrders: React.FC = () => {
 
                 {order.review && (
                   <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/10 px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-600 w-fit">
-                    <span className="flex">
+                    <span className="flex gap-0.5">
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <svg
+                        <Star
                           key={star}
-                          className={`w-3.5 h-3.5 ${
-                            star <= order.review!.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-200 dark:text-slate-700'
-                          }`}
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
+                          size={14}
+                          className={star <= order.review!.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-250 dark:text-slate-700'}
+                        />
                       ))}
                     </span>
                     {order.review.comment && (
@@ -169,10 +244,20 @@ export const MyOrders: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {order.status === 'DELIVERED' && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleReorder(order)}
+                    >
+                      Pedir novamente
+                    </Button>
+                  )}
+
                   {order.status === 'DELIVERED' && !order.review && (
                     <Button
                       size="sm"
+                      variant="secondary"
                       onClick={() => {
                         setSelectedOrderForReview(order);
                         setRatingInput(5);
@@ -240,17 +325,12 @@ export const MyOrders: React.FC = () => {
                   key={star}
                   type="button"
                   onClick={() => setRatingInput(star)}
-                  className="focus:outline-none transition-transform hover:scale-110 active:scale-95"
+                  className="focus:outline-none transition-transform hover:scale-110 active:scale-95 p-1"
                 >
-                  <svg
-                    className={`w-10 h-10 ${
-                      star <= ratingInput ? 'text-amber-500 fill-amber-500' : 'text-slate-200 dark:text-slate-700'
-                    }`}
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
+                  <Star
+                    size={36}
+                    className={star <= ratingInput ? 'text-amber-500 fill-amber-500' : 'text-slate-250 dark:text-slate-700'}
+                  />
                 </button>
               ))}
             </div>

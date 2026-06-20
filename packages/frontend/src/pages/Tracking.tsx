@@ -52,8 +52,9 @@ export const Tracking: React.FC = () => {
     if (orderId) {
       fetchOrder(orderId);
 
-      // Configuração do Socket.io para atualização em tempo real
-      const socket = io('http://localhost:3000');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const socketUrl = API_URL.replace('/api', '');
+      const socket = io(socketUrl);
       
       socket.emit('joinOrderRoom', orderId);
       
