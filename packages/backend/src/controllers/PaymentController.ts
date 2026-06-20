@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { Order } from '../models/Order';
 import { OrderService } from '../services/OrderService';
 import logger from '../config/logger';
 import prisma from '../config/prisma';
@@ -35,24 +34,28 @@ export class PaymentController {
 
       // Eventos de sucesso no pagamento
       if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
-        const order = await Order.findById(orderId);
+        const order = await prisma.order.findUnique({
+          where: { id: orderId }
+        });
         if (!order) {
           logger.error(`❌ [Asaas Webhook] Pedido ${orderId} não encontrado no banco de dados.`);
           res.status(404).json({ status: 'fail', message: `Order ${orderId} not found` });
           return;
         }
 
-        const merchantId = typeof order.merchantId === 'object' ? order.merchantId.id : order.merchantId;
+        const merchantId = order.merchantId;
 
         // Se o pedido já não foi pago ou aceito, atualiza
         if (order.status === 'PENDING') {
           logger.info(`💳 [Asaas Webhook] Confirmando pagamento do pedido ${orderId}...`);
           
-          order.paymentStatus = 'RECEIVED';
-          await order.save();
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { paymentStatus: 'RECEIVED' }
+          });
 
           // Atualiza o status do pedido para ACCEPTED (Pago e aceito)
-          await OrderService.updateStatus(orderId, 'ACCEPTED', merchantId, 'merchant');
+          const updatedOrder = await OrderService.updateStatus(orderId, 'ACCEPTED', merchantId, 'merchant');
 
           // Notifica em tempo real via WebSocket
           const io = req.app.get('io');
@@ -60,7 +63,7 @@ export class PaymentController {
             io.to(`order:${orderId}`).emit('orderStatusUpdated', { orderId, status: 'ACCEPTED' });
             io.to(`merchant:${merchantId}`).emit('orderStatusUpdated', { orderId, status: 'ACCEPTED' });
             // Força a atualização da lista do lojista
-            io.to(`merchant:${merchantId}`).emit('newOrder', order);
+            io.to(`merchant:${merchantId}`).emit('newOrder', updatedOrder);
           }
           
           logger.info(`💳 [Asaas Webhook] Pedido ${orderId} atualizado para status ACCEPTED devido ao pagamento confirmado.`);
@@ -69,12 +72,18 @@ export class PaymentController {
         }
       } else if (event === 'PAYMENT_OVERDUE') {
         // Se a cobrança vencer, cancela o pedido no sistema
-        const order = await Order.findById(orderId);
+        const order = await prisma.order.findUnique({
+          where: { id: orderId }
+        });
         if (order && order.status === 'PENDING') {
           logger.info(`💳 [Asaas Webhook] Cancelando pedido ${orderId} por expiração/vencimento do pagamento.`);
-          const merchantId = typeof order.merchantId === 'object' ? order.merchantId.id : order.merchantId;
-          order.paymentStatus = 'OVERDUE';
-          await order.save();
+          const merchantId = order.merchantId;
+          
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { paymentStatus: 'OVERDUE' }
+          });
+          
           await OrderService.updateStatus(orderId, 'CANCELLED', merchantId, 'merchant');
 
           const io = req.app.get('io');
