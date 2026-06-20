@@ -9,7 +9,9 @@ import {
   loginSchema,
   refreshSchema,
   customerRequestOtpSchema,
-  customerVerifyOtpSchema
+  customerVerifyOtpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema
 } from '../validators/auth';
 
 const router = Router();
@@ -26,6 +28,10 @@ router.post('/merchant/login', validate(loginSchema), AuthController.loginMercha
 
 // Login de Administrador Geral
 router.post('/admin/login', validate(loginSchema), AuthController.loginAdmin);
+
+// Recuperação de Senha
+router.post('/forgot-password', validate(forgotPasswordSchema), AuthController.forgotPassword);
+router.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
 
 // Refresh token e logout
 router.post('/refresh', validate(refreshSchema), AuthController.refresh);
