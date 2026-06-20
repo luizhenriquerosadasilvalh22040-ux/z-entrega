@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart, ShoppingCart } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useCartStore } from '../store/cartStore';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,9 +10,12 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, role, isAuthenticated, logout } = useAuthStore();
+  const { cart, merchantId } = useCartStore();
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // Inicializa tema
   useEffect(() => {
@@ -83,6 +87,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           {/* Action buttons */}
           <div className="hidden md:flex items-center gap-4">
+            {/* Indicator of cart items */}
+            {cartCount > 0 && merchantId && (
+              <Link 
+                to={`/store/${merchantId}`}
+                className="p-2.5 rounded-xl hover:bg-slate-105 dark:hover:bg-slate-800 text-energy hover:text-energy-dark transition-all relative flex items-center justify-center"
+                title="Ver meu carrinho de compras"
+              >
+                <ShoppingCart size={20} />
+                <span className="absolute -top-0.5 -right-0.5 bg-energy text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center shadow-md">
+                  {cartCount}
+                </span>
+              </Link>
+            )}
+
             {/* Dark mode button */}
             <button 
               onClick={toggleDarkMode}
@@ -119,6 +137,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           {/* Mobile menu button */}
           <div className="flex items-center gap-2 md:hidden">
+            {cartCount > 0 && merchantId && (
+              <Link 
+                to={`/store/${merchantId}`}
+                className="p-2 rounded-xl text-energy relative flex items-center justify-center mr-1"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <ShoppingCart size={19} />
+                <span className="absolute -top-0.5 -right-0.5 bg-energy text-white text-[8px] font-black rounded-full h-3.5 w-3.5 flex items-center justify-center shadow-md">
+                  {cartCount}
+                </span>
+              </Link>
+            )}
             <button 
               onClick={toggleDarkMode}
               className="p-2 rounded-xl text-slate-500 dark:text-slate-400"

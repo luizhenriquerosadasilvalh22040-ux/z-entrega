@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useCartStore } from '../store/cartStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
-import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2 } from 'lucide-react';
 
 interface IMerchant {
   _id: string;
@@ -58,6 +59,16 @@ export const Store: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isAuthenticated, role, user, checkAuth } = useAuthStore();
+  
+  const {
+    cart,
+    addToCart,
+    updateCartQty,
+    clearCart,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon
+  } = useCartStore();
 
   const isStoreOpen = (): boolean => {
     if (!merchant) return false;
@@ -81,7 +92,6 @@ export const Store: React.FC = () => {
 
   const [merchant, setMerchant] = useState<IMerchant | null>(null);
   const [products, setProducts] = useState<IProduct[]>([]);
-  const [cart, setCart] = useState<ICartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
@@ -92,18 +102,75 @@ export const Store: React.FC = () => {
 
   // States for Coupon Code
   const [couponCodeInput, setCouponCodeInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{
-    couponId: string;
-    code: string;
-    discountType: 'PERCENTAGE' | 'FIXED';
-    discountValue: number;
-  } | null>(null);
   const [couponError, setCouponError] = useState('');
 
   // States for Merchant Reviews Modal
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [merchantReviews, setMerchantReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+
+  // States for PIX Modal
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [pixData, setPixData] = useState<{ qrCode: string; copyAndPaste: string; orderId: string } | null>(null);
+  const [pixTimeLeft, setPixTimeLeft] = useState(600); // 10 min
+  const [isPixCopied, setIsPixCopied] = useState(false);
+
+  // CEP Search State
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
+
+  // Timer PIX Effect
+  useEffect(() => {
+    if (!isPixModalOpen || pixTimeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setPixTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isPixModalOpen, pixTimeLeft]);
+
+  const formatPixTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleCepChange = async (val: string) => {
+    let formatted = val.replace(/\D/g, '');
+    if (formatted.length > 8) {
+      formatted = formatted.substring(0, 8);
+    }
+    if (formatted.length > 5) {
+      formatted = `${formatted.substring(0, 5)}-${formatted.substring(5)}`;
+    }
+    setZipCode(formatted);
+
+    const cleanCep = formatted.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      try {
+        setIsSearchingCep(true);
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await response.json();
+        if (data && !data.erro) {
+          setStreet(data.logradouro || '');
+          setNeighborhood(data.bairro || '');
+          setCity(data.localidade || '');
+          setStateCode(data.uf || 'PR');
+          setToast({ message: 'Endereço autocompletado via CEP!', type: 'success' });
+        } else {
+          setToast({ message: 'CEP não encontrado.', type: 'error' });
+        }
+      } catch (err) {
+        setToast({ message: 'Erro ao buscar CEP.', type: 'error' });
+      } finally {
+        setIsSearchingCep(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (isReviewsModalOpen && merchant?._id) {
@@ -258,7 +325,7 @@ export const Store: React.FC = () => {
   };
 
   const handleAddCustomToCart = () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !merchant) return;
 
     if (selectedProduct.optionGroups) {
       for (const group of selectedProduct.optionGroups) {
@@ -272,61 +339,33 @@ export const Store: React.FC = () => {
       }
     }
 
-    setCart((prev) => {
-      const existing = prev.find(item => 
-        item.product._id === selectedProduct._id && 
-        isSameOptions(item.chosenOptions, selectedOptions) && 
-        (item.notes || '') === (itemNotes || '')
-      );
+    const { success, cleared } = addToCart(
+      selectedProduct,
+      itemQuantity,
+      selectedOptions,
+      itemNotes,
+      merchant._id,
+      merchant.name
+    );
 
-      if (existing) {
-        const newQty = existing.quantity + itemQuantity;
-        if (selectedProduct.stockQuantity && newQty > selectedProduct.stockQuantity) {
-          setToast({ message: `Limite de estoque atingido (${selectedProduct.stockQuantity} un.)`, type: 'error' });
-          return prev;
-        }
-        return prev.map(item => 
-          item.cartId === existing.cartId 
-            ? { ...item, quantity: newQty } 
-            : item
-        );
+    if (success) {
+      if (cleared) {
+        setToast({ message: 'Carrinho da loja anterior limpo e produto adicionado!', type: 'success' });
+      } else {
+        setToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
       }
-
-      const cartId = `${selectedProduct._id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      return [...prev, {
-        cartId,
-        product: selectedProduct,
-        quantity: itemQuantity,
-        chosenOptions: [...selectedOptions],
-        notes: itemNotes
-      }];
-    });
-
-    setToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
-    setIsDetailsModalOpen(false);
+      setIsDetailsModalOpen(false);
+    } else {
+      setToast({ message: `Limite de estoque atingido ou indisponível.`, type: 'error' });
+    }
   };
 
   const handleUpdateCartQty = (cartId: string, delta: number) => {
-    setCart((prev) => {
-      const existing = prev.find(item => item.cartId === cartId);
-      if (!existing) return prev;
-
-      const newQty = existing.quantity + delta;
-      if (newQty <= 0) {
-        const updated = prev.filter(item => item.cartId !== cartId);
-        if (updated.length === 0) {
-          setIsCheckingOut(false);
-        }
-        return updated;
-      }
-
-      if (delta > 0 && existing.product.stockQuantity && newQty > existing.product.stockQuantity) {
-        setToast({ message: `Limite de estoque atingido (${existing.product.stockQuantity} un.)`, type: 'error' });
-        return prev;
-      }
-
-      return prev.map(item => item.cartId === cartId ? { ...item, quantity: newQty } : item);
-    });
+    const existing = cart.find(item => item.cartId === cartId);
+    if (existing && existing.quantity + delta <= 0 && cart.length === 1) {
+      setIsCheckingOut(false);
+    }
+    updateCartQty(cartId, delta);
   };
 
   const getItemTotalPrice = (item: ICartItem): number => {
@@ -422,12 +461,25 @@ export const Store: React.FC = () => {
       });
 
       if (res.data?.status === 'success') {
+        const order = res.data.data.order;
         setToast({ message: 'Pedido realizado com sucesso!', type: 'success' });
         setIsCheckingOut(false);
-        setCart([]);
-        setAppliedCoupon(null);
+        clearCart();
         setCouponCodeInput('');
-        setTimeout(() => navigate('/orders'), 1500);
+        removeCoupon();
+
+        if (paymentMethod === 'PIX' && order && order.pixQrCode && order.pixCopyAndPaste) {
+          setPixData({
+            qrCode: order.pixQrCode,
+            copyAndPaste: order.pixCopyAndPaste,
+            orderId: order.id
+          });
+          setPixTimeLeft(600); // 10 minutos
+          setIsPixCopied(false);
+          setIsPixModalOpen(true);
+        } else {
+          setTimeout(() => navigate('/orders'), 1500);
+        }
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erro ao finalizar pedido';
