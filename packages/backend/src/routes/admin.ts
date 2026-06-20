@@ -24,4 +24,9 @@ router.get('/merchants', AdminController.listMerchants);
 router.put('/merchants/:id/verify', AdminController.toggleVerifyMerchant);
 router.put('/merchants/:id/subscription-price', AdminController.updateMerchantSubscriptionPrice);
 
+// Cupons de Desconto
+router.get('/coupons', AdminController.listCoupons);
+router.post('/coupons', AdminController.createCoupon);
+router.delete('/coupons/:id', AdminController.deleteCoupon);
+
 export default router;
