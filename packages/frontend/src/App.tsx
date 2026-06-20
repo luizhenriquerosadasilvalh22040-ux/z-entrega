@@ -4,7 +4,6 @@ import { useAuthStore } from './store/authStore';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
-import { Register } from './pages/Register';
 import { MyOrders } from './pages/MyOrders';
 import { Tracking } from './pages/Tracking';
 import { Dashboard } from './pages/Dashboard';
