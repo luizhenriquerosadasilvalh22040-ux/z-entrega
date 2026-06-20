@@ -282,4 +282,30 @@ export class AuthController {
       next(error);
     }
   }
+
+  public static async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, role } = req.body;
+      await AuthService.forgotPassword(email, role);
+      res.status(200).json({
+        status: 'success',
+        message: 'Código de redefinição de senha enviado.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { token, newPassword, role } = req.body;
+      await AuthService.resetPassword(token, newPassword, role);
+      res.status(200).json({
+        status: 'success',
+        message: 'Senha redefinida com sucesso!'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

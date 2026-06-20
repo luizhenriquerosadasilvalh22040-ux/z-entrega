@@ -247,14 +247,46 @@ export class AuthService {
   }
 
   public static async loginAdmin(email: string, password: string): Promise<{ admin: { name: string; email: string } } & ITokenResponse> {
-    if (email === 'admin@trazpraca.com' && password === 'admin123') {
+    // 1. Tenta buscar o admin no banco de dados
+    const admin = await prisma.systemAdmin.findUnique({
+      where: { email }
+    });
+
+    if (admin) {
+      if (!admin.isActive) {
+        throw new Error('Account deactivated');
+      }
+      const isMatch = await bcrypt.compare(password, admin.passwordHash);
+      if (!isMatch) {
+        throw new Error('Invalid email or password');
+      }
       const tokens = await this.generateTokens({
-        userId: 'admin-id-12345',
+        userId: admin.id,
         role: 'admin',
-        email: 'admin@trazpraca.com',
-        name: 'Administrador Geral'
+        email: admin.email,
+        name: admin.name
       });
-      return { admin: { name: 'Administrador Geral', email: 'admin@trazpraca.com' }, ...tokens };
+      return { admin: { name: admin.name, email: admin.email }, ...tokens };
+    }
+
+    // 2. Fallback para credenciais padrão se for o e-mail padrão e não existir no banco
+    if (email === 'admin@trazpraca.com' && password === 'admin123') {
+      const createdAdmin = await prisma.systemAdmin.create({
+        data: {
+          name: 'Administrador Geral',
+          email: 'admin@trazpraca.com',
+          passwordHash: await bcrypt.hash('admin123', 10),
+          isActive: true
+        }
+      });
+
+      const tokens = await this.generateTokens({
+        userId: createdAdmin.id,
+        role: 'admin',
+        email: createdAdmin.email,
+        name: createdAdmin.name
+      });
+      return { admin: { name: createdAdmin.name, email: createdAdmin.email }, ...tokens };
     }
     throw new Error('Invalid email or password');
   }
@@ -377,5 +409,116 @@ export class AuthService {
     });
 
     return { customer: formatCustomer(updated), ...tokens };
+  }
+
+  /**
+   * Solicita um token de recuperação de senha (Merchant ou Admin)
+   */
+  public static async forgotPassword(email: string, role: 'merchant' | 'admin'): Promise<void> {
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    if (role === 'merchant') {
+      const merchant = await prisma.merchant.findUnique({ where: { email } });
+      if (!merchant) {
+        throw new Error('E-mail de estabelecimento não cadastrado.');
+      }
+
+      await prisma.merchant.update({
+        where: { id: merchant.id },
+        data: {
+          passwordResetToken: token,
+          passwordResetExpires: expires
+        }
+      });
+
+      try {
+        const nId = await NotificationService.queueNotification({
+          userId: merchant.id,
+          userType: 'Merchant',
+          type: 'WhatsApp',
+          target: merchant.phone,
+          content: `Olá, *${merchant.name}*! O seu código para redefinição de senha no Traz Pra Cá é: *${token}*. Ele é válido por 1 hora.`
+        });
+        await NotificationService.addJobToQueue(nId);
+      } catch (err) {
+        console.error('Erro ao enviar token de redefinição via WhatsApp/Bull:', err);
+      }
+    } else if (role === 'admin') {
+      let admin = await prisma.systemAdmin.findUnique({ where: { email } });
+      if (!admin && email === 'admin@trazpraca.com') {
+        admin = await prisma.systemAdmin.create({
+          data: {
+            name: 'Administrador Geral',
+            email: 'admin@trazpraca.com',
+            passwordHash: await bcrypt.hash('admin123', 10),
+            isActive: true
+          }
+        });
+      }
+
+      if (!admin) {
+        throw new Error('E-mail de administrador não encontrado.');
+      }
+
+      await prisma.systemAdmin.update({
+        where: { id: admin.id },
+        data: {
+          passwordResetToken: token,
+          passwordResetExpires: expires
+        }
+      });
+
+      console.log(`🔑 [Recuperação de Senha] Token para o administrador (${email}) é: ${token}`);
+    }
+  }
+
+  /**
+   * Redefine a senha utilizando um token válido
+   */
+  public static async resetPassword(token: string, newPassword: string, role: 'merchant' | 'admin'): Promise<void> {
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    if (role === 'merchant') {
+      const merchant = await prisma.merchant.findFirst({
+        where: {
+          passwordResetToken: token,
+          passwordResetExpires: { gte: new Date() }
+        }
+      });
+
+      if (!merchant) {
+        throw new Error('Código de redefinição inválido ou expirado.');
+      }
+
+      await prisma.merchant.update({
+        where: { id: merchant.id },
+        data: {
+          passwordHash,
+          passwordResetToken: null,
+          passwordResetExpires: null
+        }
+      });
+    } else if (role === 'admin') {
+      const admin = await prisma.systemAdmin.findFirst({
+        where: {
+          passwordResetToken: token,
+          passwordResetExpires: { gte: new Date() }
+        }
+      });
+
+      if (!admin) {
+        throw new Error('Código de redefinição inválido ou expirado.');
+      }
+
+      await prisma.systemAdmin.update({
+        where: { id: admin.id },
+        data: {
+          passwordHash,
+          passwordResetToken: null,
+          passwordResetExpires: null
+        }
+      });
+    }
   }
 }
