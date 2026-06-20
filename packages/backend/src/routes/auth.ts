@@ -31,7 +31,7 @@ router.post('/admin/login', validate(loginSchema), AuthController.loginAdmin);
 
 // Recuperação de Senha
 router.post('/forgot-password', validate(forgotPasswordSchema), AuthController.forgotPassword);
-router.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
+router.post('/reset-password', resetPasswordRateLimiter, validate(resetPasswordSchema), AuthController.resetPassword);
 
 // Refresh token e logout
 router.post('/refresh', validate(refreshSchema), AuthController.refresh);
