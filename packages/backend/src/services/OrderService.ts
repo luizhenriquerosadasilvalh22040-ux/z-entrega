@@ -786,14 +786,83 @@ export class OrderService {
 
     for (const order of unpaidPixOrders) {
       try {
-        console.log(`[Auto-Cancel] Expirando pedido PIX não pago: ${order.id}`);
-        await this.updateStatus(order.id, 'CANCELLED', order.merchantId, 'merchant');
-        
-        if (io) {
-          io.to(`order:${order.id}`).emit('orderStatusUpdated', {
-            orderId: order.id,
-            status: 'CANCELLED'
+        let isPaidOnAsaas = false;
+
+        // Se tiver ID de pagamento do Asaas, verifica seu status atual diretamente na API deles
+        if (order.asaasPaymentId) {
+          try {
+            const asaasStatus = await AsaasService.getPaymentStatus(order.asaasPaymentId);
+            if (asaasStatus === 'RECEIVED' || asaasStatus === 'CONFIRMED') {
+              isPaidOnAsaas = true;
+              logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Asaas (${asaasStatus}). Processando confirmação.`);
+              
+              // Atualiza o pedido como pago e ACCEPTED de forma transacional e segura
+              await prisma.$transaction(async (tx) => {
+                const currentOrder = await tx.order.findUnique({ where: { id: order.id } });
+                if (currentOrder && currentOrder.status === 'PENDING') {
+                  await tx.order.update({
+                    where: { id: order.id },
+                    data: {
+                      paymentStatus: 'RECEIVED',
+                      status: 'ACCEPTED'
+                    }
+                  });
+                  await tx.orderStatusHistory.create({
+                    data: {
+                      orderId: order.id,
+                      status: 'ACCEPTED'
+                    }
+                  });
+                }
+              });
+
+              if (io) {
+                io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
+                io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
+              }
+            }
+          } catch (err: any) {
+            logger.error(`❌ [Auto-Cancel] Falha ao verificar status do pagamento ${order.asaasPaymentId} no Asaas: ${err.message}`);
+            // Em caso de falha de conexão com a API do Asaas, pulamos este pedido para evitar cancelamento indevido
+            continue;
+          }
+        }
+
+        if (!isPaidOnAsaas) {
+          logger.info(`[Auto-Cancel] Expirando pedido PIX não pago: ${order.id}`);
+          
+          // Usamos uma operação atômica de update condicional: só cancela se o status ainda for PENDING no banco.
+          // Isso garante que se o webhook confirmou o pagamento em paralelo, a query de cancelamento não afetará nenhuma linha.
+          const updateResult = await prisma.order.updateMany({
+            where: {
+              id: order.id,
+              status: 'PENDING'
+            },
+            data: {
+              status: 'CANCELLED',
+              paymentStatus: 'CANCELLED'
+            }
           });
+
+          // Se a linha foi realmente atualizada (ou seja, o status ainda era PENDING e foi alterado para CANCELLED)
+          if (updateResult.count > 0) {
+            await prisma.orderStatusHistory.create({
+              data: {
+                orderId: order.id,
+                status: 'CANCELLED'
+              }
+            });
+
+            if (io) {
+              io.to(`order:${order.id}`).emit('orderStatusUpdated', {
+                orderId: order.id,
+                status: 'CANCELLED'
+              });
+            }
+            logger.info(`[Auto-Cancel] Pedido PIX ${order.id} cancelado com sucesso.`);
+          } else {
+            logger.info(`[Auto-Cancel] Pedido PIX ${order.id} já havia sido alterado em paralelo. Cancelamento abortado.`);
+          }
         }
       } catch (err) {
         console.error(`[Auto-Cancel] Erro ao cancelar automaticamente pedido PIX ${order.id}:`, err);
