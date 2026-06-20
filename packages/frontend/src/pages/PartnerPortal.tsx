@@ -58,6 +58,55 @@ export const PartnerPortal: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Estados para Recuperação de Senha
+  const [forgotMode, setForgotMode] = useState<'none' | 'request' | 'reset'>('none');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotRole, setForgotRole] = useState<'merchant' | 'admin'>('merchant');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  const handleRequestReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      setToast({ message: 'Digite o seu e-mail cadastrado', type: 'error' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { apiClient } = await import('../services/apiClient');
+      await apiClient.post('/auth/forgot-password', { email: forgotEmail, role: forgotRole });
+      setToast({ message: 'Código enviado! Verifique seu WhatsApp ou o console do servidor.', type: 'success' });
+      setForgotMode('reset');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'E-mail não encontrado ou erro no processamento';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetToken || !newPassword) {
+      setToast({ message: 'Preencha o código e a nova senha', type: 'error' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { apiClient } = await import('../services/apiClient');
+      await apiClient.post('/auth/reset-password', { token: resetToken, newPassword, role: forgotRole });
+      setToast({ message: 'Senha redefinida com sucesso!', type: 'success' });
+      setForgotMode('none');
+      setResetToken('');
+      setNewPassword('');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Código inválido, expirado ou erro ao salvar senha';
+      setToast({ message: msg, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Lojista Login
   const handleMerchantLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,8 +300,78 @@ export const PartnerPortal: React.FC = () => {
               </button>
             </div>
 
-            {/* TAB 1: MERCHANT LOGIN */}
-            {activeTab === 'merchant_login' && (
+            {forgotMode === 'request' && (
+              <form onSubmit={handleRequestReset} className="space-y-4">
+                <div className="text-center pb-2">
+                  <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
+                    Recuperar Senha
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Digite seu e-mail para receber um código de redefinição por {forgotRole === 'merchant' ? 'WhatsApp' : 'Console do Servidor'}.
+                  </p>
+                </div>
+                <Input
+                  label="E-mail Cadastrado"
+                  type="email"
+                  placeholder="seuemail@exemplo.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                />
+                <Button type="submit" fullWidth disabled={loading}>
+                  {loading ? 'Enviando...' : 'Solicitar Código'}
+                </Button>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode('none')}
+                    className="text-xs font-semibold text-energy hover:underline"
+                  >
+                    Voltar para o login
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {forgotMode === 'reset' && (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="text-center pb-2">
+                  <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
+                    Confirmar Nova Senha
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">Insira o código enviado e sua nova senha de acesso.</p>
+                </div>
+                <Input
+                  label="Código de Confirmação (Token)"
+                  placeholder="Código de 6 dígitos"
+                  value={resetToken}
+                  onChange={(e) => setResetToken(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Nova Senha"
+                  type="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+                <Button type="submit" fullWidth disabled={loading}>
+                  {loading ? 'Redefinindo...' : 'Atualizar Senha'}
+                </Button>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode('none')}
+                    className="text-xs font-semibold text-energy hover:underline"
+                  >
+                    Cancelar e voltar
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {forgotMode === 'none' && activeTab === 'merchant_login' && (
               <form onSubmit={handleMerchantLogin} className="space-y-4">
                 <div className="text-center pb-2">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
@@ -276,14 +395,26 @@ export const PartnerPortal: React.FC = () => {
                   onChange={(e) => setMPassword(e.target.value)}
                   required
                 />
+                <div className="text-right -mt-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotRole('merchant');
+                      setForgotEmail(mEmail);
+                      setForgotMode('request');
+                    }}
+                    className="text-xs font-semibold text-energy hover:underline"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                </div>
                 <Button type="submit" fullWidth disabled={loading}>
                   {loading ? 'Entrando...' : 'Entrar no Painel Lojista'}
                 </Button>
               </form>
             )}
 
-            {/* TAB 2: MERCHANT REGISTER */}
-            {activeTab === 'merchant_register' && (
+            {forgotMode === 'none' && activeTab === 'merchant_register' && (
               <form onSubmit={handleMerchantRegister} className="space-y-4 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
                 <div className="text-center pb-2">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
@@ -399,8 +530,7 @@ export const PartnerPortal: React.FC = () => {
               </form>
             )}
 
-            {/* TAB 3: ADMIN LOGIN */}
-            {activeTab === 'admin_login' && (
+            {forgotMode === 'none' && activeTab === 'admin_login' && (
               <form onSubmit={handleAdminLogin} className="space-y-4">
                 <div className="text-center pb-2">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
@@ -424,6 +554,19 @@ export const PartnerPortal: React.FC = () => {
                   onChange={(e) => setAPassword(e.target.value)}
                   required
                 />
+                <div className="text-right -mt-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotRole('admin');
+                      setForgotEmail(aEmail);
+                      setForgotMode('request');
+                    }}
+                    className="text-xs font-semibold text-energy hover:underline"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                </div>
                 <Button type="submit" fullWidth variant="primary" disabled={loading} className="bg-slate-900 dark:bg-slate-800 text-white">
                   {loading ? 'Entrando...' : 'Entrar como Administrador'}
                 </Button>
