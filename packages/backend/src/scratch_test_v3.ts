@@ -19,6 +19,12 @@ async function runTests() {
       throw new Error('Dados de seed ausentes.');
     }
 
+    // Garante que o lojista está aberto no teste
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: { openTime: '00:00', closeTime: '23:59' }
+    });
+
     // Limpar pedidos
     await prisma.orderItemOption.deleteMany({});
     await prisma.orderItem.deleteMany({});
