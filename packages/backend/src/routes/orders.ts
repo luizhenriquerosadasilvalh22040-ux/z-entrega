@@ -6,6 +6,9 @@ import { createOrderSchema, updateOrderStatusSchema } from '../validators/order'
 
 const router = Router();
 
+// Resposta do entregador via WhatsApp (pública, sem necessidade de autenticação)
+router.get('/:id/delivery-response', OrderController.handleDelivererResponse);
+
 // Todas as rotas de pedidos requerem autenticação
 router.use(authenticate);
 

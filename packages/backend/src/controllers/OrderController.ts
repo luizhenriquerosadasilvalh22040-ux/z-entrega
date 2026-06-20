@@ -221,4 +221,189 @@ export class OrderController {
       next(error);
     }
   }
+
+  public static async handleDelivererResponse(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { delivererId, action } = req.query;
+
+      if (!delivererId || !action || (action !== 'accept' && action !== 'reject')) {
+        res.status(400).send(`
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Erro de Solicitação - Traz Pra Cá</title>
+              <style>
+                body {
+                  background: linear-gradient(135deg, #121214 0%, #1e1e24 100%);
+                  color: #e1e1e6;
+                  font-family: 'Outfit', 'Inter', sans-serif;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  height: 100vh;
+                  margin: 0;
+                }
+                .card {
+                  background: rgba(255, 255, 255, 0.05);
+                  backdrop-filter: blur(10px);
+                  border: 1px solid rgba(255, 255, 255, 0.1);
+                  border-radius: 16px;
+                  padding: 40px;
+                  max-width: 400px;
+                  text-align: center;
+                  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+                }
+                h1 {
+                  color: #ff5555;
+                  font-size: 24px;
+                  margin-top: 0;
+                }
+                p {
+                  font-size: 16px;
+                  line-height: 1.6;
+                  color: #a8a8b3;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <h1>Solicitação Inválida</h1>
+                <p>Parâmetros obrigatórios ausentes ou incorretos na requisição.</p>
+              </div>
+            </body>
+          </html>
+        `);
+        return;
+      }
+
+      const result = await OrderService.processDelivererResponse(
+        id,
+        delivererId as string,
+        action as 'accept' | 'reject'
+      );
+
+      // Renderiza página HTML estilizada de acordo com o resultado
+      const title = result.success ? 'Sucesso - Traz Pra Cá' : 'Aviso - Traz Pra Cá';
+      const heading = result.success ? 'Operação Concluída!' : 'Não foi possível processar';
+      const color = result.success ? '#4cd62b' : '#f1c40f';
+      const icon = result.success ? '✓' : '⚠';
+
+      res.status(200).send(`
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>${title}</title>
+            <style>
+              body {
+                background: linear-gradient(135deg, #121214 0%, #1e1e24 100%);
+                color: #e1e1e6;
+                font-family: 'Outfit', 'Inter', sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+              }
+              .card {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                padding: 40px;
+                max-width: 400px;
+                text-align: center;
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+              }
+              .icon {
+                font-size: 48px;
+                color: ${color};
+                margin-bottom: 20px;
+              }
+              h1 {
+                font-size: 24px;
+                margin-top: 0;
+                color: #ffffff;
+              }
+              p {
+                font-size: 16px;
+                line-height: 1.6;
+                color: #a8a8b3;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="icon">${icon}</div>
+              <h1>${heading}</h1>
+              <p>${result.message}</p>
+            </div>
+          </body>
+        </html>
+      `);
+
+      // Se a resposta for 'accept' ou 'reject', emite evento via Socket.io para atualizar o status no app em tempo real
+      if (result.success) {
+        const io = req.app.get('io');
+        if (io) {
+          if (action === 'accept') {
+            io.to(`order:${id}`).emit('orderStatusUpdated', { orderId: id, status: 'READY', delivererStatus: 'ACCEPTED' });
+          } else {
+            io.to(`order:${id}`).emit('orderStatusUpdated', { orderId: id, status: 'READY', delivererStatus: null });
+          }
+        }
+      }
+    } catch (error: any) {
+      res.status(500).send(`
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Erro do Servidor - Traz Pra Cá</title>
+            <style>
+              body {
+                background: linear-gradient(135deg, #121214 0%, #1e1e24 100%);
+                color: #e1e1e6;
+                font-family: 'Outfit', 'Inter', sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+              }
+              .card {
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                padding: 40px;
+                max-width: 400px;
+                text-align: center;
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+              }
+              h1 {
+                color: #ff5555;
+                font-size: 24px;
+                margin-top: 0;
+              }
+              p {
+                font-size: 16px;
+                line-height: 1.6;
+                color: #a8a8b3;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>Erro Interno</h1>
+              <p>${error.message || 'Erro inesperado ao processar a requisição.'}</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+  }
 }
+
