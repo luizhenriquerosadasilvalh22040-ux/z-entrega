@@ -42,18 +42,22 @@ export class NotificationService {
       }
     });
 
-    // 2. Só enfileira no Bull imediatamente se não houver transação ativa
+    // 2. Só enfileira no Bull imediatamente se não houver transação ativa (tratado com try/catch contra falhas no Redis)
     if (!tx) {
-      await notificationQueue.add(
-        { notificationId: notification.id },
-        {
-          attempts: 5,
-          backoff: {
-            type: 'exponential',
-            delay: 1000
+      try {
+        await notificationQueue.add(
+          { notificationId: notification.id },
+          {
+            attempts: 5,
+            backoff: {
+              type: 'exponential',
+              delay: 1000
+            }
           }
-        }
-      );
+        );
+      } catch (err: any) {
+        logger.error(`⚠️ [Redis Queue Notification Error] Falha ao enfileirar notificação no Bull (Notificação salva com ID ${notification.id}): ${err.message}`);
+      }
     }
 
     return notification.id;
@@ -63,16 +67,20 @@ export class NotificationService {
    * Adiciona o job de notificação na fila do Bull (utilizado pós-commit de transações)
    */
   public static async addJobToQueue(notificationId: string): Promise<void> {
-    await notificationQueue.add(
-      { notificationId },
-      {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 1000
+    try {
+      await notificationQueue.add(
+        { notificationId },
+        {
+          attempts: 5,
+          backoff: {
+            type: 'exponential',
+            delay: 1000
+          }
         }
-      }
-    );
+      );
+    } catch (err: any) {
+      logger.error(`⚠️ [Redis Add Job Error] Falha ao adicionar job de notificação pós-commit para o ID ${notificationId}: ${err.message}`);
+    }
   }
 }
 
