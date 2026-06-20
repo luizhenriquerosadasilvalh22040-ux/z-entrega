@@ -2,12 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import prisma from './config/prisma';
-import { Customer } from './models/Customer';
-import { Merchant } from './models/Merchant';
-import { Product } from './models/Product';
-import { Deliverer } from './models/Deliverer';
-import { Order } from './models/Order';
-import { Notification } from './models/Notification';
 import { OrderService } from './services/OrderService';
 import { AuthService } from './services/AuthService';
 import logger from './config/logger';
@@ -17,16 +11,22 @@ async function runTestFlow() {
     logger.info('Starting programmatic E2E flow validation...');
 
     // 1. Encontra Lojista e Produto semeados
-    const merchant = await Merchant.findOne({ email: 'merchant@example.com' });
+    const merchant = await prisma.merchant.findFirst({
+      where: { email: 'merchant@example.com' }
+    });
     if (!merchant) {
       throw new Error('Seed data missing. Please run seed script first.');
     }
 
     // Assegura que o lojista está com as portas abertas no horário de execução para o teste passar
-    merchant.operatingHours = { open: '00:00', close: '23:59' };
-    await merchant.save();
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: { openTime: '00:00', closeTime: '23:59' }
+    });
 
-    const product = await Product.findOne({ name: 'Pizza Calabresa Grande', merchantId: merchant._id });
+    const product = await prisma.product.findFirst({
+      where: { name: 'Pizza Calabresa Grande', merchantId: merchant.id }
+    });
     if (!product) {
       throw new Error('Product data missing.');
     }
@@ -55,38 +55,48 @@ async function runTestFlow() {
     logger.info(`Cliente autenticado com sucesso: ${customer.name} (${customer.phone})`);
 
     // 2. Garante que exista um entregador cadastrado e escalado para hoje
-    let deliverer = await Deliverer.findOne({ email: 'carlos@example.com' });
+    let deliverer = await prisma.deliverer.findFirst({
+      where: { email: 'carlos@example.com' }
+    });
     if (!deliverer) {
-      deliverer = await Deliverer.create({
-        name: 'Carlos Entregador',
-        email: 'carlos@example.com',
-        phone: '44998877665',
-        vehicle: 'Moto',
-        plate: 'XYZ-9988',
-        passwordHash: 'dummyhash',
-        isActive: true,
-        isAvailable: true,
-        isActiveToday: true
+      deliverer = await prisma.deliverer.create({
+        data: {
+          name: 'Carlos Entregador',
+          email: 'carlos@example.com',
+          phone: '44998877665',
+          vehicleType: 'Moto',
+          licensePlate: 'XYZ-9988',
+          passwordHash: 'dummyhash',
+          isActive: true,
+          isAvailable: true,
+          isActiveToday: true,
+          deliveryStatus: 'AVAILABLE'
+        }
       });
       logger.info('Created test deliverer Carlos.');
     } else {
-      deliverer.isActiveToday = true;
-      deliverer.isActive = true;
-      await deliverer.save();
+      deliverer = await prisma.deliverer.update({
+        where: { id: deliverer.id },
+        data: { isActiveToday: true, isActive: true }
+      });
       logger.info('Updated Carlos to be active today.');
     }
 
-    // Limpa ordens antigas e notificações para o teste
-    await Order.deleteMany({ customerId: customer._id });
-    await Notification.deleteMany({});
+    // Limpa ordens antigas, notificações e promoções para o teste (assim calculamos o valor correto sem desconto)
+    await prisma.promotion.deleteMany({});
+    await prisma.orderStatusHistory.deleteMany({});
+    await prisma.orderItemOption.deleteMany({});
+    await prisma.orderItem.deleteMany({});
+    await prisma.order.deleteMany({ where: { customerId: customer.id } });
+    await prisma.notification.deleteMany({});
 
     // 3. CRIAÇÃO DO PEDIDO (PENDING)
     logger.info('--- 3. Criando Pedido ---');
     const order = await OrderService.createOrder(
-      customer._id.toString(),
-      merchant._id.toString(),
+      customer.id,
+      merchant.id,
       [{
-        productId: product._id.toString(),
+        productId: product.id,
         quantity: 2,
         chosenOptions: [
           { groupName: 'Borda', optionName: 'Borda de Catupiry', price: 5.00 },
@@ -96,7 +106,7 @@ async function runTestFlow() {
       }],
       'PIX'
     );
-    logger.info(`Pedido nº ${order._id} criado com status ${order.status}`);
+    logger.info(`Pedido nº ${order.id} criado com status ${order.status}`);
     logger.info(`Preço base do produto: R$ ${product.price.toFixed(2)}`);
     logger.info(`Subtotal calculado pelo serviço: R$ ${order.subtotal.toFixed(2)}`);
     logger.info(`Total calculado pelo serviço: R$ ${order.total.toFixed(2)}`);
@@ -112,7 +122,10 @@ async function runTestFlow() {
     logger.info('✅ Validação de preços e opcionais passou com sucesso!');
 
     // Verifica se a notificação de criação foi enfileirada
-    let notifications = await Notification.find({ userId: customer._id }).sort({ createdAt: -1 });
+    let notifications = await prisma.notification.findMany({
+      where: { userId: customer.id },
+      orderBy: { createdAt: 'desc' }
+    });
     logger.info(`Notificações enfileiradas para o cliente: ${notifications.length}`);
     if (notifications.length > 0 && notifications[0]) {
       logger.info(`Conteúdo: "${notifications[0].content}"`);
@@ -120,34 +133,46 @@ async function runTestFlow() {
 
     // 4. ACEITE DO PEDIDO (ACCEPTED)
     logger.info('--- 4. Aceitando Pedido ---');
-    await OrderService.updateStatus(order._id.toString(), 'ACCEPTED', merchant._id.toString(), 'merchant');
-    const acceptedOrder = await Order.findById(order._id);
+    await OrderService.updateStatus(order.id, 'ACCEPTED', merchant.id, 'merchant');
+    const acceptedOrder = await prisma.order.findUnique({
+      where: { id: order.id }
+    });
     logger.info(`Status do pedido atualizado para: ${acceptedOrder?.status}`);
 
-    notifications = await Notification.find({ userId: customer._id }).sort({ createdAt: -1 });
+    notifications = await prisma.notification.findMany({
+      where: { userId: customer.id },
+      orderBy: { createdAt: 'desc' }
+    });
     if (notifications.length > 0 && notifications[0]) {
       logger.info(`Notificação de aceite enfileirada: "${notifications[0].content}"`);
     }
 
     // 5. PRONTO PARA COLETA (READY) - Deve acionar entregador escalado
     logger.info('--- 5. Pedido Pronto (READY) ---');
-    await OrderService.updateStatus(order._id.toString(), 'READY', merchant._id.toString(), 'merchant');
+    await OrderService.updateStatus(order.id, 'READY', merchant.id, 'merchant');
     
-    const readyOrder = await Order.findById(order._id).populate('delivererId');
+    const readyOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: { deliverer: true }
+    });
     logger.info(`Status do pedido atualizado para: ${readyOrder?.status}`);
-    logger.info(`Entregador atribuído: ${(readyOrder?.delivererId as any)?.name || 'NENHUM'}`);
+    logger.info(`Entregador atribuído: ${readyOrder?.deliverer?.name || 'NENHUM'}`);
 
     if (!(readyOrder?.delivererId)) {
       throw new Error('Falha na atribuição automática do entregador escalado para o dia!');
     }
 
     // Verifica notificações enfileiradas para o entregador e cliente
-    const delivererNotif = await Notification.findOne({ userId: deliverer._id });
+    const delivererNotif = await prisma.notification.findFirst({
+      where: { userId: deliverer.id }
+    });
     if (delivererNotif) {
       logger.info(`Notificação enfileirada para o entregador: "${delivererNotif.content}"`);
     }
 
-    const clientNotif = await Notification.findOne({ userId: customer._id });
+    const clientNotif = await prisma.notification.findFirst({
+      where: { userId: customer.id }
+    });
     if (clientNotif) {
       logger.info(`Notificação enfileirada para o cliente com motorista: "${clientNotif.content}"`);
     }
@@ -162,5 +187,8 @@ async function runTestFlow() {
     process.exit(0);
   }
 }
+
+runTestFlow();
+
 
 runTestFlow();
