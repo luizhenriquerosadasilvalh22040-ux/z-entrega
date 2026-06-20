@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { validate } from '../middlewares/validation';
 import { authenticate } from '../middlewares/auth';
-import { otpRateLimiter, verifyOtpRateLimiter } from '../middlewares/rateLimiter';
+import { otpRateLimiter, verifyOtpRateLimiter, resetPasswordRateLimiter } from '../middlewares/rateLimiter';
 import {
   customerRegisterSchema,
   merchantRegisterSchema,

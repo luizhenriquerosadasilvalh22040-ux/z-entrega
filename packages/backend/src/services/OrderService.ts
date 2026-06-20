@@ -183,6 +183,19 @@ export class OrderService {
         
         if (!product || product.merchantId !== merchantId) throw new Error(`Product not found: ${item.productId}`);
         if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);
+        if (product.stockQuantity < item.quantity) {
+          throw new Error(`Estoque insuficiente para o produto: ${product.name}`);
+        }
+
+        // Decrementa o estoque atômicamente garantindo que não fique negativo
+        try {
+          await tx.product.update({
+            where: { id: product.id, stockQuantity: { gte: item.quantity } },
+            data: { stockQuantity: { decrement: item.quantity } }
+          });
+        } catch (err) {
+          throw new Error(`Estoque insuficiente para o produto: ${product.name}`);
+        }
 
         const optionsPrice = item.chosenOptions
           ? item.chosenOptions.reduce((sum, opt) => sum + opt.price, 0)
@@ -252,11 +265,22 @@ export class OrderService {
 
         appliedCouponId = coupon.id;
 
-        // Incrementa contagem de usos do cupom
-        await tx.coupon.update({
-          where: { id: coupon.id },
-          data: { usedCount: { increment: 1 } }
-        });
+        // Incrementa contagem de usos do cupom de forma atômica contra condições de corrida
+        try {
+          if (coupon.maxUses !== null) {
+            await tx.coupon.update({
+              where: { id: coupon.id, usedCount: { lt: coupon.maxUses } },
+              data: { usedCount: { increment: 1 } }
+            });
+          } else {
+            await tx.coupon.update({
+              where: { id: coupon.id },
+              data: { usedCount: { increment: 1 } }
+            });
+          }
+        } catch (err) {
+          throw new Error('Este cupom atingiu o limite máximo de utilizações.');
+        }
 
         // Grava o histórico de uso
         await tx.userCouponUsage.create({

@@ -291,7 +291,9 @@ export class AuthService {
     });
     let isNewUser = false;
 
-    const code = cleanPhone === '44999998888' ? '1234' : Math.floor(1000 + Math.random() * 9000).toString(); 
+    const testingPhone = process.env.TESTING_PHONE;
+    const testingOtp = process.env.TESTING_OTP || '1234';
+    const code = (testingPhone && cleanPhone === testingPhone) ? testingOtp : Math.floor(1000 + Math.random() * 9000).toString(); 
     const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
 
     if (customer) {
@@ -409,7 +411,7 @@ export class AuthService {
    * Solicita um token de recuperação de senha (Merchant ou Admin)
    */
   public static async forgotPassword(email: string, role: 'merchant' | 'admin'): Promise<void> {
-    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
     if (role === 'merchant') {
