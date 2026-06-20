@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
-import { OrderStatus } from '../models/Order';
-import { Customer } from '../models/Customer';
 import prisma from '../config/prisma';
 
 export class OrderController {
@@ -16,12 +14,17 @@ export class OrderController {
 
       // Atualiza detalhes do endereço no cadastro do cliente se informados (mantido para compatibilidade)
       if (addressDetails) {
-        const customer = await Customer.findById(req.user.userId);
-        if (customer) {
-          customer.address.complement = addressDetails.complement || '';
-          customer.address.referencePoint = addressDetails.referencePoint || '';
-          customer.markModified('address');
-          await customer.save();
+        const primaryAddress = await prisma.customerAddress.findFirst({
+          where: { customerId: req.user.userId, isPrimary: true }
+        });
+        if (primaryAddress) {
+          await prisma.customerAddress.update({
+            where: { id: primaryAddress.id },
+            data: {
+              complement: addressDetails.complement || '',
+              referencePoint: addressDetails.referencePoint || ''
+            }
+          });
         }
       }
 
@@ -60,7 +63,7 @@ export class OrderController {
 
       const order = await OrderService.updateStatus(
         id,
-        status as OrderStatus,
+        status as any,
         req.user.userId,
         req.user.role as any
       );
@@ -95,11 +98,14 @@ export class OrderController {
       }
 
       // Verifica se o usuário atual tem direito de ver este pedido
-      if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user.userId) {
+      const orderCustomerId = typeof order.customerId === 'object' ? (order.customerId.id || order.customerId._id).toString() : order.customerId.toString();
+      const orderMerchantId = typeof order.merchantId === 'object' ? (order.merchantId.id || order.merchantId._id).toString() : order.merchantId.toString();
+
+      if (req.user.role === 'customer' && orderCustomerId !== req.user.userId) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
-      if (req.user.role === 'merchant' && order.merchantId._id.toString() !== req.user.userId) {
+      if (req.user.role === 'merchant' && orderMerchantId !== req.user.userId) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
