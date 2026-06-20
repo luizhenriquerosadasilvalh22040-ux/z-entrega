@@ -34,6 +34,7 @@ model Merchant {
   subscriptionPrice Float?    @map("subscription_price")
   passwordResetToken  String?   @map("password_reset_token")
   passwordResetExpires DateTime? @map("password_reset_expires")
+  timezone          String    @default("America/Sao_Paulo")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -254,6 +255,8 @@ model Promotion {
   merchantId         String   @map("merchant_id") @db.Uuid
   discountPercentage Float    @map("discount_percentage")
   expirationDate     DateTime @map("expiration_date")
+  categoryApplicable String?  @map("category_applicable")
+  productIds         String[] @map("product_ids")
   createdAt          DateTime @default(now()) @map("created_at")
 
   merchant           Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
