@@ -1050,7 +1050,7 @@ export const Store: React.FC = () => {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setAppliedCoupon(null);
+                    removeCoupon();
                     setCouponCodeInput('');
                   }}
                 >
@@ -1068,7 +1068,7 @@ export const Store: React.FC = () => {
                         subtotal: cartTotal
                       });
                       if (res.data?.status === 'success') {
-                        setAppliedCoupon(res.data.data);
+                        applyCoupon(res.data.data);
                         setCouponError('');
                         setToast({ message: 'Cupom aplicado com sucesso!', type: 'success' });
                       }
