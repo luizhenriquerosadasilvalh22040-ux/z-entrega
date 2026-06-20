@@ -74,6 +74,11 @@ export const formatOrder = (order: any) => {
     pixCopyAndPaste: order.pixCopyAndPaste || undefined,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+    review: order.review ? {
+      id: order.review.id,
+      rating: order.review.rating,
+      comment: order.review.comment
+    } : undefined,
     save: async function() {
       const updated = await prisma.order.update({
         where: { id: this.id },
@@ -555,6 +560,7 @@ export class OrderService {
         merchant: true,
         deliverer: true,
         statusHistory: true,
+        review: true,
         items: {
           include: {
             options: true,
@@ -574,6 +580,7 @@ export class OrderService {
         merchant: true,
         deliverer: true,
         statusHistory: true,
+        review: true,
         items: {
           include: {
             options: true,
