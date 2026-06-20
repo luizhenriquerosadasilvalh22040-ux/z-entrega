@@ -1,5 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
-import { Banner } from '../models/Banner';
+import prisma from '../config/prisma';
+
+const formatBanner = (b: any) => {
+  if (!b) return null;
+  return {
+    _id: b.id,
+    id: b.id,
+    imageUrl: b.imageUrl,
+    title: b.title,
+    isActive: b.isActive,
+    createdAt: b.createdAt
+  };
+};
 
 export class BannerController {
   /**
@@ -7,7 +19,11 @@ export class BannerController {
    */
   public static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const banners = await Banner.find({ isActive: true }).sort({ createdAt: -1 });
+      const dbBanners = await prisma.banner.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      const banners = dbBanners.map(b => formatBanner(b));
       res.status(200).json({
         status: 'success',
         data: { banners }
@@ -27,18 +43,21 @@ export class BannerController {
         return;
       }
 
-      const { imageUrl, title, linkUrl } = req.body;
+      const { imageUrl, title } = req.body;
       if (!imageUrl) {
         res.status(400).json({ status: 'fail', message: 'URL da imagem do banner é obrigatória' });
         return;
       }
 
-      const banner = await Banner.create({
-        imageUrl,
-        title,
-        linkUrl,
-        isActive: true
+      const dbBanner = await prisma.banner.create({
+        data: {
+          imageUrl,
+          title: title || null,
+          isActive: true
+        }
       });
+
+      const banner = formatBanner(dbBanner);
 
       res.status(201).json({
         status: 'success',
@@ -60,12 +79,18 @@ export class BannerController {
       }
 
       const { id } = req.params;
-      const banner = await Banner.findByIdAndDelete(id);
+      const existing = await prisma.banner.findUnique({
+        where: { id }
+      });
       
-      if (!banner) {
+      if (!existing) {
         res.status(404).json({ status: 'fail', message: 'Banner não encontrado' });
         return;
       }
+
+      await prisma.banner.delete({
+        where: { id }
+      });
 
       res.status(200).json({
         status: 'success',
@@ -76,3 +101,4 @@ export class BannerController {
     }
   }
 }
+
