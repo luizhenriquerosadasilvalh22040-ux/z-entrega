@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Order } from '../models/Order';
 import { OrderService } from '../services/OrderService';
 import logger from '../config/logger';
+import prisma from '../config/prisma';
 
 export class PaymentController {
   /**
@@ -83,6 +84,93 @@ export class PaymentController {
       res.status(200).json({ status: 'success', received: true });
     } catch (error) {
       logger.error('❌ [Asaas Webhook] Erro ao processar webhook:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Valida um cupom de desconto para o cliente
+   */
+  public static async validateCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ status: 'fail', message: 'Not authenticated' });
+        return;
+      }
+      const { userId } = req.user;
+      const { code, merchantId, subtotal } = req.body;
+
+      const coupon = await prisma.coupon.findUnique({
+        where: { code: code.toUpperCase() },
+        include: { merchant: true }
+      });
+
+      if (!coupon) {
+        res.status(404).json({ status: 'fail', message: 'Cupom de desconto inválido ou não encontrado.' });
+        return;
+      }
+
+      if (!coupon.isActive) {
+        res.status(400).json({ status: 'fail', message: 'Este cupom não está mais ativo.' });
+        return;
+      }
+
+      if (new Date(coupon.expirationDate) < new Date()) {
+        res.status(400).json({ status: 'fail', message: 'Este cupom já expirou.' });
+        return;
+      }
+
+      if (coupon.merchantId && coupon.merchantId !== merchantId) {
+        res.status(400).json({ status: 'fail', message: 'Este cupom não é válido para este estabelecimento.' });
+        return;
+      }
+
+      if (coupon.minOrderValue && subtotal < coupon.minOrderValue) {
+        res.status(400).json({ status: 'fail', message: `O valor mínimo do pedido para usar este cupom é de R$ ${coupon.minOrderValue.toFixed(2)}.` });
+        return;
+      }
+
+      if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+        res.status(400).json({ status: 'fail', message: 'Este cupom atingiu o limite máximo de utilizações.' });
+        return;
+      }
+
+      const usage = await prisma.userCouponUsage.findUnique({
+        where: {
+          userId_couponId: {
+            userId,
+            couponId: coupon.id
+          }
+        }
+      });
+
+      if (usage) {
+        res.status(400).json({ status: 'fail', message: 'Você já utilizou este cupom em um pedido anterior.' });
+        return;
+      }
+
+      let discount = 0;
+      if (coupon.discountType === 'PERCENTAGE') {
+        discount = subtotal * (coupon.discountValue / 100);
+      } else {
+        discount = coupon.discountValue;
+      }
+
+      if (discount > subtotal) {
+        discount = subtotal;
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          couponId: coupon.id,
+          code: coupon.code,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          discountCalculated: discount
+        }
+      });
+    } catch (error) {
       next(error);
     }
   }
