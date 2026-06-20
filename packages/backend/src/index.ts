@@ -25,6 +25,8 @@ import { connectDatabase } from './config/database';
 import logger from './config/logger';
 import { errorHandler } from './middlewares/errors';
 import { OrderService } from './services/OrderService';
+import { deliveryTimeoutQueue } from './queues/deliveryQueue';
+
 
 // Importa Rotas
 import authRoutes from './routes/auth';
