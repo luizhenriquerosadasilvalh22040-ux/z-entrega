@@ -791,7 +791,7 @@ export class OrderService {
     delivererId: string, 
     action: 'accept' | 'reject'
   ): Promise<{ success: boolean; message: string }> {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { merchant: true, customer: true }
@@ -853,6 +853,15 @@ export class OrderService {
         return { success: true, message: 'Você recusou a entrega. O pedido será encaminhado para outro motoboy.' };
       }
     });
+
+    if (action === 'reject' && result.success) {
+      // Dispara reatribuição automática de imediato fora da transação
+      this.autoReassignDeliverer(orderId, delivererId).catch(err => {
+        logger.error(`[Process Response] Erro ao reatribuir pedido ${orderId} imediatamente pós-rejeição:`, err);
+      });
+    }
+
+    return result;
   }
 
   /**
