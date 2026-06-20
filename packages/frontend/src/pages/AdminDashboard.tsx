@@ -52,6 +52,20 @@ interface IBanner {
   linkUrl?: string;
 }
 
+interface ICoupon {
+  _id: string;
+  code: string;
+  discountType: 'PERCENTAGE' | 'FIXED';
+  discountValue: number;
+  minOrderValue?: number;
+  expirationDate: string;
+  maxUses?: number;
+  usedCount: number;
+  isActive: boolean;
+  merchantId?: string;
+  merchant?: { name: string };
+}
+
 export const AdminDashboard: React.FC = () => {
   const { user, role, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
@@ -60,7 +74,7 @@ export const AdminDashboard: React.FC = () => {
   const [deliverers, setDeliverers] = useState<IDeliverer[]>([]);
   const [merchants, setMerchants] = useState<IMerchant[]>([]);
   const [defaultPrice, setDefaultPrice] = useState<number>(150);
-  const [activeTab, setActiveTab] = useState<'merchants' | 'deliverers' | 'orders_monitor' | 'deliverers_closing' | 'banners'>('merchants');
+  const [activeTab, setActiveTab] = useState<'merchants' | 'deliverers' | 'orders_monitor' | 'deliverers_closing' | 'banners' | 'coupons'>('merchants');
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const [dailyReport, setDailyReport] = useState<any[]>([]);
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<any | null>(null);
@@ -92,6 +106,19 @@ export const AdminDashboard: React.FC = () => {
   });
 
   const [uploadingBanner, setUploadingBanner] = useState(false);
+
+  // States for Coupons
+  const [coupons, setCoupons] = useState<ICoupon[]>([]);
+  const [isAddCouponOpen, setIsAddCouponOpen] = useState(false);
+  const [couponForm, setCouponForm] = useState({
+    code: '',
+    discountType: 'FIXED' as 'FIXED' | 'PERCENTAGE',
+    discountValue: '',
+    minOrderValue: '',
+    expirationDate: '',
+    maxUses: '',
+    merchantId: ''
+  });
 
   const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -151,6 +178,11 @@ export const AdminDashboard: React.FC = () => {
         setBanners(bannersRes.data.data.banners);
       }
 
+      const couponsRes = await apiClient.get('/admin/coupons');
+      if (couponsRes.data?.status === 'success') {
+        setCoupons(couponsRes.data.data.coupons);
+      }
+
       const activeOrdersRes = await apiClient.get('/admin/orders/active');
       if (activeOrdersRes.data?.status === 'success') {
         setActiveOrders(activeOrdersRes.data.data.orders);
@@ -165,6 +197,57 @@ export const AdminDashboard: React.FC = () => {
       setToast({ message: 'Erro ao carregar dados do administrador', type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        code: couponForm.code,
+        discountType: couponForm.discountType,
+        discountValue: Number(couponForm.discountValue),
+        minOrderValue: couponForm.minOrderValue ? Number(couponForm.minOrderValue) : undefined,
+        expirationDate: couponForm.expirationDate,
+        maxUses: couponForm.maxUses ? Number(couponForm.maxUses) : undefined,
+        merchantId: couponForm.merchantId || undefined
+      };
+
+      const res = await apiClient.post('/admin/coupons', payload);
+      if (res.data?.status === 'success') {
+        setToast({ message: 'Cupom cadastrado com sucesso!', type: 'success' });
+        setIsAddCouponOpen(false);
+        setCouponForm({
+          code: '',
+          discountType: 'FIXED',
+          discountValue: '',
+          minOrderValue: '',
+          expirationDate: '',
+          maxUses: '',
+          merchantId: ''
+        });
+        // Recarregar
+        const couponsRes = await apiClient.get('/admin/coupons');
+        if (couponsRes.data?.status === 'success') {
+          setCoupons(couponsRes.data.data.coupons);
+        }
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Erro ao cadastrar cupom';
+      setToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const handleDeleteCoupon = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este cupom?')) return;
+    try {
+      const res = await apiClient.delete(`/admin/coupons/${id}`);
+      if (res.data?.status === 'success') {
+        setToast({ message: 'Cupom removido com sucesso!', type: 'success' });
+        setCoupons(prev => prev.filter(c => c._id !== id));
+      }
+    } catch (err) {
+      setToast({ message: 'Erro ao remover cupom', type: 'error' });
     }
   };
 
@@ -483,6 +566,17 @@ export const AdminDashboard: React.FC = () => {
         >
           <Image size={16} />
           Banners Promocionais
+        </button>
+        <button
+          onClick={() => setActiveTab('coupons')}
+          className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'coupons'
+              ? 'border-energy text-energy font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <DollarSign size={16} />
+          Cupons de Desconto
         </button>
       </div>
 
@@ -944,6 +1038,85 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Tab: Coupons */}
+        {activeTab === 'coupons' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+                <DollarSign size={22} className="text-energy" /> Controle de Cupons de Desconto
+              </h2>
+              <Button size="sm" onClick={() => setIsAddCouponOpen(true)} className="flex items-center gap-1.5">
+                <Plus size={16} /> Novo Cupom
+              </Button>
+            </div>
+
+            <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                      <th className="p-4">Código</th>
+                      <th className="p-4">Tipo / Valor</th>
+                      <th className="p-4">Loja Vinculada</th>
+                      <th className="p-4">Min. Pedido</th>
+                      <th className="p-4">Expiração</th>
+                      <th className="p-4">Usos</th>
+                      <th className="p-4 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {coupons.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          Nenhum cupom de desconto cadastrado.
+                        </td>
+                      </tr>
+                    ) : (
+                      coupons.map((coupon) => (
+                        <tr key={coupon._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                          <td className="p-4 font-bold text-slate-805 dark:text-white">
+                            {coupon.code}
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex items-center text-xs font-bold px-2 py-0.5 rounded-full ${
+                              coupon.discountType === 'PERCENTAGE' ? 'bg-orange-500/10 text-energy' : 'bg-blue-500/10 text-blue-500'
+                            }`}>
+                              {coupon.discountType === 'PERCENTAGE' ? `${coupon.discountValue}%` : `R$ ${coupon.discountValue.toFixed(2)}`}
+                            </span>
+                          </td>
+                          <td className="p-4 text-slate-650 dark:text-slate-350 font-semibold">
+                            {coupon.merchant ? coupon.merchant.name : <Badge variant="orange">Global (Todas)</Badge>}
+                          </td>
+                          <td className="p-4 text-slate-500">
+                            {coupon.minOrderValue ? `R$ ${coupon.minOrderValue.toFixed(2)}` : 'Não possui'}
+                          </td>
+                          <td className="p-4 text-slate-500">
+                            {new Date(coupon.expirationDate).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="p-4 text-slate-500 font-semibold">
+                            {coupon.usedCount} {coupon.maxUses ? `/ ${coupon.maxUses}` : ''}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex justify-center">
+                              <button
+                                onClick={() => handleDeleteCoupon(coupon._id)}
+                                className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors"
+                                aria-label="Excluir cupom de desconto"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Modal: Add Driver */}
@@ -1104,6 +1277,95 @@ export const AdminDashboard: React.FC = () => {
             </Button>
             <Button type="submit" fullWidth>
               Salvar Banner
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal: Add Coupon */}
+      <Modal isOpen={isAddCouponOpen} onClose={() => setIsAddCouponOpen(false)} title="Criar Novo Cupom de Desconto">
+        <form onSubmit={handleCreateCoupon} className="space-y-4">
+          <Input
+            label="Código do Cupom *"
+            placeholder="Ex: BEMVINDO10"
+            value={couponForm.code}
+            onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 mb-1.5">Tipo de Desconto *</label>
+              <select
+                value={couponForm.discountType}
+                onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value as any })}
+                className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none text-slate-700 dark:text-white"
+              >
+                <option value="FIXED">Valor Fixo (R$)</option>
+                <option value="PERCENTAGE">Percentual (%)</option>
+              </select>
+            </div>
+
+            <Input
+              label="Valor do Desconto *"
+              type="number"
+              step="0.01"
+              placeholder="Ex: 10.00 ou 15"
+              value={couponForm.discountValue}
+              onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Valor Mínimo do Pedido (Opcional)"
+              type="number"
+              step="0.01"
+              placeholder="Ex: 30.00"
+              value={couponForm.minOrderValue}
+              onChange={(e) => setCouponForm({ ...couponForm, minOrderValue: e.target.value })}
+            />
+
+            <Input
+              label="Data de Expiração *"
+              type="date"
+              value={couponForm.expirationDate}
+              onChange={(e) => setCouponForm({ ...couponForm, expirationDate: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Limite de Usos Totais (Opcional)"
+              type="number"
+              placeholder="Ex: 100"
+              value={couponForm.maxUses}
+              onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
+            />
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 mb-1.5">Loja Vinculada (Opcional)</label>
+              <select
+                value={couponForm.merchantId}
+                onChange={(e) => setCouponForm({ ...couponForm, merchantId: e.target.value })}
+                className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none text-slate-700 dark:text-white"
+              >
+                <option value="">Global (Todas as lojas)</option>
+                {merchants.map((m) => (
+                  <option key={m._id} value={m._id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" fullWidth onClick={() => setIsAddCouponOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" fullWidth>
+              Salvar Cupom
             </Button>
           </div>
         </form>
