@@ -673,9 +673,12 @@ export class OrderService {
     return formatOrder(order);
   }
 
-  public static async listCustomerOrders(customerId: string): Promise<any[]> {
+  public static async listCustomerOrders(customerId: string, page = 1, limit = 20): Promise<any[]> {
+    const skip = (page - 1) * limit;
     const orders = await prisma.order.findMany({
       where: { customerId },
+      take: limit,
+      skip: skip,
       include: {
         customer: true,
         merchant: true,
@@ -694,13 +697,16 @@ export class OrderService {
     return orders.map(o => formatOrder(o));
   }
 
-  public static async listMerchantOrders(merchantId: string, status?: any): Promise<any[]> {
+  public static async listMerchantOrders(merchantId: string, status?: any, page = 1, limit = 20): Promise<any[]> {
+    const skip = (page - 1) * limit;
     const where: any = { merchantId };
     if (status) {
       where.status = status;
     }
     const orders = await prisma.order.findMany({
       where,
+      take: limit,
+      skip: skip,
       include: {
         customer: true,
         merchant: true,
