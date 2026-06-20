@@ -103,8 +103,7 @@ export const formatOrder = (order: any) => {
 export class OrderService {
   /**
    * Cria um novo pedido calculando subtotal, descontos, comissão e total
-   */
-  public static async createOrder(
+   */  public static async createOrder(
     customerId: string,
     merchantId: string,
     itemsData: { 
@@ -114,7 +113,8 @@ export class OrderService {
       notes?: string;
     }[],
     paymentMethod: string,
-    deliveryAddress?: IAddress
+    deliveryAddress?: IAddress,
+    couponCode?: string
   ): Promise<any> {
     const savedOrder = await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({
@@ -204,9 +204,68 @@ export class OrderService {
         });
       }
 
-      const commission = subtotal * 0.10;
+      // Processamento e validação de cupom
+      let couponDiscount = 0;
+      let appliedCouponId = null;
+
+      if (couponCode) {
+        const coupon = await tx.coupon.findUnique({
+          where: { code: couponCode.toUpperCase() }
+        });
+
+        if (!coupon) throw new Error('Cupom de desconto inválido ou não encontrado.');
+        if (!coupon.isActive) throw new Error('Este cupom não está mais ativo.');
+        if (new Date(coupon.expirationDate) < new Date()) throw new Error('Este cupom já expirou.');
+        if (coupon.merchantId && coupon.merchantId !== merchantId) throw new Error('Este cupom não é válido para esta loja.');
+        if (coupon.minOrderValue && subtotal < coupon.minOrderValue) {
+          throw new Error(`O valor mínimo do pedido para este cupom é de R$ ${coupon.minOrderValue.toFixed(2)}.`);
+        }
+        if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+          throw new Error('Este cupom atingiu o limite máximo de utilizações.');
+        }
+
+        const usage = await tx.userCouponUsage.findUnique({
+          where: {
+            userId_couponId: {
+              userId: customerId,
+              couponId: coupon.id
+            }
+          }
+        });
+
+        if (usage) throw new Error('Você já utilizou este cupom anteriormente.');
+
+        if (coupon.discountType === 'PERCENTAGE') {
+          couponDiscount = subtotal * (coupon.discountValue / 100);
+        } else {
+          couponDiscount = coupon.discountValue;
+        }
+
+        if (couponDiscount > subtotal) {
+          couponDiscount = subtotal;
+        }
+
+        appliedCouponId = coupon.id;
+
+        // Incrementa contagem de usos do cupom
+        await tx.coupon.update({
+          where: { id: coupon.id },
+          data: { usedCount: { increment: 1 } }
+        });
+
+        // Grava o histórico de uso
+        await tx.userCouponUsage.create({
+          data: {
+            userId: customerId,
+            couponId: coupon.id
+          }
+        });
+      }
+
+      const subtotalWithDiscount = Math.max(0, subtotal - couponDiscount);
+      const commission = subtotalWithDiscount * 0.10;
       const deliveryFee = 5.00;
-      const total = subtotal + deliveryFee;
+      const total = subtotalWithDiscount + deliveryFee;
 
       const finalAddress = deliveryAddress || formatCustomer(customer)?.address;
       if (!finalAddress) {
@@ -221,7 +280,7 @@ export class OrderService {
         data: {
           customerId,
           merchantId,
-          subtotal,
+          subtotal: subtotalWithDiscount,
           commission,
           deliveryFee,
           total,
@@ -235,8 +294,10 @@ export class OrderService {
           deliveryZip: finalAddress.zipCode,
           deliveryComplement: finalAddress.complement || '',
           deliveryReference: finalAddress.referencePoint || '',
-          paymentStatus: 'PENDING'
+          paymentStatus: 'PENDING',
+          couponId: appliedCouponId
         }
+      });      }
       });
 
       await tx.orderStatusHistory.create({
