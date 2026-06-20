@@ -91,8 +91,11 @@ export const formatCustomer = (customer: any) => {
 };
 
 export class CustomerService {
-  public static async listCustomers(): Promise<any[]> {
+  public static async listCustomers(page = 1, limit = 20): Promise<any[]> {
+    const skip = (page - 1) * limit;
     const customers = await prisma.customer.findMany({
+      take: limit,
+      skip: skip,
       include: { addresses: true }
     });
     return customers.map(c => formatCustomer(c));

@@ -386,28 +386,47 @@ export class AdminController {
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
 
-      // 1. Motoboys escalados hoje
-      const deliverers = await Deliverer.find({ isActiveToday: true, isActive: true });
+      // 1. Motoboys escalados hoje via Prisma
+      const deliverers = await prisma.deliverer.findMany({
+        where: { isActiveToday: true, isActive: true }
+      });
 
-      // 2. Calcula entregas concluídas de cada um
-      const report = [];
-      for (const driver of deliverers) {
-        const completedDeliveries = await Order.countDocuments({
-          delivererId: driver._id,
+      const delivererIds = deliverers.map(d => d.id);
+
+      // 2. Calcula entregas concluídas hoje de todos os motoboys ativos em uma única query com groupBy
+      const deliveryCounts = await prisma.order.groupBy({
+        by: ['delivererId'],
+        where: {
+          delivererId: { in: delivererIds },
           status: 'DELIVERED',
-          createdAt: { $gte: startOfToday, $lte: endOfToday }
-        });
+          createdAt: { gte: startOfToday, lte: endOfToday }
+        },
+        _count: {
+          id: true
+        }
+      });
 
-        report.push({
-          delivererId: driver._id,
+      // Cria um mapa para busca rápida de contagens
+      const countsMap = new Map<string, number>();
+      deliveryCounts.forEach(c => {
+        if (c.delivererId) {
+          countsMap.set(c.delivererId, c._count.id);
+        }
+      });
+
+      // 3. Monta o relatório
+      const report = deliverers.map(driver => {
+        const completedDeliveries = countsMap.get(driver.id) || 0;
+        return {
+          delivererId: driver.id,
           name: driver.name,
           phone: driver.phone,
-          vehicle: driver.vehicle,
-          plate: driver.plate,
+          vehicle: driver.vehicleType,
+          plate: driver.licensePlate || '',
           completedDeliveries,
           totalPay: completedDeliveries * 5.00
-        });
-      }
+        };
+      });
 
       res.status(200).json({
         status: 'success',
