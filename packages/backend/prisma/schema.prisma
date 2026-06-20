@@ -101,6 +101,7 @@ model Deliverer {
   isActive      Boolean  @default(true) @map("is_active")
   isAvailable   Boolean  @default(false) @map("is_available")
   isActiveToday Boolean  @default(false) @map("is_active_today")
+  deliveryStatus String   @default("AVAILABLE") @map("delivery_status") // AVAILABLE, COLLECTING, DELIVERING
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -179,6 +180,7 @@ model Order {
   pixQrCode          String?              @map("pix_qr_code")
   pixCopyAndPaste    String?              @map("pix_copy_and_paste")
   couponId           String?              @map("coupon_id") @db.Uuid
+  delivererStatus    String?              @map("deliverer_status") // PENDING, ACCEPTED, REJECTED
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
 
