@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { MerchantService } from '../services/MerchantService';
+import prisma from '../config/prisma';
 
 export class MerchantController {
   public static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -185,6 +186,32 @@ export class MerchantController {
     try {
       const count = await MerchantService.countVerifiedMerchants();
       res.status(200).json({ status: 'success', data: { count } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtém a lista de avaliações de um lojista
+   */
+  public static async getReviews(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id: merchantId } = req.params;
+      const reviews = await prisma.review.findMany({
+        where: { merchantId },
+        include: {
+          customer: {
+            select: {
+              name: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      res.status(200).json({
+        status: 'success',
+        data: { reviews }
+      });
     } catch (error) {
       next(error);
     }

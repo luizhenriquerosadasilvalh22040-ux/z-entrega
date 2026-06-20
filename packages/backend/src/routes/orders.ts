@@ -20,4 +20,7 @@ router.get('/:id', OrderController.getById);
 // Atualizar status do pedido
 router.post('/:id/status', validate(updateOrderStatusSchema), OrderController.updateStatus);
 
+// Avaliar pedido
+router.post('/:id/review', OrderController.createReview);
+
 export default router;

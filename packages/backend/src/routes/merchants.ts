@@ -17,6 +17,7 @@ router.get('/stats/verified', MerchantController.countVerified);
 // Listagem e busca de lojistas são públicas (para clientes verem)
 router.get('/', MerchantController.list);
 router.get('/:id', MerchantController.getById);
+router.get('/:id/reviews', MerchantController.getReviews);
 
 // Rotas protegidas (apenas o próprio lojista)
 router.use(authenticate);

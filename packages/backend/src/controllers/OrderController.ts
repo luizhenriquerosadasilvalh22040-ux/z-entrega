@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
 import { OrderStatus } from '../models/Order';
 import { Customer } from '../models/Customer';
+import prisma from '../config/prisma';
 
 export class OrderController {
   public static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -147,6 +148,74 @@ export class OrderController {
       res.status(200).json({
         status: 'success',
         data: { stats }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Avalia um pedido entregue
+   */
+  public static async createReview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user || req.user.role !== 'customer') {
+        res.status(403).json({ status: 'fail', message: 'Apenas clientes podem avaliar pedidos' });
+        return;
+      }
+
+      const { id: orderId } = req.params;
+      const { rating, comment } = req.body;
+
+      if (rating === undefined || rating < 1 || rating > 5) {
+        res.status(400).json({ status: 'fail', message: 'A nota de avaliação é obrigatória e deve ser entre 1 e 5 estrelas' });
+        return;
+      }
+
+      // Busca o pedido para validar
+      const order = await prisma.order.findUnique({
+        where: { id: orderId }
+      });
+
+      if (!order) {
+        res.status(404).json({ status: 'fail', message: 'Pedido não encontrado' });
+        return;
+      }
+
+      if (order.customerId !== req.user.userId) {
+        res.status(403).json({ status: 'fail', message: 'Você não tem permissão para avaliar este pedido' });
+        return;
+      }
+
+      if (order.status !== 'DELIVERED') {
+        res.status(400).json({ status: 'fail', message: 'Você só pode avaliar pedidos que já foram entregues' });
+        return;
+      }
+
+      // Verifica se já foi avaliado
+      const existingReview = await prisma.review.findUnique({
+        where: { orderId }
+      });
+
+      if (existingReview) {
+        res.status(400).json({ status: 'fail', message: 'Este pedido já foi avaliado anteriormente' });
+        return;
+      }
+
+      // Cria a avaliação
+      const review = await prisma.review.create({
+        data: {
+          orderId,
+          customerId: req.user.userId,
+          merchantId: order.merchantId,
+          rating: Number(rating),
+          comment: comment || null
+        }
+      });
+
+      res.status(201).json({
+        status: 'success',
+        data: { review }
       });
     } catch (error) {
       next(error);
