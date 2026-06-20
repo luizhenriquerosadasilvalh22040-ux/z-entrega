@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
-import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban } from 'lucide-react';
 
 interface IMerchant {
   _id: string;
@@ -656,7 +656,11 @@ export const Store: React.FC = () => {
                 disabled={!isStoreOpen()}
                 onClick={() => setIsCheckingOut(true)}
               >
-                {isStoreOpen() ? 'Revisar e Finalizar' : 'Estabelecimento Fechado 🚫'}
+                {isStoreOpen() ? 'Revisar e Finalizar' : (
+                  <span className="flex items-center gap-1.5 justify-center">
+                    Estabelecimento Fechado <Ban size={15} />
+                  </span>
+                )}
               </Button>
             </div>
           </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Button, Input, Card, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight } from 'lucide-react';
+import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, MapPin } from 'lucide-react';
 
 export const MerchantPortal: React.FC = () => {
   const { login } = useAuthStore();
@@ -98,7 +98,9 @@ export const MerchantPortal: React.FC = () => {
         <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full filter blur-3xl"></div>
         
         <div className="lg:col-span-7 space-y-6">
-          <Badge variant="orange">📍 Central do Lojista Parceiro</Badge>
+          <Badge variant="orange" className="flex items-center gap-1 w-fit">
+            <MapPin size={13} /> Central do Lojista Parceiro
+          </Badge>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
             Venda mais na sua região com o <span className="text-energy">Traz Pra Cá</span>
           </h1>

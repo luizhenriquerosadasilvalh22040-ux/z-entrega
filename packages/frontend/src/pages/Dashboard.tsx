@@ -5,7 +5,7 @@ import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
   AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
-  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText
+  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
@@ -117,7 +117,7 @@ export const Dashboard: React.FC = () => {
         pendingOrders: prev.pendingOrders + 1,
         totalOrders: prev.totalOrders + 1
       }));
-      setToast({ message: 'Novo pedido recebido! 🔔', type: 'success' });
+      setToast({ message: 'Novo pedido recebido!', type: 'success' });
     });
 
     return () => {
@@ -821,7 +821,7 @@ export const Dashboard: React.FC = () => {
               {/* Pedidos Ativos */}
               <div className="lg:col-span-2 space-y-4">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  🛵 Pedidos em Andamento ({activeOrders.length})
+                  <Bike size={20} className="text-energy animate-pulse" /> Pedidos em Andamento ({activeOrders.length})
                 </h3>
                 
                 {activeOrders.length === 0 ? (

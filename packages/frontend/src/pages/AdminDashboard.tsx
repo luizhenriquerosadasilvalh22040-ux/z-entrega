@@ -5,7 +5,7 @@ import { Button, Card, Badge, Input, Toast, Modal } from '../components/ui';
 import { 
   DollarSign, Users, Store, Bike, Plus, Trash2, Check, X, 
   Settings, UserPlus, ShieldCheck, TrendingUp, AlertCircle, ClipboardList,
-  RefreshCw, Eye, MessageSquare
+  RefreshCw, Eye, MessageSquare, Image
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -481,7 +481,7 @@ export const AdminDashboard: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
-          <span className="text-sm">🖼️</span>
+          <Image size={16} />
           Banners Promocionais
         </button>
       </div>
@@ -895,7 +895,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
-                <span className="text-xl">🖼️</span> Controle de Banners Promocionais
+                <Image size={22} className="text-energy" /> Controle de Banners Promocionais
               </h2>
               <Button size="sm" onClick={() => setIsAddBannerOpen(true)} className="flex items-center gap-1.5">
                 <Plus size={16} /> Novo Banner

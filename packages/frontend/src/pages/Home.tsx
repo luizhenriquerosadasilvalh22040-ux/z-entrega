@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Toast } from '../components/ui';
-import { Search, ShoppingCart, MapPin, Store, Clock, Award, Star } from 'lucide-react';
+import { Search, ShoppingCart, MapPin, Store, Clock, Award, Star, Pizza, Pill, ShoppingBag, Moon, IceCream, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface IMerchant {
@@ -182,7 +182,9 @@ export const Home: React.FC = () => {
       {banners.length === 0 && (
         <div className="bg-gradient-to-tr from-orange-500/10 via-orange-500/5 to-transparent rounded-3xl p-8 md:p-12 text-center md:text-left md:flex md:items-center md:justify-between gap-8 border border-orange-500/5">
           <div className="max-w-xl space-y-6">
-            <Badge variant="orange">📍 Rondon, PR e Região</Badge>
+            <Badge variant="orange" className="flex items-center gap-1 w-fit">
+              <MapPin size={13} /> Rondon, PR e Região
+            </Badge>
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-800 dark:text-white leading-tight">
               Compre do comércio local, <span className="text-energy">receba em casa.</span>
             </h1>
@@ -190,7 +192,16 @@ export const Home: React.FC = () => {
               Faça pedidos sem complicações com confirmação direto no seu WhatsApp!
             </p>
           </div>
-          <div className="hidden lg:block text-9xl animate-float filter drop-shadow-lg">🛵</div>
+          <div className="hidden lg:block text-orange-500 animate-float filter drop-shadow-lg">
+            <svg className="w-32 h-32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="18" r="3" />
+              <path d="M3 18h3M9 18h6M21 18h-3" />
+              <path d="M18 15V9a2 2 0 0 0-2-2h-5l-2-3H4" />
+              <path d="M12 7v5a2 2 0 0 1-2 2H6" />
+              <path d="M12 10h4" />
+            </svg>
+          </div>
         </div>
       )}
 
@@ -211,12 +222,12 @@ export const Home: React.FC = () => {
         <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-450 pl-2">Categorias</h3>
         <div className="flex flex-wrap justify-center gap-3">
           {[
-            { id: 'Hambúrguer', label: 'Hambúrguer', emoji: '🍔' },
-            { id: 'Sorvete', label: 'Sorvete', emoji: '🍨' },
-            { id: 'Pizza', label: 'Pizza', emoji: '🍕' },
-            { id: 'Farmácia', label: 'Farmácia', emoji: '💊' },
-            { id: 'Geral', label: 'Geral', emoji: '🛍️' },
-            { id: 'Madrugada', label: 'Madrugada', emoji: '🌙' }
+            { id: 'Hambúrguer', label: 'Hambúrguer', icon: <Utensils size={18} /> },
+            { id: 'Sorvete', label: 'Sorvete', icon: <IceCream size={18} /> },
+            { id: 'Pizza', label: 'Pizza', icon: <Pizza size={18} /> },
+            { id: 'Farmácia', label: 'Farmácia', icon: <Pill size={18} /> },
+            { id: 'Geral', label: 'Geral', icon: <ShoppingBag size={18} /> },
+            { id: 'Madrugada', label: 'Madrugada', icon: <Moon size={18} /> }
           ].map((cat) => (
             <button
               key={cat.id}
@@ -227,7 +238,7 @@ export const Home: React.FC = () => {
                   : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:border-slate-800 shadow-sm'
               }`}
             >
-              <span className="text-xl animate-float inline-block filter drop-shadow">{cat.emoji}</span>
+              <span className="text-orange-500 dark:text-orange-400 animate-float inline-block filter drop-shadow">{cat.icon}</span>
               <span>{cat.label}</span>
             </button>
           ))}
@@ -316,7 +327,10 @@ export const Home: React.FC = () => {
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-50 dark:border-slate-850 pt-3">
                       <span>Horário: <span className="font-bold text-slate-700 dark:text-slate-300">{merchant.operatingHours.open} às {merchant.operatingHours.close}</span></span>
                       {isMadrugadaStore(merchant.operatingHours.open, merchant.operatingHours.close) && (
-                        <span className="text-[10px] font-bold text-amber-500 flex items-center gap-0.5">🌙 Madrugada</span>
+                        <span className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
+                          <Moon size={12} className="text-amber-500" />
+                          Madrugada
+                        </span>
                       )}
                     </div>
                   </div>

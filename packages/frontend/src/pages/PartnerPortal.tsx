@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Button, Input, Card, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus, Sparkles } from 'lucide-react';
+import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus, Sparkles, Pizza, ShoppingBag, Package, Rocket } from 'lucide-react';
 
 export const PartnerPortal: React.FC = () => {
   const { login } = useAuthStore();
@@ -142,15 +142,33 @@ export const PartnerPortal: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-gradient-to-tr from-slate-950 via-slate-900 to-black text-white rounded-3xl p-8 md:p-12 relative overflow-hidden border border-slate-800 shadow-2xl">
         <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full filter blur-3xl"></div>
         
-        {/* Floating 3D Emojis */}
-        <div className="absolute top-4 left-1/2 text-2xl animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.4s', animationDuration: '4s' }}>🍕</div>
-        <div className="absolute bottom-8 left-1/3 text-3xl animate-float opacity-25 select-none hidden md:block" style={{ animationDelay: '1.0s', animationDuration: '4.8s' }}>🍔</div>
-        <div className="absolute top-10 right-1/3 text-2xl animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.7s', animationDuration: '3.6s' }}>📦</div>
-        <div className="absolute bottom-4 right-1/2 text-3xl animate-float opacity-20 select-none hidden md:block" style={{ animationDelay: '1.5s', animationDuration: '5.2s' }}>🛍️</div>
+        {/* Floating 3D Icons */}
+        <div className="absolute top-4 left-1/2 animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.4s', animationDuration: '4s' }}>
+          <Pizza size={24} className="text-orange-500" />
+        </div>
+        <div className="absolute bottom-8 left-1/3 animate-float opacity-25 select-none hidden md:block" style={{ animationDelay: '1.0s', animationDuration: '4.8s' }}>
+          <svg className="w-8 h-8 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 11a9 9 0 0 1 18 0v2H3v-2Z" />
+            <path d="M3 18h18M3 15h18" />
+          </svg>
+        </div>
+        <div className="absolute top-10 right-1/3 animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.7s', animationDuration: '3.6s' }}>
+          <Package size={24} className="text-orange-400" />
+        </div>
+        <div className="absolute bottom-4 right-1/2 animate-float opacity-20 select-none hidden md:block" style={{ animationDelay: '1.5s', animationDuration: '5.2s' }}>
+          <ShoppingBag size={28} className="text-orange-500" />
+        </div>
         
-        {/* Elemento 3D de Destaque no Background do Hero */}
-        <div className="absolute -bottom-6 -right-6 text-[100px] lg:text-[140px] animate-float select-none opacity-20 lg:opacity-30 filter drop-shadow-[0_15px_15px_rgba(249,115,22,0.4)] hidden sm:block" style={{ animationDuration: '4s' }}>
-          🛵
+        {/* Elemento de Destaque no Background do Hero */}
+        <div className="absolute -bottom-6 -right-6 text-orange-500/20 lg:text-orange-500/30 animate-float select-none hidden sm:block" style={{ animationDuration: '4s' }}>
+          <svg className="w-24 h-24 lg:w-36 lg:h-36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="18" r="3" />
+            <path d="M3 18h3M9 18h6M21 18h-3" />
+            <path d="M18 15V9a2 2 0 0 0-2-2h-5l-2-3H4" />
+            <path d="M12 7v5a2 2 0 0 1-2 2H6" />
+            <path d="M12 10h4" />
+          </svg>
         </div>
         
         {/* Left Info Column */}
@@ -166,7 +184,7 @@ export const PartnerPortal: React.FC = () => {
             Vendeu? <span className="text-slate-200">O Traz Pra Cá leva!</span>
           </h1>
           <p className="text-slate-300 text-sm md:text-base max-w-xl font-medium leading-relaxed">
-            Vendeu? Nós levamos! A plataforma local desenvolvida para conectar restaurantes, farmácias e comércios locais a milhares de clientes na região de Rondon-PR. Comece a vender online hoje mesmo e deixe a entrega com a gente! 🚀
+            Vendeu? Nós levamos! A plataforma local desenvolvida para conectar restaurantes, farmácias e comércios locais a milhares de clientes na região de Rondon-PR. Comece a vender online hoje mesmo e deixe a entrega com a gente! <Rocket size={15} className="inline ml-1 text-energy animate-pulse" />
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-800">

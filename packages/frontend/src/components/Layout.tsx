@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
@@ -226,9 +226,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             &copy; 2026 Traz Pra Cá Delivery. Todos os direitos reservados.
           </p>
           <div className="text-xs text-slate-400 dark:text-slate-500 mt-2 md:mt-0 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/parceiros" className="hover:text-energy transition-colors font-semibold">Portal de Parceiros & Administração 🏢</Link>
+            <Link to="/parceiros" className="hover:text-energy transition-colors font-semibold flex items-center gap-1">
+              Portal de Parceiros & Administração <Building size={14} className="text-slate-400 dark:text-slate-500" />
+            </Link>
             <span>•</span>
-            <span className="flex items-center gap-0.5">Valorizando o comércio local 💚</span>
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-450">
+              Valorizando o comércio local <Heart size={13} className="fill-emerald-500 stroke-emerald-500" />
+            </span>
           </div>
         </div>
       </footer>

@@ -101,11 +101,13 @@ export const Card: React.FC<CardProps> = ({
 interface BadgeProps {
   variant?: 'orange' | 'green' | 'blue' | 'red' | 'gray';
   children: React.ReactNode;
+  className?: string;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   variant = 'gray',
-  children
+  children,
+  className = ''
 }) => {
   const styles = {
     orange: "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400",
@@ -116,7 +118,7 @@ export const Badge: React.FC<BadgeProps> = ({
   };
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${styles[variant]}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${styles[variant]} ${className}`}>
       {children}
     </span>
   );
