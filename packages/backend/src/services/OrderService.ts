@@ -782,4 +782,203 @@ export class OrderService {
       }
     }
   }
+
+  /**
+   * Processa a resposta do entregador (Aceitar/Recusar)
+   */
+  public static async processDelivererResponse(
+    orderId: string, 
+    delivererId: string, 
+    action: 'accept' | 'reject'
+  ): Promise<{ success: boolean; message: string }> {
+    return await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { merchant: true, customer: true }
+      });
+
+      if (!order) {
+        throw new Error('Pedido não encontrado.');
+      }
+
+      if (order.status !== 'READY') {
+        return { success: false, message: 'Este pedido já foi coletado, entregue ou cancelado.' };
+      }
+
+      if (order.delivererId !== delivererId) {
+        return { success: false, message: 'Esta entrega já foi atribuída a outro motoboy.' };
+      }
+
+      if (order.delivererStatus !== 'PENDING') {
+        return { success: false, message: `Você já respondeu a esta entrega anteriormente (Status: ${order.delivererStatus}).` };
+      }
+
+      if (action === 'accept') {
+        // Atualiza status de resposta da entrega e do motoboy
+        await tx.order.update({
+          where: { id: orderId },
+          data: { delivererStatus: 'ACCEPTED' }
+        });
+
+        await tx.deliverer.update({
+          where: { id: delivererId },
+          data: { deliveryStatus: 'COLLECTING' }
+        });
+
+        // Notifica o lojista via WhatsApp
+        await NotificationService.queueNotification({
+          userId: order.merchantId,
+          userType: 'Merchant',
+          type: 'WhatsApp',
+          target: order.merchant.phone,
+          content: `O motoboy aceitou a entrega do pedido nº *${orderId}* e está a caminho do estabelecimento.`
+        }, tx);
+
+        return { success: true, message: 'Você aceitou a entrega com sucesso! Dirija-se ao estabelecimento para a coleta.' };
+      } else {
+        // Rejeitar: remove o entregador, marca-o como disponível de novo
+        await tx.order.update({
+          where: { id: orderId },
+          data: { 
+            delivererId: null,
+            delivererStatus: null
+          }
+        });
+
+        await tx.deliverer.update({
+          where: { id: delivererId },
+          data: { deliveryStatus: 'AVAILABLE' }
+        });
+
+        return { success: true, message: 'Você recusou a entrega. O pedido será encaminhado para outro motoboy.' };
+      }
+    });
+  }
+
+  /**
+   * Reatribui automaticamente o pedido para outro entregador
+   */
+  public static async autoReassignDeliverer(orderId: string, oldDelivererId: string): Promise<void> {
+    logger.info(`🔄 [Auto-Reassign] Iniciando reatribuição para o pedido ${orderId} (Antigo entregador: ${oldDelivererId})...`);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { merchant: true }
+      });
+
+      if (!order || order.status !== 'READY' || order.delivererId !== oldDelivererId || order.delivererStatus !== 'PENDING') {
+        logger.info(`🔄 [Auto-Reassign] Pedido ${orderId} já foi aceito, cancelado ou o entregador foi alterado. Abortando reatribuição.`);
+        return null;
+      }
+
+      // Marca o motoboy que recusou/excedeu o tempo como AVAILABLE
+      await tx.deliverer.update({
+        where: { id: oldDelivererId },
+        data: { deliveryStatus: 'AVAILABLE' }
+      });
+
+      // Busca todos os entregadores disponíveis e ativos hoje, excluindo o que recusou/deu timeout
+      const activeDeliverers = await tx.deliverer.findMany({
+        where: { 
+          isActiveToday: true, 
+          isActive: true, 
+          isAvailable: true,
+          id: { not: oldDelivererId }
+        }
+      });
+
+      if (activeDeliverers.length > 0) {
+        const delivererIds = activeDeliverers.map(d => d.id);
+        const activeDeliveriesCounts = await tx.order.groupBy({
+          by: ['delivererId'],
+          where: {
+            delivererId: { in: delivererIds },
+            status: { in: ['READY', 'DISPATCHED', 'IN_TRANSIT'] }
+          },
+          _count: { id: true }
+        });
+
+        const countsMap = new Map<string, number>();
+        activeDeliveriesCounts.forEach(c => {
+          if (c.delivererId) countsMap.set(c.delivererId, c._count.id);
+        });
+
+        activeDeliverers.sort((a, b) => {
+          const countA = countsMap.get(a.id) || 0;
+          const countB = countsMap.get(b.id) || 0;
+          return countA - countB;
+        });
+
+        const newDriver = activeDeliverers[0];
+
+        // Atualiza a ordem com o novo entregador
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            delivererId: newDriver.id,
+            delivererStatus: 'PENDING'
+          },
+          include: { deliverer: true, merchant: true }
+        });
+
+        // Envia notificação ao novo entregador
+        const pickupAddr = `${order.merchant.street}, ${order.merchant.number} - ${order.merchant.neighborhood}, ${order.merchant.city}`;
+        const delivAddr = `${updatedOrder.deliveryStreet}, ${updatedOrder.deliveryNumber} - ${updatedOrder.deliveryNeighborhood}, ${updatedOrder.deliveryCity}` +
+          (updatedOrder.deliveryComplement ? `, Complemento: ${updatedOrder.deliveryComplement}` : '') +
+          (updatedOrder.deliveryReference ? ` (Ref: ${updatedOrder.deliveryReference})` : '');
+
+        const nId = await NotificationService.queueNotification({
+          userId: newDriver.id,
+          userType: 'Deliverer',
+          type: 'WhatsApp',
+          target: newDriver.phone,
+          content: `Olá, *${newDriver.name}*! O pedido nº *${orderId}* foi reatribuído a você. Coleta em: *${order.merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: http://localhost:3000/api/orders/${orderId}/delivery-response?delivererId=${newDriver.id}&action=accept\nRecusar: http://localhost:3000/api/orders/${orderId}/delivery-response?delivererId=${newDriver.id}&action=reject`
+        }, tx);
+
+        return { updatedOrder, notificationId: nId };
+      } else {
+        // Se não houver outros motoboys, limpa o entregador e avisa o lojista
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            delivererId: null,
+            delivererStatus: null
+          }
+        });
+        
+        // Notifica o merchant
+        const nId = await NotificationService.queueNotification({
+          userId: order.merchantId,
+          userType: 'Merchant',
+          type: 'WhatsApp',
+          target: order.merchant.phone,
+          content: `Atenção: O pedido nº *${orderId}* não foi aceito por nenhum motoboy disponível no momento e ficou sem entregador vinculado.`
+        }, tx);
+
+        return { updatedOrder: null, notificationId: nId };
+      }
+    });
+
+    if (result) {
+      try {
+        await NotificationService.addJobToQueue(result.notificationId);
+      } catch (err) {
+        console.error('Erro ao enfileirar notificação de reatribuição:', err);
+      }
+
+      // Se atribuiu a um novo entregador, agenda o timeout para ele também
+      if (result.updatedOrder && result.updatedOrder.delivererId) {
+        try {
+          await deliveryTimeoutQueue.add(
+            { orderId: result.updatedOrder.id, delivererId: result.updatedOrder.delivererId },
+            { delay: 5 * 60 * 1000 }
+          );
+          logger.info(`⏰ [Timeout Scheduled] Próximo timeout de 5 minutos agendado para o pedido ${result.updatedOrder.id} (Entregador: ${result.updatedOrder.delivererId})`);
+        } catch (err) {
+          logger.error('Erro ao agendar timeout de entrega na fila Bull:', err);
+        }
+      }
+    }
+  }
 }
