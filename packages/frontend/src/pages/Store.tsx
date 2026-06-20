@@ -1118,20 +1118,22 @@ export const Store: React.FC = () => {
       <Modal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} title="Personalizar Produto">
         {selectedProduct && (
           <div className="space-y-6">
-            {/* Product Header */}
-            <div className="flex gap-4 border-b border-slate-150 dark:border-slate-800/80 pb-4">
-              {selectedProduct.image && (
+            {/* Product Image Full-Width */}
+            {selectedProduct.image && (
+              <div className="w-full h-48 md:h-56 overflow-hidden rounded-2xl mb-4 border border-slate-100 dark:border-slate-800">
                 <img 
                   src={selectedProduct.image} 
                   alt={selectedProduct.name} 
-                  className="w-20 h-20 rounded-xl object-cover bg-slate-50 border border-slate-100"
+                  className="w-full h-full object-cover"
                 />
-              )}
-              <div className="flex-1 space-y-1">
-                <h4 className="font-bold text-base text-slate-800 dark:text-white">{selectedProduct.name}</h4>
-                <p className="text-xs text-slate-400 line-clamp-2">{selectedProduct.description}</p>
-                <p className="text-sm font-extrabold text-energy mt-1">Base: R$ {selectedProduct.price.toFixed(2)}</p>
               </div>
+            )}
+
+            {/* Product Header */}
+            <div className="border-b border-slate-150 dark:border-slate-800/80 pb-4">
+              <h4 className="font-bold text-base text-slate-800 dark:text-white">{selectedProduct.name}</h4>
+              <p className="text-xs text-slate-400 mt-1">{selectedProduct.description}</p>
+              <p className="text-sm font-extrabold text-energy mt-2">Base: R$ {selectedProduct.price.toFixed(2)}</p>
             </div>
 
             {/* Option Groups */}
