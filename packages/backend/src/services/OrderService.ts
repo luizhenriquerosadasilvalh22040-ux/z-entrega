@@ -836,12 +836,11 @@ export class OrderService {
 
         return { success: true, message: 'Você aceitou a entrega com sucesso! Dirija-se ao estabelecimento para a coleta.' };
       } else {
-        // Rejeitar: remove o entregador, marca-o como disponível de novo
+        // Rejeitar: marca o status da entrega como REJECTED
         await tx.order.update({
           where: { id: orderId },
           data: { 
-            delivererId: null,
-            delivererStatus: null
+            delivererStatus: 'REJECTED'
           }
         });
 
@@ -876,7 +875,7 @@ export class OrderService {
         include: { merchant: true }
       });
 
-      if (!order || order.status !== 'READY' || order.delivererId !== oldDelivererId || order.delivererStatus !== 'PENDING') {
+      if (!order || order.status !== 'READY' || order.delivererId !== oldDelivererId || (order.delivererStatus !== 'PENDING' && order.delivererStatus !== 'REJECTED')) {
         logger.info(`🔄 [Auto-Reassign] Pedido ${orderId} já foi aceito, cancelado ou o entregador foi alterado. Abortando reatribuição.`);
         return null;
       }
