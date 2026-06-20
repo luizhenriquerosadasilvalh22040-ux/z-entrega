@@ -156,8 +156,38 @@ export class AsaasService {
         copyAndPaste: qrData.payload,
         qrCodeBase64: qrData.encodedImage
       };
+  }
+
+  /**
+   * Busca o status de uma cobrança no Asaas
+   */
+  public static async getPaymentStatus(asaasPaymentId: string): Promise<string> {
+    if (!asaasPaymentId) {
+      throw new Error('ID do pagamento do Asaas não fornecido.');
+    }
+
+    if (asaasPaymentId.startsWith('pay_mock_')) {
+      logger.info(`💳 [Asaas Mock] Buscando status de pagamento fictício: ${asaasPaymentId}`);
+      return 'PENDING';
+    }
+
+    const url = `${this.getApiUrl()}/payments/${asaasPaymentId}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro Asaas (Get Payment): ${response.status} - ${errorText}`);
+      }
+
+      const resData: any = await response.json();
+      return resData.status; // Retorna status (ex: PENDING, RECEIVED, CONFIRMED)
     } catch (err: any) {
-      logger.error(`❌ [Asaas] Falha ao processar pagamento Pix: ${err.message}`);
+      logger.error(`❌ [Asaas] Falha ao obter status de pagamento ${asaasPaymentId}: ${err.message}`);
       throw err;
     }
   }
