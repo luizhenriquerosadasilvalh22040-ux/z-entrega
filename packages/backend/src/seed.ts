@@ -27,7 +27,8 @@ async function seed() {
     await prisma.systemConfig.deleteMany({});
 
     // 1. Cria Lojista Teste
-    const passwordHash = await bcrypt.hash('password123', 10)    const merchant = await prisma.merchant.create({
+    const passwordHash = await bcrypt.hash('password123', 10);
+    const merchant = await prisma.merchant.create({
       data: {
         name: 'Pizzaria Rondon',
         email: 'merchant@example.com',
@@ -176,7 +177,7 @@ async function seed() {
       }
     });
 
-    logger.info('Test promotions created successfully.');lly.');
+    logger.info('Test promotions created successfully.');
 
     // 3. Cria Cliente Teste
     const customer = await prisma.customer.create({
