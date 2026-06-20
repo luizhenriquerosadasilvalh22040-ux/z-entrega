@@ -88,6 +88,16 @@ export const Store: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // States for Coupon Code
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    couponId: string;
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState('');
+
   // States for Custom Product Details Modal
   const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<{ groupName: string; optionName: string; price: number }[]>([]);
@@ -314,7 +324,15 @@ export const Store: React.FC = () => {
 
   const cartTotal = cart.reduce((total, item) => total + (getItemTotalPrice(item) * item.quantity), 0);
   const deliveryFee = 5.00;
-  const grandTotal = cartTotal + deliveryFee;
+  
+  const discountAmount = appliedCoupon
+    ? appliedCoupon.discountType === 'PERCENTAGE'
+      ? cartTotal * (appliedCoupon.discountValue / 100)
+      : appliedCoupon.discountValue
+    : 0;
+
+  const finalDiscount = Math.min(cartTotal, discountAmount);
+  const grandTotal = Math.max(0, cartTotal - finalDiscount + deliveryFee);
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -373,13 +391,16 @@ export const Store: React.FC = () => {
         merchantId: merchant?._id,
         items: orderItems,
         paymentMethod,
-        deliveryAddress: targetAddress
+        deliveryAddress: targetAddress,
+        couponCode: appliedCoupon?.code || undefined
       });
 
       if (res.data?.status === 'success') {
         setToast({ message: 'Pedido realizado com sucesso!', type: 'success' });
         setIsCheckingOut(false);
         setCart([]);
+        setAppliedCoupon(null);
+        setCouponCodeInput('');
         setTimeout(() => navigate('/orders'), 1500);
       }
     } catch (err: any) {
@@ -906,12 +927,82 @@ export const Store: React.FC = () => {
             </div>
           </div>
 
+          {/* Cupom de Desconto */}
+          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Cupom de Desconto
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Ex: BEMVINDO10"
+                value={couponCodeInput}
+                onChange={(e) => {
+                  setCouponCodeInput(e.target.value.toUpperCase());
+                  setCouponError('');
+                }}
+                disabled={!!appliedCoupon}
+                className="flex-1 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all duration-200 outline-none dark:text-white"
+              />
+              {appliedCoupon ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setAppliedCoupon(null);
+                    setCouponCodeInput('');
+                  }}
+                >
+                  Remover
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!couponCodeInput.trim()) return;
+                    try {
+                      const res = await apiClient.post('/payments/validate-coupon', {
+                        code: couponCodeInput,
+                        merchantId: merchant?._id,
+                        subtotal: cartTotal
+                      });
+                      if (res.data?.status === 'success') {
+                        setAppliedCoupon(res.data.data);
+                        setCouponError('');
+                        setToast({ message: 'Cupom aplicado com sucesso!', type: 'success' });
+                      }
+                    } catch (err: any) {
+                      const msg = err.response?.data?.message || 'Erro ao validar cupom';
+                      setCouponError(msg);
+                    }
+                  }}
+                >
+                  Aplicar
+                </Button>
+              )}
+            </div>
+            {couponError && (
+              <p className="text-xs text-red-500 font-semibold">{couponError}</p>
+            )}
+            {appliedCoupon && (
+              <p className="text-xs text-green-500 font-semibold flex items-center gap-1">
+                Cupom {appliedCoupon.code} aplicado: {appliedCoupon.discountType === 'PERCENTAGE' ? `${appliedCoupon.discountValue}%` : `R$ ${appliedCoupon.discountValue.toFixed(2)}`} de desconto.
+              </p>
+            )}
+          </div>
+
           {/* Totals Summary */}
           <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-2 text-sm">
             <div className="flex justify-between text-xs text-slate-500">
               <span>Subtotal:</span>
               <span>R$ {cartTotal.toFixed(2)}</span>
             </div>
+            {appliedCoupon && (
+              <div className="flex justify-between text-xs text-green-600 dark:text-green-400 font-semibold">
+                <span>Desconto Cupom ({appliedCoupon.code}):</span>
+                <span>- R$ {finalDiscount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs text-slate-500">
               <span>Taxa de Entrega:</span>
               <span>R$ 5.00</span>
