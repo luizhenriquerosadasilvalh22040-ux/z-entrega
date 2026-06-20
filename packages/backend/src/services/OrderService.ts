@@ -297,7 +297,6 @@ export class OrderService {
           paymentStatus: 'PENDING',
           couponId: appliedCouponId
         }
-      });      }
       });
 
       await tx.orderStatusHistory.create({
