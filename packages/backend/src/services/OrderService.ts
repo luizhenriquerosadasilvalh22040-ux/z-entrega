@@ -140,9 +140,18 @@ export class OrderService {
         throw new Error('O estabelecimento comercial está fechado manualmente pelo proprietário.');
       }
 
-      // Verifica se o estabelecimento está aberto no horário atual
+      // Valida se o método de pagamento selecionado é aceito pelo lojista
+      if (!merchant.paymentMethods.includes(paymentMethod)) {
+        throw new Error('Método de pagamento não aceito por este estabelecimento.');
+      }
+
+      // Verifica se o estabelecimento está aberto no horário atual (baseado no fuso horário do lojista)
       const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const timezone = merchant.timezone || 'America/Sao_Paulo';
+      const localTimeStr = now.toLocaleString('en-US', { timeZone: timezone });
+      const localDate = new Date(localTimeStr);
+      const currentMinutes = localDate.getHours() * 60 + localDate.getMinutes();
+
       const [openH, openM] = merchant.openTime.split(':').map(Number);
       const [closeH, closeM] = merchant.closeTime.split(':').map(Number);
 
@@ -206,7 +215,16 @@ export class OrderService {
 
         let baseAndOptionsPrice = product.price + optionsPrice;
 
-        const applicablePromo = activePromotions.find(() => true);
+        // Procura se há alguma promoção ativa que se aplica especificamente a este produto ou categoria
+        const applicablePromo = activePromotions.find(promo => {
+          if (promo.productIds && promo.productIds.length > 0) {
+            return promo.productIds.includes(product.id);
+          }
+          if (promo.categoryApplicable) {
+            return promo.categoryApplicable.toLowerCase() === product.category.toLowerCase();
+          }
+          return true;
+        });
 
         if (applicablePromo) {
           baseAndOptionsPrice = baseAndOptionsPrice * (1 - applicablePromo.discountPercentage / 100);
