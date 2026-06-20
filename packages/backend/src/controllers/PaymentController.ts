@@ -42,6 +42,8 @@ export class PaymentController {
           return;
         }
 
+        const merchantId = typeof order.merchantId === 'object' ? order.merchantId.id : order.merchantId;
+
         // Se o pedido já não foi pago ou aceito, atualiza
         if (order.status === 'PENDING') {
           logger.info(`💳 [Asaas Webhook] Confirmando pagamento do pedido ${orderId}...`);
@@ -50,15 +52,15 @@ export class PaymentController {
           await order.save();
 
           // Atualiza o status do pedido para ACCEPTED (Pago e aceito)
-          await OrderService.updateStatus(orderId, 'ACCEPTED', order.merchantId.toString(), 'merchant');
+          await OrderService.updateStatus(orderId, 'ACCEPTED', merchantId, 'merchant');
 
           // Notifica em tempo real via WebSocket
           const io = req.app.get('io');
           if (io) {
             io.to(`order:${orderId}`).emit('orderStatusUpdated', { orderId, status: 'ACCEPTED' });
-            io.to(`merchant:${order.merchantId.toString()}`).emit('orderStatusUpdated', { orderId, status: 'ACCEPTED' });
+            io.to(`merchant:${merchantId}`).emit('orderStatusUpdated', { orderId, status: 'ACCEPTED' });
             // Força a atualização da lista do lojista
-            io.to(`merchant:${order.merchantId.toString()}`).emit('newOrder', order);
+            io.to(`merchant:${merchantId}`).emit('newOrder', order);
           }
           
           logger.info(`💳 [Asaas Webhook] Pedido ${orderId} atualizado para status ACCEPTED devido ao pagamento confirmado.`);
@@ -70,9 +72,10 @@ export class PaymentController {
         const order = await Order.findById(orderId);
         if (order && order.status === 'PENDING') {
           logger.info(`💳 [Asaas Webhook] Cancelando pedido ${orderId} por expiração/vencimento do pagamento.`);
+          const merchantId = typeof order.merchantId === 'object' ? order.merchantId.id : order.merchantId;
           order.paymentStatus = 'OVERDUE';
           await order.save();
-          await OrderService.updateStatus(orderId, 'CANCELLED', order.merchantId.toString(), 'merchant');
+          await OrderService.updateStatus(orderId, 'CANCELLED', merchantId, 'merchant');
 
           const io = req.app.get('io');
           if (io) {

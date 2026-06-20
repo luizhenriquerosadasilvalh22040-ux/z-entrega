@@ -55,6 +55,7 @@ model Customer {
   phone           String            @unique
   isPhoneVerified Boolean           @default(false) @map("is_phone_verified")
   verificationCode String?          @map("verification_code")
+  verificationCodeExpires DateTime? @map("verification_code_expires")
   asaasCustomerId String?           @map("asaas_customer_id")
   isActive        Boolean           @default(true) @map("is_active")
   createdAt       DateTime          @default(now()) @map("created_at")

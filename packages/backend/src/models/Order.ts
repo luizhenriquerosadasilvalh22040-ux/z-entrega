@@ -102,7 +102,34 @@ export class Order {
   }
 
   public static async deleteMany(query: any = {}) {
-    return await prisma.order.deleteMany({});
+    const where: any = {};
+    if (query.status) {
+      if (typeof query.status === 'object') {
+        if (query.status.$ne) {
+          where.status = { not: query.status.$ne };
+        } else if (query.status.$nin) {
+          where.status = { notIn: query.status.$nin };
+        }
+      } else {
+        where.status = query.status;
+      }
+    }
+    if (query.delivererId) {
+      where.delivererId = query.delivererId;
+    }
+    if (query.merchantId) {
+      where.merchantId = query.merchantId;
+    }
+    if (query.customerId) {
+      where.customerId = query.customerId;
+    }
+    if (query.createdAt && typeof query.createdAt === 'object') {
+      where.createdAt = {};
+      if (query.createdAt.$gte) where.createdAt.gte = query.createdAt.$gte;
+      if (query.createdAt.$lte) where.createdAt.lte = query.createdAt.$lte;
+    }
+
+    return await prisma.order.deleteMany({ where });
   }
 }
 

@@ -252,43 +252,27 @@ export class AuthService {
       where: { email }
     });
 
-    if (admin) {
-      if (!admin.isActive) {
-        throw new Error('Account deactivated');
-      }
-      const isMatch = await bcrypt.compare(password, admin.passwordHash);
-      if (!isMatch) {
-        throw new Error('Invalid email or password');
-      }
-      const tokens = await this.generateTokens({
-        userId: admin.id,
-        role: 'admin',
-        email: admin.email,
-        name: admin.name
-      });
-      return { admin: { name: admin.name, email: admin.email }, ...tokens };
+    if (!admin) {
+      throw new Error('Invalid email or password');
     }
 
-    // 2. Fallback para credenciais padrão se for o e-mail padrão e não existir no banco
-    if (email === 'admin@trazpraca.com' && password === 'admin123') {
-      const createdAdmin = await prisma.systemAdmin.create({
-        data: {
-          name: 'Administrador Geral',
-          email: 'admin@trazpraca.com',
-          passwordHash: await bcrypt.hash('admin123', 10),
-          isActive: true
-        }
-      });
-
-      const tokens = await this.generateTokens({
-        userId: createdAdmin.id,
-        role: 'admin',
-        email: createdAdmin.email,
-        name: createdAdmin.name
-      });
-      return { admin: { name: createdAdmin.name, email: createdAdmin.email }, ...tokens };
+    if (!admin.isActive) {
+      throw new Error('Account deactivated');
     }
-    throw new Error('Invalid email or password');
+
+    const isMatch = await bcrypt.compare(password, admin.passwordHash);
+    if (!isMatch) {
+      throw new Error('Invalid email or password');
+    }
+
+    const tokens = await this.generateTokens({
+      userId: admin.id,
+      role: 'admin',
+      email: admin.email,
+      name: admin.name
+    });
+
+    return { admin: { name: admin.name, email: admin.email }, ...tokens };
   }
 
   public static async logout(refreshToken: string): Promise<void> {
@@ -308,11 +292,15 @@ export class AuthService {
     let isNewUser = false;
 
     const code = cleanPhone === '44999998888' ? '1234' : Math.floor(1000 + Math.random() * 9000).toString(); 
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
 
     if (customer) {
       const updated = await prisma.customer.update({
         where: { id: customer.id },
-        data: { verificationCode: code },
+        data: { 
+          verificationCode: code,
+          verificationCodeExpires: expires
+        },
         include: { addresses: true }
       });
       customer = updated;
@@ -328,6 +316,7 @@ export class AuthService {
             name,
             phone: cleanPhone,
             verificationCode: code,
+            verificationCodeExpires: expires,
             isPhoneVerified: false,
             isActive: true
           }
@@ -392,11 +381,16 @@ export class AuthService {
       throw new Error('Código de verificação inválido');
     }
 
+    if (customer.verificationCodeExpires && new Date() > new Date(customer.verificationCodeExpires)) {
+      throw new Error('Código de verificação expirou');
+    }
+
     const updated = await prisma.customer.update({
       where: { id: customer.id },
       data: {
         isPhoneVerified: true,
-        verificationCode: null
+        verificationCode: null,
+        verificationCodeExpires: null
       },
       include: { addresses: true }
     });
@@ -445,17 +439,7 @@ export class AuthService {
         console.error('Erro ao enviar token de redefinição via WhatsApp/Bull:', err);
       }
     } else if (role === 'admin') {
-      let admin = await prisma.systemAdmin.findUnique({ where: { email } });
-      if (!admin && email === 'admin@trazpraca.com') {
-        admin = await prisma.systemAdmin.create({
-          data: {
-            name: 'Administrador Geral',
-            email: 'admin@trazpraca.com',
-            passwordHash: await bcrypt.hash('admin123', 10),
-            isActive: true
-          }
-        });
-      }
+      const admin = await prisma.systemAdmin.findUnique({ where: { email } });
 
       if (!admin) {
         throw new Error('E-mail de administrador não encontrado.');

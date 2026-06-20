@@ -267,6 +267,7 @@ export class AuthController {
       const customerObj = customer.toObject();
       delete customerObj.passwordHash;
       delete customerObj.verificationCode;
+      delete customerObj.verificationCodeExpires;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
 

@@ -17,6 +17,7 @@ export const formatCustomer = (customer: any) => {
     phone: customer.phone,
     isPhoneVerified: customer.isPhoneVerified,
     verificationCode: customer.verificationCode,
+    verificationCodeExpires: customer.verificationCodeExpires,
     asaasCustomerId: customer.asaasCustomerId,
     isActive: customer.isActive,
     createdAt: customer.createdAt,
@@ -65,6 +66,7 @@ export const formatCustomer = (customer: any) => {
         phone: this.phone,
         isPhoneVerified: this.isPhoneVerified,
         verificationCode: this.verificationCode,
+        verificationCodeExpires: this.verificationCodeExpires,
         asaasCustomerId: this.asaasCustomerId,
         isActive: this.isActive
       };

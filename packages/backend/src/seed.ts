@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import prisma from './config/prisma';
 import { encryptDeterministic } from './config/encryption';
 import logger from './config/logger';
@@ -22,6 +23,7 @@ async function seed() {
     await prisma.merchant.deleteMany({});
     await prisma.deliverer.deleteMany({});
     await prisma.banner.deleteMany({});
+    await prisma.systemAdmin.deleteMany({});
     await prisma.systemConfig.deleteMany({});
 
     // 1. Cria Lojista Teste
@@ -189,6 +191,21 @@ async function seed() {
       }
     });
     logger.info('System Config created successfully.');
+
+    // 5. Criação Segura do Administrador Geral
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@trazpraca.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(16).toString('hex');
+    const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+
+    await prisma.systemAdmin.create({
+      data: {
+        name: 'Administrador Geral',
+        email: adminEmail,
+        passwordHash: adminPasswordHash,
+        isActive: true
+      }
+    });
+    logger.info(`System Admin created successfully. Email: ${adminEmail}, Password: ${process.env.ADMIN_PASSWORD ? '******' : adminPassword}`);
 
     logger.info('Seeding finished successfully!');
   } catch (error) {

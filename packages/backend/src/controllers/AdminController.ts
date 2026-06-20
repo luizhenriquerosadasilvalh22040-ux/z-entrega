@@ -5,6 +5,8 @@ import { Deliverer } from '../models/Deliverer';
 import { Order } from '../models/Order';
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma';
+import { formatMerchant } from '../services/MerchantService';
+import { formatOrder } from '../services/OrderService';
 
 export class AdminController {
   /**
@@ -275,16 +277,18 @@ export class AdminController {
         return;
       }
 
-      const merchant = await Merchant.findByIdAndUpdate(
-        id,
-        { $set: { isVerified } },
-        { new: true, select: { passwordHash: 0 } }
-      );
+      const updated = await prisma.merchant.update({
+        where: { id },
+        data: { isVerified }
+      });
 
-      if (!merchant) {
+      if (!updated) {
         res.status(404).json({ status: 'fail', message: 'Lojista não encontrado' });
         return;
       }
+
+      const formatted = formatMerchant(updated);
+      const merchant = formatted ? formatted.toObject() : null;
 
       res.status(200).json({
         status: 'success',
@@ -308,16 +312,18 @@ export class AdminController {
         return;
       }
 
-      const merchant = await Merchant.findByIdAndUpdate(
-        id,
-        { $set: { subscriptionPrice } },
-        { new: true, select: { passwordHash: 0 } }
-      );
+      const updated = await prisma.merchant.update({
+        where: { id },
+        data: { subscriptionPrice: subscriptionPrice !== undefined ? subscriptionPrice : null }
+      });
 
-      if (!merchant) {
+      if (!updated) {
         res.status(404).json({ status: 'fail', message: 'Lojista não encontrado' });
         return;
       }
+
+      const formatted = formatMerchant(updated);
+      const merchant = formatted ? formatted.toObject() : null;
 
       res.status(200).json({
         status: 'success',
@@ -335,14 +341,34 @@ export class AdminController {
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
 
-      const orders = await Order.find({
-        createdAt: { $gte: startOfToday, $lte: endOfToday },
-        status: { $nin: ['DELIVERED', 'CANCELLED'] }
-      })
-      .populate('customerId', 'name phone')
-      .populate('merchantId', 'name address')
-      .populate('delivererId', 'name phone')
-      .sort({ createdAt: -1 });
+      const activeOrders = await prisma.order.findMany({
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lte: endOfToday
+          },
+          status: {
+            notIn: ['DELIVERED', 'CANCELLED']
+          }
+        },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      const orders = activeOrders.map(o => formatOrder(o));
 
       res.status(200).json({
         status: 'success',
