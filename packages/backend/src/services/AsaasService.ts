@@ -1,6 +1,6 @@
 import logger from '../config/logger';
-import { ICustomerDocument } from '../models/Customer';
 import { decrypt } from '../config/encryption';
+import prisma from '../config/prisma';
 
 export interface IAsaasPixResponse {
   asaasPaymentId: string;
@@ -27,7 +27,7 @@ export class AsaasService {
   /**
    * Obtém ou cria o cadastro do cliente no Asaas
    */
-  public static async getOrCreateCustomer(customer: ICustomerDocument): Promise<string> {
+  public static async getOrCreateCustomer(customer: any): Promise<string> {
     if (customer.asaasCustomerId) {
       return customer.asaasCustomerId;
     }
@@ -77,7 +77,10 @@ export class AsaasService {
 
       // Salva o ID no documento do cliente no banco
       customer.asaasCustomerId = asaasCustomerId;
-      await customer.save();
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { asaasCustomerId }
+      });
 
       logger.info(`💳 [Asaas] Cliente criado com sucesso! ID: ${asaasCustomerId}`);
       return asaasCustomerId;
