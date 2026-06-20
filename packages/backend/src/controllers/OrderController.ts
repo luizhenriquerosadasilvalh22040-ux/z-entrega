@@ -120,16 +120,22 @@ export class OrderController {
         return;
       }
 
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 20;
+
       let orders: any[] = [];
       if (req.user.role === 'customer') {
-        orders = await OrderService.listCustomerOrders(req.user.userId);
+        orders = await OrderService.listCustomerOrders(req.user.userId, page, limit);
       } else if (req.user.role === 'merchant') {
         const { status } = req.query;
-        orders = await OrderService.listMerchantOrders(req.user.userId, status as OrderStatus);
+        orders = await OrderService.listMerchantOrders(req.user.userId, status as any, page, limit);
       }
 
       res.status(200).json({
         status: 'success',
+        results: orders.length,
+        page,
+        limit,
         data: { orders }
       });
     } catch (error) {
