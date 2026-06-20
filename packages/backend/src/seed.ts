@@ -207,6 +207,39 @@ async function seed() {
     });
     logger.info(`System Admin created successfully. Email: ${adminEmail}, Password: ${process.env.ADMIN_PASSWORD ? '******' : adminPassword}`);
 
+    // 6. Cria Entregadores de Teste
+    await prisma.deliverer.create({
+      data: {
+        name: 'Carlos Motoboy',
+        email: 'carlos.motoboy@example.com',
+        passwordHash,
+        phone: '44999990001',
+        vehicleType: 'MOTO',
+        licensePlate: 'ABC-1234',
+        isActive: true,
+        isAvailable: true,
+        isActiveToday: true,
+        deliveryStatus: 'AVAILABLE'
+      }
+    });
+
+    await prisma.deliverer.create({
+      data: {
+        name: 'Marcos Motoboy',
+        email: 'marcos.motoboy@example.com',
+        passwordHash,
+        phone: '44999990002',
+        vehicleType: 'MOTO',
+        licensePlate: 'DEF-5678',
+        isActive: true,
+        isAvailable: true,
+        isActiveToday: true,
+        deliveryStatus: 'AVAILABLE'
+      }
+    });
+
+    logger.info('Test deliverers created successfully.');
+
     logger.info('Seeding finished successfully!');
   } catch (error) {
     logger.error('Seeding error: %O', error);
