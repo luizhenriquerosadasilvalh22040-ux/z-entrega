@@ -1,7 +1,7 @@
 import prisma from '../config/prisma';
 import { IAddress, IOperatingHours } from '../types';
 
-export const formatMerchant = (merchant: any) => {
+export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; count: number }) => {
   if (!merchant) return null;
   return {
     _id: merchant.id,
@@ -21,6 +21,8 @@ export const formatMerchant = (merchant: any) => {
     subscriptionPrice: merchant.subscriptionPrice !== null ? Number(merchant.subscriptionPrice) : undefined,
     createdAt: merchant.createdAt,
     updatedAt: merchant.updatedAt,
+    averageRating: reviewsStats?.avg ? Number((reviewsStats.avg).toFixed(1)) : 0,
+    reviewsCount: reviewsStats ? reviewsStats.count : 0,
     operatingHours: {
       open: merchant.openTime,
       close: merchant.closeTime
@@ -87,12 +89,38 @@ export class MerchantService {
       where.city = { contains: filters.city, mode: 'insensitive' };
     }
     const merchants = await prisma.merchant.findMany({ where });
-    return merchants.map(m => formatMerchant(m));
+
+    // Busca agregada das avaliações das lojas para evitar N+1
+    const reviewsMap = new Map<string, { avg: number; count: number }>();
+    const aggregations = await prisma.review.groupBy({
+      by: ['merchantId'],
+      _avg: { rating: true },
+      _count: { id: true }
+    });
+    aggregations.forEach(agg => {
+      reviewsMap.set(agg.merchantId, {
+        avg: agg._avg.rating || 0,
+        count: agg._count.id || 0
+      });
+    });
+
+    return merchants.map(m => formatMerchant(m, reviewsMap.get(m.id)));
   }
 
   public static async getMerchantById(id: string): Promise<any | null> {
     const merchant = await prisma.merchant.findUnique({ where: { id } });
-    return formatMerchant(merchant);
+    if (!merchant) return null;
+
+    const agg = await prisma.review.aggregate({
+      where: { merchantId: id },
+      _avg: { rating: true },
+      _count: { id: true }
+    });
+
+    return formatMerchant(merchant, {
+      avg: agg._avg.rating || 0,
+      count: agg._count.id || 0
+    });
   }
 
   public static async updateProfile(
