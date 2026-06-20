@@ -4,6 +4,7 @@ import { NotificationService } from './NotificationService';
 import { IAddress } from '../types';
 import logger from '../config/logger';
 import { formatCustomer } from './CustomerService';
+import { deliveryTimeoutQueue } from '../queues/deliveryQueue';
 
 export const formatOrder = (order: any) => {
   if (!order) return null;
