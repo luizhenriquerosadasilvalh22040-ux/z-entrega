@@ -10,6 +10,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Store } from './pages/Store';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { PartnerPortal } from './pages/PartnerPortal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotFound } from './pages/NotFound';
 
 function App() {
   const { checkAuth, isLoading } = useAuthStore();
@@ -33,19 +35,19 @@ function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ErrorBoundary><Home /></ErrorBoundary>} />
+          <Route path="/login" element={<ErrorBoundary><Login /></ErrorBoundary>} />
           <Route path="/register" element={<Navigate to="/login" replace />} />
-          <Route path="/orders" element={<MyOrders />} />
-          <Route path="/tracking" element={<Tracking />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/store/:id" element={<Store />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/lojista" element={<PartnerPortal />} />
-          <Route path="/central-admin" element={<PartnerPortal />} />
-          <Route path="/parceiros" element={<PartnerPortal />} />
+          <Route path="/orders" element={<ErrorBoundary><MyOrders /></ErrorBoundary>} />
+          <Route path="/tracking" element={<ErrorBoundary><Tracking /></ErrorBoundary>} />
+          <Route path="/dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+          <Route path="/store/:id" element={<ErrorBoundary><Store /></ErrorBoundary>} />
+          <Route path="/admin" element={<ErrorBoundary><AdminDashboard /></ErrorBoundary>} />
+          <Route path="/lojista" element={<ErrorBoundary><PartnerPortal /></ErrorBoundary>} />
+          <Route path="/central-admin" element={<ErrorBoundary><PartnerPortal /></ErrorBoundary>} />
+          <Route path="/parceiros" element={<ErrorBoundary><PartnerPortal /></ErrorBoundary>} />
           {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<ErrorBoundary><NotFound /></ErrorBoundary>} />
         </Routes>
       </Layout>
     </BrowserRouter>

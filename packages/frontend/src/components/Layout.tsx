@@ -14,8 +14,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // Inicializa tema
   useEffect(() => {
@@ -29,6 +28,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       document.body.classList.remove('dark');
       setIsDarkMode(false);
     }
+  }, []);
+
+  // Monitora status da rede
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const toggleDarkMode = () => {
@@ -48,8 +61,26 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     navigate('/');
   };
 
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-night transition-colors duration-300">
+      {/* Offline banner */}
+      {isOffline && (
+        <div className="bg-red-600 dark:bg-red-950 text-white text-xs md:text-sm py-2.5 px-4 text-center flex items-center justify-center gap-3 transition-all duration-300 relative z-50 flex-wrap border-b border-red-700/50 dark:border-red-900/50 flex-shrink-0">
+          <span className="font-bold flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse flex-shrink-0" />
+            Você está sem conexão com a internet.
+          </span>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-white/15 hover:bg-white/25 active:scale-95 text-white font-bold px-3 py-1 rounded-xl text-xs transition-all border border-white/20"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

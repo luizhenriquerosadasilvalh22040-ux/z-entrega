@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, X } from 'lucide-react';
 
 // ==========================================
@@ -140,6 +140,8 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children
 }) => {
+  const modalStateKey = useRef(`modal-${Math.random().toString(36).substring(2, 9)}`);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -150,6 +152,27 @@ export const Modal: React.FC<ModalProps> = ({
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    window.history.pushState({ modalKey: modalStateKey.current }, '');
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.modalKey !== modalStateKey.current) {
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (window.history.state?.modalKey === modalStateKey.current) {
+        window.history.back();
+      }
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -163,11 +186,11 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Box */}
       <div 
-        className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative z-10 border border-slate-100 dark:border-slate-850 animate-float-in"
+        className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative z-10 border border-slate-100 dark:border-slate-850 animate-float-in max-h-[calc(100dvh-2rem)] flex flex-col"
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4 mb-4 flex-shrink-0">
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h3>
           <button 
             onClick={onClose}
@@ -177,7 +200,7 @@ export const Modal: React.FC<ModalProps> = ({
             <X size={20} />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
+        <div className="overflow-y-auto pr-1 flex-1 max-h-[60vh] md:max-h-[70vh] pb-[env(safe-area-inset-bottom)]">
           {children}
         </div>
       </div>
