@@ -14,6 +14,8 @@ interface IMerchant {
   address: { street: string; number: string; city: string };
   logoImage?: string;
   isForceClosed?: boolean;
+  averageRating?: number;
+  reviewsCount?: number;
 }
 
 interface IBanner {
@@ -306,6 +308,23 @@ export const Home: React.FC = () => {
                         <div>
                           <h3 className="font-bold text-slate-850 dark:text-white text-base leading-snug line-clamp-1">{merchant.name}</h3>
                           <p className="text-xs text-slate-400 mt-0.5">{merchant.address.city}</p>
+                          <div className="flex items-center gap-1.5 mt-1 text-xs font-semibold">
+                            {merchant.reviewsCount && merchant.reviewsCount > 0 ? (
+                              <>
+                                <span className="text-amber-500 flex items-center">
+                                  <Star size={12} className="fill-amber-500 text-amber-500" />
+                                </span>
+                                <span className="font-extrabold text-slate-700 dark:text-slate-200">
+                                  {merchant.averageRating?.toFixed(1)}
+                                </span>
+                                <span className="text-slate-400">
+                                  ({merchant.reviewsCount})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-slate-400/80 italic text-[11px]">Novo no app</span>
+                            )}
+                          </div>
                         </div>
                       </div>
 

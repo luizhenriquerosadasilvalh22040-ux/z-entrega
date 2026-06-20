@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
-import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star } from 'lucide-react';
 
 interface IMerchant {
   _id: string;
@@ -15,6 +15,8 @@ interface IMerchant {
   logoImage?: string;
   coverImage?: string;
   isForceClosed?: boolean;
+  averageRating?: number;
+  reviewsCount?: number;
 }
 
 interface IOption {
@@ -97,6 +99,30 @@ export const Store: React.FC = () => {
     discountValue: number;
   } | null>(null);
   const [couponError, setCouponError] = useState('');
+
+  // States for Merchant Reviews Modal
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
+  const [merchantReviews, setMerchantReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
+  useEffect(() => {
+    if (isReviewsModalOpen && merchant?._id) {
+      const fetchReviews = async () => {
+        try {
+          setLoadingReviews(true);
+          const res = await apiClient.get(`/merchants/${merchant._id}/reviews`);
+          if (res.data?.status === 'success') {
+            setMerchantReviews(res.data.data.reviews);
+          }
+        } catch (err) {
+          setToast({ message: 'Erro ao carregar as avaliações da loja', type: 'error' });
+        } finally {
+          setLoadingReviews(false);
+        }
+      };
+      fetchReviews();
+    }
+  }, [isReviewsModalOpen, merchant?._id]);
 
   // States for Custom Product Details Modal
   const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
@@ -510,7 +536,19 @@ export const Store: React.FC = () => {
                 {merchant.address.street}, {merchant.address.number} - {merchant.address.neighborhood}, {merchant.address.city}
               </p>
 
-              <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-2 pt-2 text-xs text-slate-600 dark:text-slate-300">
+              <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-2 pt-2 text-xs text-slate-600 dark:text-slate-300 items-center">
+                {merchant.reviewsCount && merchant.reviewsCount > 0 ? (
+                  <button 
+                    onClick={() => setIsReviewsModalOpen(true)}
+                    className="flex items-center gap-1 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 px-2.5 py-1 rounded-xl text-amber-600 transition-colors font-bold"
+                  >
+                    <Star size={13} className="fill-amber-500 text-amber-500" />
+                    <span>{merchant.averageRating?.toFixed(1)}</span>
+                    <span className="text-slate-400 dark:text-slate-500 font-normal">({merchant.reviewsCount} avaliações)</span>
+                  </button>
+                ) : (
+                  <span className="text-slate-400/80 italic text-xs py-1">Novo no app (Sem avaliações)</span>
+                )}
                 <span className="flex items-center gap-1">
                   <Clock size={14} className="text-orange-500" />
                   Aberto das {merchant.operatingHours.open} às {merchant.operatingHours.close}
@@ -1159,6 +1197,46 @@ export const Store: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal de Avaliações / Feedbacks da Loja */}
+      <Modal isOpen={isReviewsModalOpen} onClose={() => setIsReviewsModalOpen(false)} title={`Avaliações de ${merchant.name}`}>
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+          {loadingReviews ? (
+            <p className="text-center py-6 text-slate-400 text-sm">Carregando avaliações...</p>
+          ) : merchantReviews.length === 0 ? (
+            <p className="text-center py-6 text-slate-400 text-sm italic">Esta loja ainda não possui comentários.</p>
+          ) : (
+            <div className="space-y-3">
+              {merchantReviews.map((rev) => (
+                <div key={rev.id} className="p-3 bg-slate-50 dark:bg-slate-850/40 border border-slate-100 dark:border-slate-800/60 rounded-2xl space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-xs text-slate-750 dark:text-slate-200">
+                      {rev.customer?.name || 'Cliente'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(rev.createdAt).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        size={12}
+                        className={star <= rev.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-300 dark:text-slate-750'}
+                      />
+                    ))}
+                  </div>
+                  {rev.comment && (
+                    <p className="text-xs text-slate-600 dark:text-slate-350 italic">
+                      "{rev.comment}"
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* Toast notifications */}
