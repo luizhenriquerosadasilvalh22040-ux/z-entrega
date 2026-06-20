@@ -4,6 +4,7 @@ import { Merchant } from '../models/Merchant';
 import { Deliverer } from '../models/Deliverer';
 import { Order } from '../models/Order';
 import bcrypt from 'bcrypt';
+import prisma from '../config/prisma';
 
 export class AdminController {
   /**
@@ -385,6 +386,91 @@ export class AdminController {
       res.status(200).json({
         status: 'success',
         data: { report }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Lista todos os cupons do sistema
+   */
+  public static async listCoupons(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const coupons = await prisma.coupon.findMany({
+        include: {
+          merchant: {
+            select: {
+              name: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      res.status(200).json({
+        status: 'success',
+        data: { coupons }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Cria um novo cupom
+   */
+  public static async createCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { code, discountType, discountValue, minOrderValue, expirationDate, merchantId, maxUses } = req.body;
+
+      if (!code || !discountType || discountValue === undefined || !expirationDate) {
+        res.status(400).json({ status: 'fail', message: 'Campos obrigatórios: código, tipo de desconto, valor de desconto, data de expiração' });
+        return;
+      }
+
+      const existing = await prisma.coupon.findUnique({
+        where: { code: code.toUpperCase() }
+      });
+
+      if (existing) {
+        res.status(400).json({ status: 'fail', message: 'Já existe um cupom cadastrado com este código' });
+        return;
+      }
+
+      const coupon = await prisma.coupon.create({
+        data: {
+          code: code.toUpperCase(),
+          discountType,
+          discountValue: Number(discountValue),
+          minOrderValue: minOrderValue ? Number(minOrderValue) : null,
+          expirationDate: new Date(expirationDate),
+          merchantId: merchantId || null,
+          maxUses: maxUses ? Number(maxUses) : null,
+          isActive: true
+        }
+      });
+
+      res.status(201).json({
+        status: 'success',
+        data: { coupon }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Remove/deleta um cupom pelo ID
+   */
+  public static async deleteCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      await prisma.coupon.delete({
+        where: { id }
+      });
+      res.status(200).json({
+        status: 'success',
+        message: 'Cupom removido com sucesso'
       });
     } catch (error) {
       next(error);
