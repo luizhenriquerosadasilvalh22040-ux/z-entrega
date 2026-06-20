@@ -27,8 +27,7 @@ async function seed() {
     await prisma.systemConfig.deleteMany({});
 
     // 1. Cria Lojista Teste
-    const passwordHash = await bcrypt.hash('password123', 10);
-    const merchant = await prisma.merchant.create({
+    const passwordHash = await bcrypt.hash('password123', 10)    const merchant = await prisma.merchant.create({
       data: {
         name: 'Pizzaria Rondon',
         email: 'merchant@example.com',
@@ -38,6 +37,7 @@ async function seed() {
         category: 'Comida',
         openTime: '18:00',
         closeTime: '23:30',
+        timezone: 'America/Sao_Paulo',
         paymentMethods: ['PIX', 'Dinheiro', 'Cartão'],
         logoImage: 'https://images.unsplash.com/photo-1590842211124-9676b2253b37?w=200&auto=format&fit=crop&q=80',
         coverImage: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
@@ -57,7 +57,7 @@ async function seed() {
 
     // 2. Cria Produtos Teste
     // Pizza Calabresa
-    await prisma.product.create({
+    const pizzaProduct = await prisma.product.create({
       data: {
         merchantId: merchant.id,
         name: 'Pizza Calabresa Grande',
@@ -98,7 +98,7 @@ async function seed() {
     });
 
     // X-Burger Supremo
-    await prisma.product.create({
+    const burgerProduct = await prisma.product.create({
       data: {
         merchantId: merchant.id,
         name: 'X-Burger Supremo',
@@ -154,6 +154,29 @@ async function seed() {
     });
 
     logger.info('Test products created successfully.');
+
+    // 2.5 Cria Promoções de Teste
+    // Promoção de Pizzas (10% de desconto)
+    await prisma.promotion.create({
+      data: {
+        merchantId: merchant.id,
+        discountPercentage: 10.00,
+        expirationDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias
+        categoryApplicable: 'Pizzas'
+      }
+    });
+
+    // Promoção do Burger (20% de desconto)
+    await prisma.promotion.create({
+      data: {
+        merchantId: merchant.id,
+        discountPercentage: 20.00,
+        expirationDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias
+        productIds: [burgerProduct.id]
+      }
+    });
+
+    logger.info('Test promotions created successfully.');lly.');
 
     // 3. Cria Cliente Teste
     const customer = await prisma.customer.create({
