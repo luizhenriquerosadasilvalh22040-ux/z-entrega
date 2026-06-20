@@ -4,8 +4,16 @@ import { CustomerService } from '../services/CustomerService';
 export class CustomerController {
   public static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const customers = await CustomerService.listCustomers();
-      res.status(200).json({ status: 'success', data: { customers } });
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 20;
+      const customers = await CustomerService.listCustomers(page, limit);
+      res.status(200).json({ 
+        status: 'success', 
+        results: customers.length,
+        page,
+        limit,
+        data: { customers } 
+      });
     } catch (error) {
       next(error);
     }
