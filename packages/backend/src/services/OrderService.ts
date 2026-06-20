@@ -866,7 +866,7 @@ export class OrderService {
             },
             data: {
               status: 'CANCELLED',
-              paymentStatus: 'CANCELLED'
+              paymentStatus: 'OVERDUE'
             }
           });
 
