@@ -32,12 +32,16 @@ model Merchant {
   logoImage         String?   @map("logo_image")
   coverImage        String?   @map("cover_image")
   subscriptionPrice Float?    @map("subscription_price")
+  passwordResetToken  String?   @map("password_reset_token")
+  passwordResetExpires DateTime? @map("password_reset_expires")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   products          Product[]
   orders            Order[]
   promotions        Promotion[]
+  reviews           Review[]
+  coupons           Coupon[]
 
   @@map("merchants")
 }
@@ -58,6 +62,7 @@ model Customer {
 
   addresses       CustomerAddress[]
   orders          Order[]
+  reviews         Review[]
 
   @@map("customers")
 }
@@ -172,6 +177,7 @@ model Order {
   paymentStatus      String?              @default("PENDING") @map("payment_status")
   pixQrCode          String?              @map("pix_qr_code")
   pixCopyAndPaste    String?              @map("pix_copy_and_paste")
+  couponId           String?              @map("coupon_id") @db.Uuid
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
 
@@ -180,6 +186,8 @@ model Order {
   deliverer          Deliverer?           @relation(fields: [delivererId], references: [id])
   statusHistory      OrderStatusHistory[]
   items              OrderItem[]
+  coupon             Coupon?              @relation(fields: [couponId], references: [id])
+  review             Review?
 
   @@map("orders")
 }
@@ -275,8 +283,55 @@ model SystemAdmin {
   email        String   @unique
   passwordHash String   @map("password_hash")
   isActive     Boolean  @default(true) @map("is_active")
+  passwordResetToken  String?   @map("password_reset_token")
+  passwordResetExpires DateTime? @map("password_reset_expires")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("system_admins")
+}
+
+model Review {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @unique @map("order_id") @db.Uuid
+  customerId  String   @map("customer_id") @db.Uuid
+  merchantId  String   @map("merchant_id") @db.Uuid
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+model Coupon {
+  id                 String    @id @default(uuid()) @db.Uuid
+  code               String    @unique
+  discountType       String    @default("PERCENTAGE")
+  discountValue      Float     @map("discount_value")
+  minOrderValue      Float?    @map("min_order_value")
+  expirationDate     DateTime  @map("expiration_date")
+  isActive           Boolean   @default(true) @map("is_active")
+  merchantId         String?   @map("merchant_id") @db.Uuid
+  maxUses            Int?      @map("max_uses")
+  usedCount          Int       @default(0) @map("used_count")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  merchant           Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orders             Order[]
+
+  @@map("coupons")
+}
+
+model UserCouponUsage {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  couponId  String   @map("coupon_id") @db.Uuid
+  usedAt    DateTime @default(now()) @map("used_at")
+
+  @@unique([userId, couponId])
+  @@map("user_coupon_usages")
 }
