@@ -728,39 +728,65 @@ export class OrderService {
     cardRevenue: number;
     totalCommission: number;
   }> {
-    const orders = await prisma.order.findMany({
+    // 1. Contagem total de pedidos
+    const totalOrders = await prisma.order.count({
       where: { merchantId }
     });
+
+    // 2. Contagem de pedidos pendentes
     const pendingOrders = await prisma.order.count({
       where: { merchantId, status: 'PENDING' }
     });
 
-    let revenue = 0;
-    let pixRevenue = 0;
-    let cashRevenue = 0;
-    let cardRevenue = 0;
-    let totalCommission = 0;
-
-    orders.forEach(order => {
-      if (order.status !== 'PENDING' && order.status !== 'CANCELLED') {
-        revenue += order.subtotal;
-        totalCommission += order.commission;
-        
-        if (order.paymentMethod === 'PIX') {
-          pixRevenue += order.subtotal;
-        } else if (order.paymentMethod === 'Dinheiro') {
-          cashRevenue += order.subtotal;
-        } else if (order.paymentMethod === 'Cartão') {
-          cardRevenue += order.subtotal;
-        }
+    // 3. Agregações para pedidos concluídos (não PENDING e não CANCELLED)
+    const aggregates = await prisma.order.aggregate({
+      where: {
+        merchantId,
+        status: { notIn: ['PENDING', 'CANCELLED'] }
+      },
+      _sum: {
+        subtotal: true,
+        commission: true
+      },
+      _count: {
+        id: true
       }
     });
 
-    const completedOrdersCount = orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length;
+    const revenue = aggregates._sum.subtotal || 0;
+    const totalCommission = aggregates._sum.commission || 0;
+    const completedOrdersCount = aggregates._count.id || 0;
     const averageTicket = completedOrdersCount > 0 ? revenue / completedOrdersCount : 0;
 
+    // 4. Receita agrupada por método de pagamento para pedidos concluídos
+    const paymentGroups = await prisma.order.groupBy({
+      by: ['paymentMethod'],
+      where: {
+        merchantId,
+        status: { notIn: ['PENDING', 'CANCELLED'] }
+      },
+      _sum: {
+        subtotal: true
+      }
+    });
+
+    let pixRevenue = 0;
+    let cashRevenue = 0;
+    let cardRevenue = 0;
+
+    paymentGroups.forEach(group => {
+      const amount = group._sum.subtotal || 0;
+      if (group.paymentMethod === 'PIX') {
+        pixRevenue = amount;
+      } else if (group.paymentMethod === 'Dinheiro') {
+        cashRevenue = amount;
+      } else if (group.paymentMethod === 'Cartão') {
+        cardRevenue = amount;
+      }
+    });
+
     return {
-      totalOrders: orders.length,
+      totalOrders,
       pendingOrders,
       revenue,
       averageTicket,
