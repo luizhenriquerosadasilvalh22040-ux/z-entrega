@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npm run build --prefix packages/frontend",
+  "outputDirectory": "packages/frontend/dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

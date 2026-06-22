@@ -226,8 +226,21 @@ export const Login: React.FC = () => {
                 {loading ? 'Verificando...' : 'Confirmar Código'}
               </Button>
             </div>
-          </form>
         )}
+
+        {/* Link para o Portal de Parceiros / Lojistas no fim do login */}
+        <div className="mt-6 pt-4 border-t border-slate-150/40 dark:border-slate-800/60 text-center">
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            É um parceiro comercial ou lojista?{' '}
+            <button
+              type="button"
+              onClick={() => navigate('/parceiros')}
+              className="text-energy font-extrabold hover:underline"
+            >
+              Acesse o Portal de Parceiros
+            </button>
+          </p>
+        </div>
       </Card>
 
       {toast && (
