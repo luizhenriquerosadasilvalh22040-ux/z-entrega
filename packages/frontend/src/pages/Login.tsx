@@ -226,6 +226,7 @@ export const Login: React.FC = () => {
                 {loading ? 'Verificando...' : 'Confirmar Código'}
               </Button>
             </div>
+          </form>
         )}
 
         {/* Link para o Portal de Parceiros / Lojistas no fim do login */}
