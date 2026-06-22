@@ -153,6 +153,7 @@ export const Home: React.FC = () => {
                 src={banner.imageUrl}
                 alt={banner.title || 'Banner promocional'}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
               {banner.title && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent p-6 text-white pt-16">
@@ -299,6 +300,7 @@ export const Home: React.FC = () => {
                             src={merchant.logoImage} 
                             alt={merchant.name} 
                             className="w-12 h-12 rounded-xl object-cover border bg-slate-50"
+                            loading="lazy"
                           />
                         ) : (
                           <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-energy flex items-center justify-center font-black text-lg border border-orange-500/10">

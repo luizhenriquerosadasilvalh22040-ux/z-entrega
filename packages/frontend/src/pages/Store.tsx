@@ -555,6 +555,7 @@ export const Store: React.FC = () => {
             src={merchant.coverImage} 
             alt="Estabelecimento Capa" 
             className="w-full h-40 md:h-48 object-cover"
+            loading="lazy"
           />
         ) : (
           <div className="w-full h-40 md:h-48 bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white/30 font-black tracking-widest text-lg">
@@ -570,6 +571,7 @@ export const Store: React.FC = () => {
                 src={merchant.logoImage} 
                 alt={merchant.name} 
                 className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-slate-900 shadow-md bg-slate-50 -mt-12 z-10 flex-shrink-0"
+                loading="lazy"
               />
             ) : (
               <div className="w-24 h-24 rounded-full bg-orange-500/10 text-energy flex items-center justify-center font-black text-3xl shadow-md border-4 border-white dark:border-slate-900 -mt-12 z-10 flex-shrink-0">
@@ -706,6 +708,7 @@ export const Store: React.FC = () => {
                           src={product.image} 
                           alt={product.name} 
                           className="w-20 h-20 rounded-xl object-cover bg-slate-50 border border-slate-100"
+                          loading="lazy"
                         />
                       )}
                       <div className="space-y-1 flex-1 pr-2">
@@ -916,6 +919,7 @@ export const Store: React.FC = () => {
                       value={zipCode}
                       onChange={(e) => handleCepChange(e.target.value)}
                       disabled={isSearchingCep}
+                      autoComplete="postal-code"
                       required
                     />
                     {isSearchingCep && (
@@ -931,6 +935,7 @@ export const Store: React.FC = () => {
                       value={street}
                       onChange={(e) => setStreet(e.target.value)}
                       disabled={isSearchingCep}
+                      autoComplete="street-address"
                       required
                     />
                   </div>
@@ -952,6 +957,7 @@ export const Store: React.FC = () => {
                     value={neighborhood}
                     onChange={(e) => setNeighborhood(e.target.value)}
                     disabled={isSearchingCep}
+                    autoComplete="address-line2"
                     required
                   />
                   <Input
@@ -960,6 +966,7 @@ export const Store: React.FC = () => {
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     disabled={isSearchingCep}
+                    autoComplete="address-level2"
                     required
                   />
                   <Input
@@ -969,6 +976,7 @@ export const Store: React.FC = () => {
                     value={stateCode}
                     onChange={(e) => setStateCode(e.target.value.toUpperCase())}
                     disabled={isSearchingCep}
+                    autoComplete="address-level1"
                     required
                   />
                 </div>
@@ -1145,6 +1153,7 @@ export const Store: React.FC = () => {
                   src={selectedProduct.image} 
                   alt={selectedProduct.name} 
                   className="w-full h-full object-cover"
+                  loading="lazy"
                 />
               </div>
             )}

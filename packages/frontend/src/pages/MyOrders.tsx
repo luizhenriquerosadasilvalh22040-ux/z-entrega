@@ -214,6 +214,7 @@ export const MyOrders: React.FC = () => {
                           src={item.image} 
                           alt={item.name} 
                           className="w-12 h-12 rounded-lg object-cover bg-slate-100 flex-shrink-0 border border-slate-100 dark:border-slate-850"
+                          loading="lazy"
                         />
                       )}
                       <div className="flex-1 min-w-0">
