@@ -1119,13 +1119,17 @@ export const Store: React.FC = () => {
             </div>
           </div>
 
-          <Button 
+           <Button 
             fullWidth 
             size="lg" 
-            disabled={!isStoreOpen()}
+            disabled={!isStoreOpen() || isSubmittingOrder}
             onClick={handleCheckout}
           >
-            {isStoreOpen() ? 'Confirmar e Enviar Pedido' : 'Estabelecimento Fechado'}
+            {isSubmittingOrder ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" /> Enviando Pedido...
+              </span>
+            ) : isStoreOpen() ? 'Confirmar e Enviar Pedido' : 'Estabelecimento Fechado'}
           </Button>
         </div>
       </Modal>
