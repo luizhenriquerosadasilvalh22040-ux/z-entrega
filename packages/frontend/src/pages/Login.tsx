@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, ShieldCheck, ArrowRight, MapPin, User } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { requestOtp, verifyOtp, error } = useAuthStore();
+  const { requestOtp, verifyOtp, login, error } = useAuthStore();
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp');
   const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
   const [code, setCode] = useState('');
 
@@ -105,6 +107,27 @@ export const Login: React.FC = () => {
     }
   };
 
+  // Realiza o login usando telefone e senha
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone || !password) {
+      setToast({ message: 'Preencha o telefone e a senha', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await login(phone, password, 'customer');
+      setToast({ message: 'Login realizado com sucesso!', type: 'success' });
+      setTimeout(() => navigate('/'), 1000);
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Telefone ou senha inválidos';
+      setToast({ message: message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-md mx-auto my-12">
       <Card className="relative overflow-hidden">
@@ -127,8 +150,36 @@ export const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* STEP 1: Phone input */}
+        {/* Toggle Switch para método de login (apenas no passo inicial) */}
         {step === 'phone' && (
+          <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl mb-6">
+            <button
+              type="button"
+              onClick={() => setLoginMethod('otp')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                loginMethod === 'otp'
+                  ? 'bg-white dark:bg-slate-700 text-energy shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              Código WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={() => setLoginMethod('password')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                loginMethod === 'password'
+                  ? 'bg-white dark:bg-slate-700 text-energy shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              Entrar com Senha
+            </button>
+          </div>
+        )}
+
+        {/* STEP 1: Phone input (OTP) */}
+        {step === 'phone' && loginMethod === 'otp' && (
           <form onSubmit={handleRequestOtp} className="space-y-5">
             <Input
               label="WhatsApp (com DDD)"
@@ -141,6 +192,32 @@ export const Login: React.FC = () => {
             />
             <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
               {loading ? 'Enviando...' : 'Receber Código no WhatsApp'} <ArrowRight size={16} />
+            </Button>
+          </form>
+        )}
+
+        {/* STEP 1: Phone & Password Input */}
+        {step === 'phone' && loginMethod === 'password' && (
+          <form onSubmit={handlePasswordLogin} className="space-y-5">
+            <Input
+              label="WhatsApp (com DDD)"
+              type="tel"
+              placeholder="Ex: (44) 99999-8888"
+              value={phone}
+              onChange={(e) => setPhone(formatPhone(e.target.value))}
+              required
+              maxLength={15}
+            />
+            <Input
+              label="Senha"
+              type="password"
+              placeholder="Digite sua senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
+              {loading ? 'Entrando...' : 'Entrar'} <ArrowRight size={16} />
             </Button>
           </form>
         )}

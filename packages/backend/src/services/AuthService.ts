@@ -9,6 +9,7 @@ import { authConfig } from '../config/auth';
 import { encryptDeterministic } from '../config/encryption';
 import { IAddress, IOperatingHours } from '../types';
 import { NotificationService } from './NotificationService';
+import { normalizePhone } from '../utils/phone';
 
 export interface ITokenResponse {
   accessToken: string;
@@ -79,7 +80,7 @@ export class AuthService {
           email: data.email,
           passwordHash,
           cpf: encryptedCpf,
-          phone: data.phone,
+          phone: normalizePhone(data.phone),
           isActive: true,
         }
       });
@@ -149,7 +150,7 @@ export class AuthService {
         email: data.email,
         passwordHash,
         cnpj: encryptedCnpj,
-        phone: data.phone,
+        phone: normalizePhone(data.phone),
         category: data.category,
         openTime: data.operatingHours.open,
         closeTime: data.operatingHours.close,
@@ -170,14 +171,22 @@ export class AuthService {
     return formatMerchant(merchant);
   }
 
-  public static async loginCustomer(email: string, password: string): Promise<{ customer: any } & ITokenResponse> {
-    const customer = await prisma.customer.findUnique({
-      where: { email },
+  public static async loginCustomer(identifier: string, password: string): Promise<{ customer: any } & ITokenResponse> {
+    const isEmail = identifier.includes('@');
+    const normalizedPhone = isEmail ? '' : normalizePhone(identifier);
+
+    const customer = await prisma.customer.findFirst({
+      where: {
+        OR: [
+          { email: isEmail ? identifier : undefined },
+          { phone: isEmail ? undefined : normalizedPhone }
+        ]
+      },
       include: { addresses: true }
     });
     
     if (!customer || !customer.passwordHash) {
-      throw new Error('Invalid email or password');
+      throw new Error('E-mail/telefone ou senha inválidos, ou conta sem senha configurada (use o login via WhatsApp).');
     }
 
     if (!customer.isActive) {
@@ -186,7 +195,7 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(password, customer.passwordHash);
     if (!isMatch) {
-      throw new Error('Invalid email or password');
+      throw new Error('E-mail/telefone ou senha inválidos');
     }
 
     const tokens = await this.generateTokens({
@@ -284,7 +293,7 @@ export class AuthService {
    * Solicita um código OTP de verificação via WhatsApp para o cliente
    */
   public static async requestCustomerOtp(phone: string, name?: string, address?: IAddress): Promise<{ isNewUser: boolean }> {
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhone(phone);
     let customer = await prisma.customer.findUnique({
       where: { phone: cleanPhone },
       include: { addresses: true }
@@ -369,7 +378,7 @@ export class AuthService {
    * Verifica o código OTP digitado pelo cliente
    */
   public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: any } & ITokenResponse> {
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhone(phone);
     const customer = await prisma.customer.findUnique({
       where: { phone: cleanPhone },
       include: { addresses: true }

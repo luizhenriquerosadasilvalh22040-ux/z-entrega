@@ -54,8 +54,13 @@ export class AuthController {
 
   public static async loginCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { email, password } = req.body;
-      const { customer, accessToken, refreshToken } = await AuthService.loginCustomer(email, password);
+      const { email, phone, password } = req.body;
+      const identifier = email || phone;
+      if (!identifier) {
+        res.status(400).json({ status: 'fail', message: 'E-mail ou telefone deve ser fornecido' });
+        return;
+      }
+      const { customer, accessToken, refreshToken } = await AuthService.loginCustomer(identifier, password);
 
       const customerObj = customer.toObject ? customer.toObject() : customer;
       delete customerObj.passwordHash;

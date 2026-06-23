@@ -39,7 +39,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
+  login: (identifier: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
   requestOtp: (phone: string, name?: string, address?: any) => Promise<{ isNewUser: boolean }>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearError: () => set({ error: null }),
 
-  login: async (email, password, role) => {
+  login: async (identifier, password, role) => {
     set({ isLoading: true, error: null });
     try {
       let endpoint = '';
@@ -64,7 +64,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       else if (role === 'merchant') endpoint = '/auth/merchant/login';
       else if (role === 'admin') endpoint = '/auth/admin/login';
 
-      const response = await apiClient.post(endpoint, { email, password });
+      const isEmail = identifier.includes('@');
+      const payload = role === 'customer'
+        ? (isEmail ? { email: identifier, password } : { phone: identifier.replace(/\D/g, ''), password })
+        : { email: identifier, password };
+
+      const response = await apiClient.post(endpoint, payload);
       
       const { customer, merchant, admin } = response.data.data;
       let user = null;
