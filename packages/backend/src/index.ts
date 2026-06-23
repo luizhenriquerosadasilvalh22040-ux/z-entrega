@@ -70,16 +70,22 @@ const PORT = process.env.PORT || 3000;
 // Middlewares Globais
 app.use(helmet());
 
-const allowedOrigins = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((o) => o.trim())
+  : [];
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    
+    const isLocalhost = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
+    const isVercelDomain = origin.endsWith('.vercel.app');
+    const isAllowedCustomDomain = allowedOrigins.includes(origin);
+
+    if (isLocalhost || isVercelDomain || isAllowedCustomDomain) {
       return callback(null, true);
     }
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    
     callback(new Error('Bloqueado pelas políticas de CORS do Traz Pra Cá'));
   },
   credentials: true
