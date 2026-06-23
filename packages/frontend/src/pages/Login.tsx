@@ -22,6 +22,15 @@ export const Login: React.FC = () => {
   const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp');
   const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
   const [code, setCode] = useState('');
+  const [rememberPhone, setRememberPhone] = useState(false);
+
+  React.useEffect(() => {
+    const savedPhone = localStorage.getItem('rememberedPhone');
+    if (savedPhone) {
+      setPhone(savedPhone);
+      setRememberPhone(true);
+    }
+  }, []);
 
   const formatPhone = (val: string) => {
     const digits = val.replace(/\D/g, '');
@@ -106,6 +115,8 @@ export const Login: React.FC = () => {
     setLoading(true);
     try {
       await verifyOtp(phone, code);
+      if (rememberPhone) localStorage.setItem('rememberedPhone', phone);
+      else localStorage.removeItem('rememberedPhone');
       setToast({ message: 'Login realizado com sucesso!', type: 'success' });
       setTimeout(() => navigate('/'), 1000);
     } catch (err: any) {
@@ -127,6 +138,8 @@ export const Login: React.FC = () => {
     setLoading(true);
     try {
       await login(phone, password, 'customer');
+      if (rememberPhone) localStorage.setItem('rememberedPhone', phone);
+      else localStorage.removeItem('rememberedPhone');
       setToast({ message: 'Login realizado com sucesso!', type: 'success' });
       setTimeout(() => navigate('/'), 1000);
     } catch (err: any) {
@@ -190,15 +203,29 @@ export const Login: React.FC = () => {
         {/* STEP 1: Phone input (OTP) */}
         {step === 'phone' && loginMethod === 'otp' && (
           <form onSubmit={handleRequestOtp} className="space-y-5">
-            <Input
-              label="WhatsApp (com DDD)"
-              type="tel"
-              placeholder="Ex: (44) 99999-8888"
-              value={phone}
-              onChange={(e) => setPhone(formatPhone(e.target.value))}
-              required
-              maxLength={15}
-            />
+            <div className="space-y-2">
+              <Input
+                label="WhatsApp (com DDD)"
+                type="tel"
+                placeholder="Ex: (44) 99999-8888"
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                required
+                maxLength={15}
+              />
+              <div className="flex items-center gap-2 px-1">
+                <input 
+                  type="checkbox" 
+                  id="rememberPhoneOtp" 
+                  checked={rememberPhone} 
+                  onChange={(e) => setRememberPhone(e.target.checked)}
+                  className="w-4 h-4 text-energy bg-white border-slate-300 rounded focus:ring-energy dark:bg-slate-800 dark:border-slate-600 cursor-pointer"
+                />
+                <label htmlFor="rememberPhoneOtp" className="text-sm font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                  Lembrar telefone
+                </label>
+              </div>
+            </div>
             <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
               {loading ? 'Enviando...' : 'Receber Código no WhatsApp'} <ArrowRight size={16} />
             </Button>
@@ -208,15 +235,29 @@ export const Login: React.FC = () => {
         {/* STEP 1: Phone & Password Input */}
         {step === 'phone' && loginMethod === 'password' && (
           <form onSubmit={handlePasswordLogin} className="space-y-5">
-            <Input
-              label="WhatsApp (com DDD)"
-              type="tel"
-              placeholder="Ex: (44) 99999-8888"
-              value={phone}
-              onChange={(e) => setPhone(formatPhone(e.target.value))}
-              required
-              maxLength={15}
-            />
+            <div className="space-y-2">
+              <Input
+                label="WhatsApp (com DDD)"
+                type="tel"
+                placeholder="Ex: (44) 99999-8888"
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                required
+                maxLength={15}
+              />
+              <div className="flex items-center gap-2 px-1">
+                <input 
+                  type="checkbox" 
+                  id="rememberPhonePwd" 
+                  checked={rememberPhone} 
+                  onChange={(e) => setRememberPhone(e.target.checked)}
+                  className="w-4 h-4 text-energy bg-white border-slate-300 rounded focus:ring-energy dark:bg-slate-800 dark:border-slate-600 cursor-pointer"
+                />
+                <label htmlFor="rememberPhonePwd" className="text-sm font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                  Lembrar telefone
+                </label>
+              </div>
+            </div>
             <Input
               label="Senha"
               type="password"
