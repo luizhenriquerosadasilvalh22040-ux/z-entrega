@@ -12,5 +12,8 @@
     "build": "npm run build --prefix packages/frontend",
     "dev:backend": "npm run --prefix packages/backend dev",
     "dev:frontend": "npm run --prefix packages/frontend dev"
+  },
+  "dependencies": {
+    "bull": "^4.16.5"
   }
 }
