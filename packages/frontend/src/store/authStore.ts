@@ -71,15 +71,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const response = await apiClient.post(endpoint, payload);
       
-      const { customer, merchant, admin } = response.data.data;
+      const { customer, merchant, admin, accessToken, refreshToken } = response.data.data;
       let user = null;
       if (role === 'customer') user = customer;
       else if (role === 'merchant') user = merchant;
       else if (role === 'admin') user = admin;
 
-      // Armazena apenas flags auxiliares (cookies contêm as chaves criptografadas reais)
+      // Armazena as flags auxiliares e tokens
       localStorage.setItem('role', role);
       localStorage.setItem('isLogged', 'true');
+      if (accessToken) localStorage.setItem('accessToken', accessToken);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
 
       set({
         user,
@@ -113,11 +115,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const cleanPhone = phone.replace(/\D/g, '');
       const res = await apiClient.post('/auth/customer/verify-otp', { phone: cleanPhone, code });
-      const { customer } = res.data.data;
+      const { customer, accessToken, refreshToken } = res.data.data;
 
-      // Armazena apenas flags auxiliares
+      // Armazena as flags auxiliares e tokens
       localStorage.setItem('role', 'customer');
       localStorage.setItem('isLogged', 'true');
+      if (accessToken) localStorage.setItem('accessToken', accessToken);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
 
       set({
         user: customer,
