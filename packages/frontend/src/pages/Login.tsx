@@ -5,8 +5,17 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, ShieldCheck, ArrowRight, MapPin, User } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { requestOtp, verifyOtp, login, error } = useAuthStore();
+  const { requestOtp, verifyOtp, login, error, isAuthenticated, role } = useAuthStore();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      if (role === 'admin') navigate('/admin');
+      else if (role === 'merchant') navigate('/dashboard');
+      else navigate('/');
+    }
+  }, [isAuthenticated, role, navigate]);
+
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
