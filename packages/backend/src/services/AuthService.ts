@@ -186,16 +186,22 @@ export class AuthService {
     });
     
     if (!customer || !customer.passwordHash) {
-      throw new Error('E-mail/telefone ou senha inválidos, ou conta sem senha configurada (use o login via WhatsApp).');
+      const err: any = new Error('E-mail/telefone ou senha inválidos, ou conta sem senha configurada (use o login via WhatsApp).');
+      err.statusCode = 401;
+      throw err;
     }
 
     if (!customer.isActive) {
-      throw new Error('Account deactivated');
+      const err: any = new Error('Conta desativada');
+      err.statusCode = 403;
+      throw err;
     }
 
     const isMatch = await bcrypt.compare(password, customer.passwordHash);
     if (!isMatch) {
-      throw new Error('E-mail/telefone ou senha inválidos');
+      const err: any = new Error('E-mail/telefone ou senha inválidos');
+      err.statusCode = 401;
+      throw err;
     }
 
     const tokens = await this.generateTokens({
@@ -217,16 +223,22 @@ export class AuthService {
     });
     
     if (!merchant) {
-      throw new Error('Invalid email or password');
+      const err: any = new Error('E-mail ou senha inválidos');
+      err.statusCode = 401;
+      throw err;
     }
 
     if (!merchant.isActive) {
-      throw new Error('Account deactivated');
+      const err: any = new Error('Conta desativada');
+      err.statusCode = 403;
+      throw err;
     }
 
     const isMatch = await bcrypt.compare(password, merchant.passwordHash);
     if (!isMatch) {
-      throw new Error('Invalid email or password');
+      const err: any = new Error('E-mail ou senha inválidos');
+      err.statusCode = 401;
+      throw err;
     }
 
     const tokens = await this.generateTokens({
@@ -262,16 +274,22 @@ export class AuthService {
     });
 
     if (!admin) {
-      throw new Error('Invalid email or password');
+      const err: any = new Error('E-mail ou senha inválidos');
+      err.statusCode = 401;
+      throw err;
     }
 
     if (!admin.isActive) {
-      throw new Error('Account deactivated');
+      const err: any = new Error('Conta desativada');
+      err.statusCode = 403;
+      throw err;
     }
 
     const isMatch = await bcrypt.compare(password, admin.passwordHash);
     if (!isMatch) {
-      throw new Error('Invalid email or password');
+      const err: any = new Error('E-mail ou senha inválidos');
+      err.statusCode = 401;
+      throw err;
     }
 
     const tokens = await this.generateTokens({
