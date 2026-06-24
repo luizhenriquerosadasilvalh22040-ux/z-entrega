@@ -119,6 +119,14 @@ export const Store: React.FC = () => {
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
+  // States for Credit Card
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardCpf, setCardCpf] = useState('');
+  const [cardInstallments, setCardInstallments] = useState(1);
+
   // Timer PIX Effect
   useEffect(() => {
     if (!isPixModalOpen || pixTimeLeft <= 0) return;
@@ -460,7 +468,10 @@ export const Store: React.FC = () => {
         items: orderItems,
         paymentMethod,
         deliveryAddress: targetAddress,
-        couponCode: appliedCoupon?.code || undefined
+        couponCode: appliedCoupon?.code || undefined,
+        cardToken: paymentMethod === 'Cartão' ? 'card_token_mock_' + Math.random().toString(36).substring(7) : undefined,
+        paymentMethodId: paymentMethod === 'Cartão' ? 'visa' : undefined,
+        installments: paymentMethod === 'Cartão' ? Number(cardInstallments) : undefined
       });
 
       if (res.data?.status === 'success') {
@@ -1040,6 +1051,78 @@ export const Store: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Mercado Pago transparent credit card form */}
+          {paymentMethod === 'Cartão' && (
+            <div className="mt-4 p-4 border border-slate-150 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dados do Cartão de Crédito</p>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Nome do Titular (como no cartão)"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                  required
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Número do Cartão"
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value)}
+                  maxLength={19}
+                  required
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Validade (MM/AA)"
+                  value={cardExpiry}
+                  onChange={(e) => setCardExpiry(e.target.value)}
+                  maxLength={5}
+                  required
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                />
+                <input
+                  type="password"
+                  placeholder="CVC"
+                  value={cardCvv}
+                  onChange={(e) => setCardCvv(e.target.value)}
+                  maxLength={4}
+                  required
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div>
+                <input
+                  type="text"
+                  placeholder="CPF do Titular"
+                  value={cardCpf}
+                  onChange={(e) => setCardCpf(e.target.value)}
+                  required
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 font-semibold mb-1">Parcelas</label>
+                <select
+                  value={cardInstallments}
+                  onChange={(e) => setCardInstallments(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
+                >
+                  {[1, 2, 3, 4, 5, 6, 10, 12].map((num) => (
+                    <option key={num} value={num}>
+                      {num}x de R$ {((cartTotal - finalDiscount + deliveryFee) / num).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Cupom de Desconto */}
           <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">

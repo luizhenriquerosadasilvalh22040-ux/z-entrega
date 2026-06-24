@@ -862,14 +862,14 @@ export class OrderService {
 
     for (const order of unpaidPixOrders) {
       try {
-        let isPaidOnAsaas = false;
+        let isPaidOnGateway = false;
 
         // Se tiver ID de pagamento do Mercado Pago, verifica seu status atual diretamente na API deles
         if (order.mpPaymentId) {
           try {
             const mpStatus = await MercadoPagoService.getPaymentStatus(order.mpPaymentId, order.merchantId);
             if (mpStatus === 'approved') {
-              isPaidOnAsaas = true;
+              isPaidOnGateway = true;
               logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Mercado Pago (${mpStatus}). Processando confirmação.`);
               
               // Atualiza o pedido como pago e ACCEPTED de forma transacional e segura
@@ -898,13 +898,13 @@ export class OrderService {
               }
             }
           } catch (err: any) {
-            logger.error(`❌ [Auto-Cancel] Falha ao verificar status do pagamento ${order.asaasPaymentId} no Asaas: ${err.message}`);
-            // Em caso de falha de conexão com a API do Asaas, pulamos este pedido para evitar cancelamento indevido
+            logger.error(`❌ [Auto-Cancel] Falha ao verificar status do pagamento ${order.mpPaymentId} no Mercado Pago: ${err.message}`);
+            // Em caso de falha de conexão com a API do Mercado Pago, pulamos este pedido para evitar cancelamento indevido
             continue;
           }
         }
 
-        if (!isPaidOnAsaas) {
+        if (!isPaidOnGateway) {
           logger.info(`[Auto-Cancel] Expirando pedido PIX não pago: ${order.id}`);
           
           // Usamos uma operação atômica de update condicional: só cancela se o status ainda for PENDING no banco.

@@ -10,7 +10,7 @@ export class OrderController {
         return;
       }
 
-      const { merchantId, items, paymentMethod, addressDetails, deliveryAddress, couponCode } = req.body;
+      const { merchantId, items, paymentMethod, addressDetails, deliveryAddress, couponCode, cardToken, paymentMethodId, installments } = req.body;
 
       // Atualiza detalhes do endereço no cadastro do cliente se informados (mantido para compatibilidade)
       if (addressDetails) {
@@ -34,7 +34,10 @@ export class OrderController {
         items,
         paymentMethod,
         deliveryAddress,
-        couponCode
+        couponCode,
+        cardToken,
+        paymentMethodId,
+        installments
       );
 
       const io = req.app.get('io');
