@@ -1154,7 +1154,7 @@ export const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <a
-                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?.id || (user as any)?._id}`}
+                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?._id}`}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all"
                   >
                     Reconectar Conta
@@ -1172,7 +1172,7 @@ export const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <a
-                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?.id || (user as any)?._id}`}
+                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?._id}`}
                     className="px-4 py-2.5 bg-energy hover:bg-energy-dark text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
                   >
                     <Sparkles size={14} /> Conectar Mercado Pago
