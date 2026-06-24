@@ -5,7 +5,7 @@ import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
   AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
-  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike
+  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike, Sparkles
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
@@ -1131,6 +1131,53 @@ export const Dashboard: React.FC = () => {
                   </Button>
                 </div>
               </form>
+            </Card>
+
+            <Card className="max-w-2xl mx-auto mt-6 space-y-6">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Sparkles size={20} className="text-energy" /> Conexão Mercado Pago (Repasse)
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Para receber os repasses automáticos dos pedidos pagos via PIX ou Cartão de Crédito Online, você precisa conectar sua conta do Mercado Pago.
+              </p>
+
+              {(user as any)?.mpUserId ? (
+                <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Conta Conectada</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
+                      ID do Usuário Mercado Pago: {(user as any).mpUserId}
+                    </p>
+                  </div>
+                  <a
+                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?.id || (user as any)?._id}`}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all"
+                  >
+                    Reconectar Conta
+                  </a>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span className="text-sm font-bold text-amber-600 dark:text-amber-400">Conta Não Conectada</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Conecte sua conta para habilitar o split de pagamento automático e receber pelas vendas online.
+                    </p>
+                  </div>
+                  <a
+                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?.id || (user as any)?._id}`}
+                    className="px-4 py-2.5 bg-energy hover:bg-energy-dark text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+                  >
+                    <Sparkles size={14} /> Conectar Mercado Pago
+                  </a>
+                </div>
+              )}
             </Card>
           )}
 
