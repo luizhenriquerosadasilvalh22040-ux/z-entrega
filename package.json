@@ -6,9 +6,6 @@
     "packages/*"
   ],
   "scripts": {
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "init:replica": "docker exec trazpraca-mongodb mongosh --eval \"rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})\"",
     "build": "npm run build --prefix packages/frontend",
     "dev:backend": "npm run --prefix packages/backend dev",
     "dev:frontend": "npm run --prefix packages/frontend dev"
