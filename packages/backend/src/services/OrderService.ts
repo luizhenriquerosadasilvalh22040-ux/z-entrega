@@ -1,5 +1,5 @@
 import prisma from '../config/prisma';
-import { AsaasService } from './AsaasService';
+import { MercadoPagoService } from './MercadoPagoService';
 import { NotificationService } from './NotificationService';
 import { IAddress } from '../types';
 import logger from '../config/logger';
@@ -69,7 +69,7 @@ export const formatOrder = (order: any) => {
       complement: order.deliveryComplement || '',
       referencePoint: order.deliveryReference || ''
     },
-    asaasPaymentId: order.asaasPaymentId || undefined,
+    mpPaymentId: order.mpPaymentId || undefined,
     paymentStatus: order.paymentStatus || undefined,
     pixQrCode: order.pixQrCode || undefined,
     pixCopyAndPaste: order.pixCopyAndPaste || undefined,
@@ -122,7 +122,10 @@ export class OrderService {
     }[],
     paymentMethod: string,
     deliveryAddress?: IAddress,
-    couponCode?: string
+    couponCode?: string,
+    cardToken?: string,
+    paymentMethodId?: string,
+    installments?: number
   ): Promise<any> {
     const savedOrder = await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({
@@ -322,7 +325,7 @@ export class OrderService {
         throw new Error('Endereço de entrega não definido.');
       }
 
-      let asaasPaymentId = undefined;
+      let mpPaymentId = undefined;
       let pixQrCode = undefined;
       let pixCopyAndPaste = undefined;
 
@@ -380,33 +383,74 @@ export class OrderService {
         }
       }
 
+      const applicationFee = commission + deliveryFee;
+      const customerData = formatCustomer(customer)!;
+
       if (paymentMethod === 'PIX') {
-        const asaasCustomer = formatCustomer(customer)!;
-        if (process.env.ASAAS_API_KEY) {
-          const asaasCustomerId = await AsaasService.getOrCreateCustomer(asaasCustomer as any);
-          const pixPayment = await AsaasService.createPixPayment(
-            createdOrder.id,
-            total,
-            asaasCustomerId
-          );
-          asaasPaymentId = pixPayment.asaasPaymentId;
-          pixQrCode = pixPayment.qrCodeBase64;
-          pixCopyAndPaste = pixPayment.copyAndPaste;
-        } else {
-          logger.warn('⚠️ [Asaas Mock] Chave ASAAS_API_KEY ausente no .env. Gerando dados de PIX fictícios para teste local.');
-          asaasPaymentId = `pay_mock_${Math.random().toString(36).substr(2, 9)}`;
-          pixQrCode = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-          pixCopyAndPaste = '00020101021226830014br.gov.bcb.pix256100000000000000000000000000000005204000053039865802BR5920Traz Pra Ca Delivery6009Sao Paulo62070503***6304ABCD';
-        }
+        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(customerData as any);
+        const pixPayment = await MercadoPagoService.createPixPayment(
+          createdOrder.id,
+          total,
+          mpCustomerId,
+          merchantId,
+          applicationFee
+        );
+        mpPaymentId = pixPayment.mpPaymentId;
+        pixQrCode = pixPayment.qrCodeBase64;
+        pixCopyAndPaste = pixPayment.copyAndPaste;
 
         await tx.order.update({
           where: { id: createdOrder.id },
           data: {
-            asaasPaymentId,
+            mpPaymentId,
             pixQrCode,
             pixCopyAndPaste
           }
         });
+      } else if (paymentMethod === 'Cartão') {
+        if (!cardToken || !paymentMethodId) {
+          throw new Error('Dados do cartão de crédito não fornecidos para pagamento.');
+        }
+        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(customerData as any);
+        const cardPaymentResult = await MercadoPagoService.createCardPayment(
+          createdOrder.id,
+          total,
+          mpCustomerId,
+          cardToken,
+          paymentMethodId,
+          installments || 1,
+          customer.email || 'comprador@trazpraca.com',
+          merchantId,
+          applicationFee
+        );
+
+        mpPaymentId = String(cardPaymentResult.id);
+        const paymentStatusMap: Record<string, string> = {
+          approved: 'RECEIVED',
+          in_process: 'PENDING',
+          pending: 'PENDING',
+          rejected: 'REJECTED',
+          cancelled: 'CANCELLED'
+        };
+        const mpStatus = paymentStatusMap[cardPaymentResult.status] || 'PENDING';
+
+        await tx.order.update({
+          where: { id: createdOrder.id },
+          data: {
+            mpPaymentId,
+            paymentStatus: mpStatus,
+            status: mpStatus === 'RECEIVED' ? 'ACCEPTED' : 'PENDING'
+          }
+        });
+
+        if (mpStatus === 'RECEIVED') {
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: createdOrder.id,
+              status: 'ACCEPTED'
+            }
+          });
+        }
       }
 
       const notificationId = await NotificationService.queueNotification({
@@ -820,13 +864,13 @@ export class OrderService {
       try {
         let isPaidOnAsaas = false;
 
-        // Se tiver ID de pagamento do Asaas, verifica seu status atual diretamente na API deles
-        if (order.asaasPaymentId) {
+        // Se tiver ID de pagamento do Mercado Pago, verifica seu status atual diretamente na API deles
+        if (order.mpPaymentId) {
           try {
-            const asaasStatus = await AsaasService.getPaymentStatus(order.asaasPaymentId);
-            if (asaasStatus === 'RECEIVED' || asaasStatus === 'CONFIRMED') {
+            const mpStatus = await MercadoPagoService.getPaymentStatus(order.mpPaymentId, order.merchantId);
+            if (mpStatus === 'approved') {
               isPaidOnAsaas = true;
-              logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Asaas (${asaasStatus}). Processando confirmação.`);
+              logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Mercado Pago (${mpStatus}). Processando confirmação.`);
               
               // Atualiza o pedido como pago e ACCEPTED de forma transacional e segura
               await prisma.$transaction(async (tx) => {
