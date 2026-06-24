@@ -997,7 +997,8 @@ export const Dashboard: React.FC = () => {
 
           {/* TAB: SETTINGS */}
           {activeTab === 'settings' && (
-            <Card className="max-w-2xl mx-auto space-y-6">
+            <>
+              <Card className="max-w-2xl mx-auto space-y-6">
               <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Settings size={20} className="text-energy" /> Detalhes do Estabelecimento
               </h3>
@@ -1179,7 +1180,8 @@ export const Dashboard: React.FC = () => {
                 </div>
               )}
             </Card>
-          )}
+          </>
+        )}
 
           {/* TAB: FINANCE */}
           {activeTab === 'finance' && (
