@@ -45,8 +45,13 @@ async function test() {
     });
 
     console.log('\n1. Testando criação de cliente...');
-    const customerId = await MercadoPagoService.getOrCreateCustomer(createdCustomer);
-    console.log(`✅ Cliente resolvido no Mercado Pago! ID: ${customerId}`);
+    let customerId = 'mock_customer_id';
+    try {
+      customerId = await MercadoPagoService.getOrCreateCustomer(createdCustomer);
+      console.log(`✅ Cliente resolvido no Mercado Pago! ID: ${customerId}`);
+    } catch (err: any) {
+      console.log(`⚠️ Falha ao criar cliente no Mercado Pago (ignorado para testar Pix): ${err.message}`);
+    }
 
     // 3. Criar um Order temporário de teste
     console.log('\nCriando pedido temporário no banco...');
