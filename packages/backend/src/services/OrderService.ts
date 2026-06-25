@@ -316,7 +316,7 @@ export class OrderService {
       }
 
       const subtotalWithDiscount = Math.max(0, subtotal - couponDiscount);
-      const commission = subtotalWithDiscount * 0.10;
+      const commission = 0.0;
       const deliveryFee = 5.00;
       const total = subtotalWithDiscount + deliveryFee;
 

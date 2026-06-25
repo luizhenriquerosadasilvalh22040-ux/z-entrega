@@ -409,7 +409,7 @@ export class MercadoPagoService {
     if (!merchant) throw new Error('Lojista não encontrado.');
 
     // Valor da assinatura
-    const price = merchant.subscriptionPrice || 150.00;
+    const price = merchant.subscriptionPrice || 125.00;
 
     const url = 'https://api.mercadopago.com/preapproval';
 
@@ -423,7 +423,11 @@ export class MercadoPagoService {
         frequency: 1,
         frequency_type: 'months',
         transaction_amount: price,
-        currency_id: 'BRL'
+        currency_id: 'BRL',
+        free_trial: {
+          frequency: 7,
+          frequency_type: 'days'
+        }
       },
       status: 'authorized'
     };
