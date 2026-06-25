@@ -3,6 +3,7 @@ dotenv.config();
 
 import { MercadoPagoService } from './services/MercadoPagoService';
 import prisma from './config/prisma';
+import { encrypt } from './config/encryption';
 
 async function test() {
   console.log('🚀 Iniciando teste de comunicação com Mercado Pago Sandbox...');
