@@ -211,7 +211,7 @@ async function seed() {
     // 4. Configuração Padrão do Sistema
     await prisma.systemConfig.create({
       data: {
-        defaultSubscriptionPrice: 150.00
+        defaultSubscriptionPrice: 125.00
       }
     });
     logger.info('System Config created successfully.');
