@@ -36,8 +36,8 @@ async function test() {
     console.log('👤 Criando cliente temporário no banco...');
     createdCustomer = await prisma.customer.create({
       data: {
-        name: 'João Testador Mercado Pago',
-        email: 'joao.testador.' + Math.random().toString(36).substring(2, 7) + '@trazpraca.com.br',
+        name: 'Joao Lucas Silva',
+        email: 'joaolucas.' + Math.random().toString(36).substring(2, 7) + '@gmail.com',
         phone: '1198765' + Math.floor(1000 + Math.random() * 9000), // telefone único
       }
     });
