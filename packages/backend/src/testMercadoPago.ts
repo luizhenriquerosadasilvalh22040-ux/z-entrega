@@ -29,7 +29,8 @@ async function test() {
         city: 'Cidade Teste',
         zipCode: '12345-678',
         isVerified: true,
-        paymentMethods: ['pix']
+        paymentMethods: ['pix'],
+        mpAccessToken: encrypt(process.env.MERCADO_PAGO_ACCESS_TOKEN || '')
       }
     });
 
