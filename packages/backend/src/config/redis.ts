@@ -8,12 +8,31 @@ const redisConfig = {
   host: REDIS_HOST,
   port: REDIS_PORT,
   maxRetriesPerRequest: null, // Requerido por Bull
+  enableOfflineQueue: false,  // Rejeita comandos imediatamente se estiver offline
+  connectTimeout: 2000,       // Timeout de 2s para conexões
 };
 
 export const redisClient = new Redis(redisConfig);
 
+export let isRedisConnected = false;
+
 redisClient.on('connect', () => {
-  logger.info('Redis connected successfully.');
+  logger.info('Redis socket connected.');
+});
+
+redisClient.on('ready', () => {
+  isRedisConnected = true;
+  logger.info('Redis connected and ready successfully.');
+});
+
+redisClient.on('close', () => {
+  isRedisConnected = false;
+  logger.warn('Redis connection closed.');
+});
+
+redisClient.on('end', () => {
+  isRedisConnected = false;
+  logger.warn('Redis connection ended.');
 });
 
 redisClient.on('error', (err) => {
@@ -22,3 +41,4 @@ redisClient.on('error', (err) => {
 
 export const getRedisConnectionOptions = () => redisConfig;
 export default redisClient;
+
