@@ -266,10 +266,12 @@ export class AuthController {
     try {
       const { phone, name, address } = req.body;
       const { isNewUser } = await AuthService.requestCustomerOtp(phone, name, address);
+      
+      const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
       res.status(200).json({
         status: 'success',
         message: 'Código de verificação enviado para seu WhatsApp.',
-        data: { isNewUser }
+        data: { isNewUser, isMock }
       });
     } catch (error) {
       next(error);
