@@ -41,7 +41,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (identifier: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
-  requestOtp: (phone: string, name?: string, address?: any) => Promise<{ isNewUser: boolean }>;
+  requestOtp: (phone: string, name?: string, address?: any) => Promise<{ isNewUser: boolean; isMock?: boolean }>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
