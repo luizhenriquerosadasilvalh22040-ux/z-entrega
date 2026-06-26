@@ -123,12 +123,14 @@ export const Home: React.FC = () => {
   return (
     <div className="space-y-10">
       
-      {/* Banner Principal — Animado */}
+      {/* Banner Principal — Animado 4K */}
       <div className="banner-home-container relative w-full rounded-3xl overflow-hidden shadow-xl border border-slate-100/60 dark:border-slate-800/60 banner-home-shimmer banner-home-vignette group">
         {/* Container com aspect ratio responsivo */}
-        <div className="relative w-full" style={{ aspectRatio: '16/7' }}>
+        <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
           <img
-            src="/banner_home.jpg"
+            src="/banner_home_4k.jpg"
+            srcSet="/banner_home.jpg 1024w, /banner_home_4k.jpg 3840w"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 90vw, 1200px"
             alt="Traz Pra Cá Delivery - O que você precisa, a gente traz"
             className="banner-home-image absolute inset-0 w-full h-full object-cover object-center"
             loading="eager"
@@ -136,7 +138,7 @@ export const Home: React.FC = () => {
             fetchPriority="high"
           />
           {/* Gradiente inferior para transição suave com o conteúdo */}
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-50 dark:from-night to-transparent z-[3] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-50 dark:from-night to-transparent z-[3] pointer-events-none" />
         </div>
       </div>
 
