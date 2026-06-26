@@ -23,6 +23,8 @@ export const Login: React.FC = () => {
   const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
   const [code, setCode] = useState('');
   const [rememberPhone, setRememberPhone] = useState(false);
+  const [isMockOtp, setIsMockOtp] = useState(false);
+
 
   React.useEffect(() => {
     const savedPhone = localStorage.getItem('rememberedPhone');
@@ -66,7 +68,12 @@ export const Login: React.FC = () => {
     try {
       // Tenta enviar OTP. Se for novo usuário e não enviarmos nome/endereço, o backend pode falhar, 
       // então primeiro tentamos um request simples para ver se já existe.
-      await requestOtp(phone);
+      const data = await requestOtp(phone);
+      if (data?.isMock) {
+        setIsMockOtp(true);
+      } else {
+        setIsMockOtp(false);
+      }
       setToast({ message: 'Código de verificação enviado!', type: 'success' });
       setStep('otp');
     } catch (err: any) {
@@ -93,7 +100,12 @@ export const Login: React.FC = () => {
 
     setLoading(true);
     try {
-      await requestOtp(phone, name, address);
+      const data = await requestOtp(phone, name, address);
+      if (data?.isMock) {
+        setIsMockOtp(true);
+      } else {
+        setIsMockOtp(false);
+      }
       setToast({ message: 'Cadastro pré-salvo! Código enviado.', type: 'success' });
       setStep('otp');
     } catch (err: any) {
@@ -337,14 +349,21 @@ export const Login: React.FC = () => {
         {/* STEP 3: OTP Code verification */}
         {step === 'otp' && (
           <form onSubmit={handleVerifyOtp} className="space-y-5">
-            <Input
-              label="Código de Verificação"
-              placeholder="Digite o código (Ex: 1234)"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              maxLength={6}
-            />
+            <div className="space-y-2">
+              <Input
+                label="Código de Verificação"
+                placeholder="Digite o código (Ex: 1234)"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+                maxLength={6}
+              />
+              {isMockOtp && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                  ⚠️ <strong>Modo de testes ativado:</strong> Utilize o código de verificação <strong>1234</strong> para prosseguir.
+                </div>
+              )}
+            </div>
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" fullWidth onClick={() => setStep('phone')}>
                 Mudar Número
