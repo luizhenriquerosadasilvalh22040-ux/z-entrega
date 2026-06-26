@@ -39,3 +39,102 @@
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
+
+/* ========================================
+   BANNER HOME — Animações Suaves
+   ======================================== */
+
+/* Ken Burns — zoom suave e lento na imagem */
+@keyframes bannerKenBurns {
+  0% {
+    transform: scale(1) translateX(0);
+  }
+  50% {
+    transform: scale(1.06) translateX(-0.5%);
+  }
+  100% {
+    transform: scale(1) translateX(0);
+  }
+}
+
+/* Shimmer — brilho suave que percorre o banner */
+@keyframes bannerShimmer {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
+}
+
+/* Fade in + slide up suave na entrada */
+@keyframes bannerFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Float suave do container */
+@keyframes bannerFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.banner-home-container {
+  animation: bannerFadeIn 0.8s ease-out both, bannerFloat 6s ease-in-out 1s infinite;
+  will-change: transform, opacity;
+}
+
+.banner-home-image {
+  animation: bannerKenBurns 20s ease-in-out infinite;
+  will-change: transform;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.banner-home-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.12) 45%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.12) 55%,
+    transparent 80%
+  );
+  animation: bannerShimmer 6s ease-in-out 2s infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Gradiente sutil nas bordas para blending suave */
+.banner-home-vignette::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.06) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+}
+
