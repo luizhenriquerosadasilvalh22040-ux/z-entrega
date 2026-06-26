@@ -5,6 +5,7 @@ import { useCartStore } from '../store/cartStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
 import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2 } from 'lucide-react';
+import { CheckoutCardForm } from '../components/CheckoutCardForm';
 
 interface IMerchant {
   _id: string;
@@ -408,7 +409,7 @@ export const Store: React.FC = () => {
   const finalDiscount = Math.min(cartTotal, discountAmount);
   const grandTotal = Math.max(0, cartTotal - finalDiscount + deliveryFee);
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (mpToken?: string, mpIssuerId?: string, mpPaymentMethodId?: string, mpInstallments?: number) => {
     if (!isAuthenticated) {
       setToast({ message: 'Faça login antes de finalizar o pedido', type: 'error' });
       setTimeout(() => navigate('/login'), 1500);
@@ -469,9 +470,9 @@ export const Store: React.FC = () => {
         paymentMethod,
         deliveryAddress: targetAddress,
         couponCode: appliedCoupon?.code || undefined,
-        cardToken: paymentMethod === 'Cartão' ? 'card_token_mock_' + Math.random().toString(36).substring(7) : undefined,
-        paymentMethodId: paymentMethod === 'Cartão' ? 'visa' : undefined,
-        installments: paymentMethod === 'Cartão' ? Number(cardInstallments) : undefined
+        cardToken: paymentMethod === 'Cartão' ? mpToken : undefined,
+        paymentMethodId: paymentMethod === 'Cartão' ? mpPaymentMethodId : undefined,
+        installments: paymentMethod === 'Cartão' ? Number(mpInstallments) : undefined
       });
 
       if (res.data?.status === 'success') {
@@ -1055,72 +1056,15 @@ export const Store: React.FC = () => {
           {/* Mercado Pago transparent credit card form */}
           {paymentMethod === 'Cartão' && (
             <div className="mt-4 p-4 border border-slate-150 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dados do Cartão de Crédito</p>
-              <div>
-                <input
-                  type="text"
-                  placeholder="Nome do Titular (como no cartão)"
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  placeholder="Número do Cartão"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                  maxLength={19}
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Validade (MM/AA)"
-                  value={cardExpiry}
-                  onChange={(e) => setCardExpiry(e.target.value)}
-                  maxLength={5}
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                />
-                <input
-                  type="password"
-                  placeholder="CVC"
-                  value={cardCvv}
-                  onChange={(e) => setCardCvv(e.target.value)}
-                  maxLength={4}
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  placeholder="CPF do Titular"
-                  value={cardCpf}
-                  onChange={(e) => setCardCpf(e.target.value)}
-                  required
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 font-semibold mb-1">Parcelas</label>
-                <select
-                  value={cardInstallments}
-                  onChange={(e) => setCardInstallments(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:ring-energy/20 focus:border-energy rounded-xl shadow-sm text-sm focus:ring-4 transition-all outline-none dark:text-white"
-                >
-                  {[1, 2, 3, 4, 5, 6, 10, 12].map((num) => (
-                    <option key={num} value={num}>
-                      {num}x de R$ {((cartTotal - finalDiscount + deliveryFee) / num).toFixed(2)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CheckoutCardForm 
+                amount={grandTotal}
+                email={user?.email}
+                buttonDisabled={!isStoreOpen() || isSubmittingOrder}
+                onSuccess={(token, issuerId, paymentMethodId, installments) => {
+                  handleCheckout(token, issuerId, paymentMethodId, installments);
+                }}
+                onError={(err) => setToast({ message: err, type: 'error' })}
+              />
             </div>
           )}
 
@@ -1210,18 +1154,20 @@ export const Store: React.FC = () => {
             </div>
           </div>
 
-           <Button 
-            fullWidth 
-            size="lg" 
-            disabled={!isStoreOpen() || isSubmittingOrder}
-            onClick={handleCheckout}
-          >
-            {isSubmittingOrder ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" /> Enviando Pedido...
-              </span>
-            ) : isStoreOpen() ? 'Confirmar e Enviar Pedido' : 'Estabelecimento Fechado'}
-          </Button>
+          {paymentMethod !== 'Cartão' && (
+            <Button 
+              fullWidth 
+              size="lg" 
+              disabled={!isStoreOpen() || isSubmittingOrder}
+              onClick={() => handleCheckout()}
+            >
+              {isSubmittingOrder ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Enviando Pedido...
+                </span>
+              ) : isStoreOpen() ? 'Confirmar e Enviar Pedido' : 'Estabelecimento Fechado'}
+            </Button>
+          )}
         </div>
       </Modal>
 

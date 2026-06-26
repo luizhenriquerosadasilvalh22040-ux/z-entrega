@@ -139,6 +139,10 @@ export class OrderService {
       });
       if (!merchant) throw new Error('Merchant not found');
 
+      if (merchant.subscriptionStatus !== 'ACTIVE') {
+        throw new Error('O estabelecimento não está habilitado para receber pedidos no momento (Assinatura Inativa).');
+      }
+
       if (merchant.isForceClosed) {
         throw new Error('O estabelecimento comercial está fechado manualmente pelo proprietário.');
       }

@@ -6,6 +6,7 @@ export interface IUser {
   name: string;
   email: string;
   phone: string;
+  subscriptionStatus?: string;
   address?: {
     street: string;
     number: string;

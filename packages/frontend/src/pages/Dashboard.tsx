@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
+import { SubscriptionForm } from '../components/SubscriptionForm';
 
 interface IOrder {
   _id: string;
@@ -52,7 +53,7 @@ export const Dashboard: React.FC = () => {
   const { isAuthenticated, role, user, checkAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings' | 'finance'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings' | 'finance' | 'subscription'>('orders');
   const [stats, setStats] = useState<IStats>({ 
     totalOrders: 0, 
     pendingOrders: 0, 
@@ -596,6 +597,24 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {user?.subscriptionStatus !== 'ACTIVE' && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-red-600 dark:text-red-400" size={24} />
+            <div>
+              <h4 className="font-bold text-red-800 dark:text-red-200">Sua assinatura está inativa!</h4>
+              <p className="text-sm text-red-600 dark:text-red-400">Você não poderá receber novos pedidos até regularizar sua assinatura.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setActiveTab('subscription')}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm whitespace-nowrap"
+          >
+            Regularizar Agora
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -669,6 +688,16 @@ export const Dashboard: React.FC = () => {
               }`}
             >
               <Settings size={14} /> Configurações
+            </button>
+            <button
+              onClick={() => setActiveTab('subscription')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'subscription'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <CreditCard size={14} /> Assinatura
             </button>
           </div>
         </div>
@@ -1363,6 +1392,13 @@ export const Dashboard: React.FC = () => {
                   )}
                 </div>
               </Card>
+            </div>
+          )}
+
+          {/* TAB: ASSINATURA */}
+          {activeTab === 'subscription' && (
+            <div className="space-y-6">
+              <SubscriptionForm user={user} />
             </div>
           )}
         </div>

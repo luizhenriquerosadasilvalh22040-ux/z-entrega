@@ -17,13 +17,17 @@ export class MercadoPagoService {
     return token || 'mock_access_token';
   }
 
-  private static getHeaders(customToken?: string) {
+  private static getHeaders(customToken?: string, idempotencyKey?: string) {
     const token = customToken || this.getAccessToken();
-    return {
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'accept': 'application/json'
     };
+    if (idempotencyKey) {
+      headers['X-Idempotency-Key'] = idempotencyKey;
+    }
+    return headers;
   }
 
   private static isMockMode(): boolean {
@@ -226,7 +230,7 @@ export class MercadoPagoService {
       },
       application_fee: Number(applicationFee.toFixed(2)),
       external_reference: orderId,
-      notification_url: `${process.env.BACKEND_URL || 'https://suaapi.com'}/api/payments/webhook/mercadopago`
+      notification_url: `${process.env.FRONTEND_URL || 'https://z-entrega.vercel.app'}/api/payments/webhook/mercadopago`
     };
 
     try {
@@ -234,7 +238,7 @@ export class MercadoPagoService {
       // E passando o application_fee que é repassado para a conta do Marketplace (nossa conta central)
       const response = await fetch(url, {
         method: 'POST',
-        headers: this.getHeaders(merchantToken),
+        headers: this.getHeaders(merchantToken, orderId),
         body: JSON.stringify(body)
       });
 
@@ -316,13 +320,13 @@ export class MercadoPagoService {
       },
       application_fee: Number(applicationFee.toFixed(2)),
       external_reference: orderId,
-      notification_url: `${process.env.BACKEND_URL || 'https://suaapi.com'}/api/payments/webhook/mercadopago`
+      notification_url: `${process.env.FRONTEND_URL || 'https://z-entrega.vercel.app'}/api/payments/webhook/mercadopago`
     };
 
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: this.getHeaders(merchantToken),
+        headers: this.getHeaders(merchantToken, orderId),
         body: JSON.stringify(body)
       });
 
@@ -416,7 +420,7 @@ export class MercadoPagoService {
     const body = {
       payer_email: email,
       card_token_id: cardToken,
-      back_url: `${process.env.BACKEND_URL || 'https://suaapi.com'}/api/payments/subscription/success`,
+      back_url: `${process.env.FRONTEND_URL || 'https://z-entrega.vercel.app'}/api/payments/subscription/success`,
       reason: 'Assinatura Mensal Traz Pra Ca Delivery',
       external_reference: merchantId,
       auto_recurring: {
