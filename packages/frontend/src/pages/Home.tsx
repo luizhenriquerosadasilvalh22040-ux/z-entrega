@@ -18,20 +18,14 @@ interface IMerchant {
   reviewsCount?: number;
 }
 
-interface IBanner {
-  _id: string;
-  imageUrl: string;
-  title?: string;
-  linkUrl?: string;
-}
+
 
 export const Home: React.FC = () => {
   const { isAuthenticated, role } = useAuthStore();
   const navigate = useNavigate();
   
   const [merchants, setMerchants] = useState<IMerchant[]>([]);
-  const [banners, setBanners] = useState<IBanner[]>([]);
-  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
@@ -48,10 +42,7 @@ export const Home: React.FC = () => {
           setMerchants(merchantsRes.data.data.merchants);
         }
 
-        const bannersRes = await apiClient.get('/banners');
-        if (bannersRes.data?.status === 'success') {
-          setBanners(bannersRes.data.data.banners);
-        }
+
       } catch (err) {
         setToast({ message: 'Erro ao carregar dados da Home', type: 'error' });
       } finally {
@@ -61,14 +52,7 @@ export const Home: React.FC = () => {
     fetchData();
   }, []);
 
-  // Rotatividade automática dos banners
-  useEffect(() => {
-    if (banners.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveBannerIndex((prev) => (prev + 1) % banners.length);
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [banners]);
+
 
   // Função para verificar se a loja está na madrugada (fecha após 22h ou antes de 6h, ou vira a noite)
   const isMadrugadaStore = (openTime: string, closeTime: string): boolean => {
@@ -139,74 +123,14 @@ export const Home: React.FC = () => {
   return (
     <div className="space-y-10">
       
-      {/* Banner Carousel Slider */}
-      {banners.length > 0 && (
-        <div className="relative w-full h-44 md:h-60 rounded-3xl overflow-hidden shadow-lg border border-slate-150/40 dark:border-slate-800/60 group">
-          {banners.map((banner, index) => (
-            <div
-              key={banner._id}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                index === activeBannerIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
-              }`}
-            >
-              <img
-                src={banner.imageUrl}
-                alt={banner.title || 'Banner promocional'}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-              {banner.title && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent p-6 text-white pt-16">
-                  <h3 className="font-extrabold text-lg md:text-xl tracking-tight leading-snug drop-shadow-md">{banner.title}</h3>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Dots Indicator */}
-          {banners.length > 1 && (
-            <div className="absolute bottom-4 right-6 z-20 flex gap-2">
-              {banners.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => setActiveBannerIndex(index)}
-                  className={`h-2.5 rounded-full transition-all duration-300 ${
-                    index === activeBannerIndex ? 'w-6 bg-energy' : 'w-2.5 bg-white/60 hover:bg-white'
-                  }`}
-                  aria-label={`Ir para o banner ${index + 1}`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Hero Fallback se não existirem banners */}
-      {banners.length === 0 && (
-        <div className="bg-gradient-to-tr from-orange-500/10 via-orange-500/5 to-transparent rounded-3xl p-8 md:p-12 text-center md:text-left md:flex md:items-center md:justify-between gap-8 border border-orange-500/5">
-          <div className="max-w-xl space-y-6">
-            <Badge variant="orange" className="flex items-center gap-1 w-fit">
-              <MapPin size={13} /> Rondon, PR e Região
-            </Badge>
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-800 dark:text-white leading-tight">
-              Compre do comércio local, <span className="text-energy">receba em casa.</span>
-            </h1>
-            <p className="text-base text-slate-600 dark:text-slate-350">
-              Faça pedidos sem complicações com confirmação direto no seu WhatsApp!
-            </p>
-          </div>
-          <div className="hidden lg:block text-orange-500 animate-float filter drop-shadow-lg">
-            <svg className="w-32 h-32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="18" r="3" />
-              <path d="M3 18h3M9 18h6M21 18h-3" />
-              <path d="M18 15V9a2 2 0 0 0-2-2h-5l-2-3H4" />
-              <path d="M12 7v5a2 2 0 0 1-2 2H6" />
-              <path d="M12 10h4" />
-            </svg>
-          </div>
-        </div>
-      )}
+      {/* Banner Principal */}
+      <div className="relative w-full rounded-3xl overflow-hidden shadow-lg border border-slate-150/40 dark:border-slate-800/60">
+        <img
+          src="/banner_home.jpg"
+          alt="Traz Pra Cá Delivery - O que você precisa, a gente traz"
+          className="w-full h-auto object-cover"
+        />
+      </div>
 
       {/* Search Input */}
       <div className="max-w-md mx-auto flex items-center relative">
