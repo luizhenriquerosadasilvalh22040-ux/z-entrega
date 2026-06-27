@@ -1,4 +1,4 @@
-import Queue from 'bull';
+import { Queue, Worker, type Job } from 'bullmq';
 import prisma from '../config/prisma';
 import { getRedisConnectionOptions, isRedisConnected } from '../config/redis';
 import { WhatsAppService } from './WhatsAppService';
@@ -6,13 +6,11 @@ import logger from '../config/logger';
 
 
 const REDIS_OPTIONS = getRedisConnectionOptions();
+const SHOULD_PROCESS_QUEUES = process.env.PROCESS_QUEUES !== 'false';
 
 // Inicializa a fila do Bull
 export const notificationQueue = new Queue('notificationQueue', {
-  redis: {
-    host: REDIS_OPTIONS.host,
-    port: REDIS_OPTIONS.port,
-  }
+  connection: REDIS_OPTIONS as any
 });
 
 export class NotificationService {
@@ -49,6 +47,7 @@ export class NotificationService {
       if (isRedisConnected) {
         try {
           await notificationQueue.add(
+            'sendNotification',
             { notificationId: notification.id },
             {
               attempts: 5,
@@ -85,6 +84,7 @@ export class NotificationService {
     if (isRedisConnected) {
       try {
         await notificationQueue.add(
+          'sendNotification',
           { notificationId },
           {
             attempts: 5,
@@ -151,45 +151,50 @@ export class NotificationService {
   }
 }
 
-// 3. Processador de jobs da fila
-notificationQueue.process(async (job) => {
-  const { notificationId } = job.data;
-  const notification = await prisma.notification.findUnique({
-    where: { id: notificationId }
-  });
-  
-  if (!notification) {
-    throw new Error(`Notification not found: ${notificationId}`);
-  }
-
-  try {
-    if (notification.type === 'WhatsApp') {
-      await WhatsAppService.sendMessage(notification.target, notification.content);
-    } else {
-      logger.warn(`Unsupported notification type: ${notification.type}`);
+if (SHOULD_PROCESS_QUEUES) {
+  new Worker('notificationQueue', async (job: Job) => {
+    const { notificationId } = job.data;
+    const notification = await prisma.notification.findUnique({
+      where: { id: notificationId }
+    });
+    
+    if (!notification) {
+      throw new Error(`Notification not found: ${notificationId}`);
     }
 
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: {
-        status: 'SENT',
-        sentAt: new Date()
+    try {
+      if (notification.type === 'WhatsApp') {
+        await WhatsAppService.sendMessage(notification.target, notification.content);
+      } else {
+        logger.warn(`Unsupported notification type: ${notification.type}`);
       }
-    });
-  } catch (error: any) {
-    logger.error(`Error processing job for notification ${notificationId}: %s`, error.message);
-    
-    const isLastAttempt = job.attemptsMade === job.opts.attempts;
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: {
-        status: isLastAttempt ? 'FAILED' : 'QUEUED',
-        errorMessage: error.message
-      }
-    });
-    
-    throw error;
-  }
-});
 
-logger.info('🔔 Bull Queue processor for notifications initialized.');
+      await prisma.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: 'SENT',
+          sentAt: new Date()
+        }
+      });
+    } catch (error: any) {
+      logger.error(`Error processing job for notification ${notificationId}: %s`, error.message);
+      
+      const isLastAttempt = job.attemptsMade === job.opts.attempts;
+      await prisma.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: isLastAttempt ? 'FAILED' : 'QUEUED',
+          errorMessage: error.message
+        }
+      });
+      
+      throw error;
+    }
+  }, {
+    connection: REDIS_OPTIONS as any
+  });
+
+  logger.info('🔔 BullMQ worker for notifications initialized.');
+} else {
+  logger.info('🔔 Notification queue producer initialized without processing jobs.');
+}

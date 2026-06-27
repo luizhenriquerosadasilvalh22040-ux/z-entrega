@@ -1,0 +1,109 @@
+services:
+  - type: web
+    name: z-entrega-api
+    runtime: node
+    rootDir: packages/backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PROCESS_QUEUES
+        value: "false"
+      - key: RUN_SCHEDULER
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: DELIVERY_RESPONSE_SECRET
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      - key: JSON_BODY_LIMIT
+        value: 2mb
+      - key: MAX_UPLOAD_BYTES
+        value: "1500000"
+      - key: UPLOADS_PUBLIC_URL
+        sync: false
+      - key: SERVICE_CITY
+        value: Rondon
+      - key: SERVICE_STATE
+        value: PR
+      - key: PLATFORM_DELIVERY_FEE
+        value: "5"
+      - key: PLATFORM_COMMISSION_RATE
+        value: "0"
+      - key: DELIVERER_PAY_PER_DELIVERY
+        value: "0"
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADO_PAGO_CLIENT_ID
+        sync: false
+      - key: MERCADO_PAGO_CLIENT_SECRET
+        sync: false
+      - key: MERCADO_PAGO_REDIRECT_URI
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        sync: false
+
+  - type: worker
+    name: z-entrega-worker
+    runtime: node
+    rootDir: packages/backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:worker
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PROCESS_QUEUES
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: PIX_SWEEP_INTERVAL_MS
+        value: "60000"
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: DELIVERY_RESPONSE_SECRET
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: SERVICE_CITY
+        value: Rondon
+      - key: SERVICE_STATE
+        value: PR
+      - key: PLATFORM_DELIVERY_FEE
+        value: "5"
+      - key: PLATFORM_COMMISSION_RATE
+        value: "0"
+      - key: DELIVERER_PAY_PER_DELIVERY
+        value: "0"

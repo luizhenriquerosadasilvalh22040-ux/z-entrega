@@ -108,6 +108,7 @@ export const MyOrders: React.FC = () => {
   const getStatusBadge = (status: string) => {
     const statuses: { [key: string]: { text: string; variant: 'orange' | 'green' | 'blue' | 'red' | 'gray' } } = {
       PENDING: { text: 'Aguardando Aprovação', variant: 'gray' },
+      PAID: { text: 'Pago, aguardando loja', variant: 'orange' },
       ACCEPTED: { text: 'Aceito', variant: 'blue' },
       PREPARING: { text: 'Em Preparação', variant: 'orange' },
       READY: { text: 'Pronto para Entrega', variant: 'orange' },

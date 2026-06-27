@@ -137,7 +137,7 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [isAuthenticated, role]);
 
-  const pendingOrders = orders.filter((o) => o.status === 'PENDING');
+  const pendingOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'PAID');
 
   // Controle de áudio do alarme
   useEffect(() => {
@@ -1286,25 +1286,25 @@ export const Dashboard: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="text-lg font-bold text-slate-800 dark:text-white">
-                        Comissão e Repasse (Traz Pra Cá)
+                        Taxa e Repasse (Traz Pra Cá)
                       </h4>
                       <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 max-w-2xl leading-relaxed">
-                        A comissão da plataforma Traz Pra Cá é de <strong className="text-energy">10%</strong> calculada sobre o subtotal dos pedidos aceitos ou concluídos (excluindo taxas de entrega e pedidos pendentes/cancelados).
+                        A taxa da plataforma Traz Pra Cá é fixa: <strong className="text-energy">R$ 5,00 por pedido válido</strong>. Em pagamentos online, esse valor fica retido automaticamente no split do Mercado Pago.
                       </p>
                       <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-550 dark:text-slate-400">
                         <span className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                          PIX Online: Repasse retido/descontado automaticamente.
+                          PIX/Cartão online: taxa retida automaticamente no split.
                         </span>
                         <span className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                          Dinheiro/Cartão na Entrega: Comissão a ser faturada para pagamento posterior.
+                          Dinheiro: taxa registrada para acerto operacional com o admin.
                         </span>
                       </div>
                     </div>
                   </div>
                   <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-energy/10 shadow-sm flex flex-col items-center md:items-end min-w-[200px] justify-center">
-                    <span className="text-xs text-slate-450 font-semibold uppercase tracking-wider">Total em Comissão Devida</span>
+                    <span className="text-xs text-slate-450 font-semibold uppercase tracking-wider">Taxa da Plataforma</span>
                     <span className="text-3xl font-black text-energy mt-1">
                       R$ {(stats.totalCommission || 0).toFixed(2)}
                     </span>
@@ -1319,12 +1319,12 @@ export const Dashboard: React.FC = () => {
                     <FileText size={18} className="text-energy" /> Detalhes dos Pedidos Faturados
                   </h4>
                   <Badge variant="orange">
-                    {orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length} Pedidos Válidos
+                    {orders.filter(o => o.status !== 'PENDING' && o.status !== 'PAID' && o.status !== 'CANCELLED').length} Pedidos Válidos
                   </Badge>
                 </div>
 
                 <div className="overflow-x-auto">
-                  {orders.filter(o => o.status !== 'PENDING' && o.status !== 'CANCELLED').length === 0 ? (
+                  {orders.filter(o => o.status !== 'PENDING' && o.status !== 'PAID' && o.status !== 'CANCELLED').length === 0 ? (
                     <div className="p-8 text-center text-slate-400 dark:text-slate-500">
                       Nenhum pedido faturado neste período.
                     </div>
@@ -1337,12 +1337,12 @@ export const Dashboard: React.FC = () => {
                           <th className="py-3 px-5">Data / Hora</th>
                           <th className="py-3 px-5">Forma de Pagamento</th>
                           <th className="py-3 px-5 text-right">Faturamento</th>
-                          <th className="py-3 px-5 text-right">Comissão (10%)</th>
+                          <th className="py-3 px-5 text-right">Taxa Plataforma</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-150 dark:divide-slate-800 text-sm">
                         {orders
-                          .filter(order => order.status !== 'PENDING' && order.status !== 'CANCELLED')
+                          .filter(order => order.status !== 'PENDING' && order.status !== 'PAID' && order.status !== 'CANCELLED')
                           .map((order) => {
                             const date = new Date(order.createdAt).toLocaleString('pt-BR', {
                               day: '2-digit',
@@ -1352,7 +1352,7 @@ export const Dashboard: React.FC = () => {
                               minute: '2-digit'
                             });
                             
-                            const individualCommission = order.commission || (order.subtotal * 0.10);
+                            const individualCommission = (order.commission || 0) + (order.deliveryFee || 0);
 
                             return (
                               <tr key={order._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/50 text-slate-700 dark:text-slate-300 font-semibold transition-colors">

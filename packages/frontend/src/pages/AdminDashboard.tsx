@@ -822,6 +822,7 @@ export const AdminDashboard: React.FC = () => {
                         const getStatusBadge = (status: string) => {
                           const statuses: { [key: string]: { text: string; variant: 'orange' | 'green' | 'blue' | 'red' | 'gray' } } = {
                             PENDING: { text: 'Aguardando Lojista', variant: 'gray' },
+                            PAID: { text: 'Pago, aguardando aceite', variant: 'orange' },
                             ACCEPTED: { text: 'Aceito', variant: 'blue' },
                             PREPARING: { text: 'Preparando', variant: 'orange' },
                             READY: { text: 'Pronto para Entrega', variant: 'orange' },
