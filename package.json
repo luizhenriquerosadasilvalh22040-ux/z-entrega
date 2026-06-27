@@ -7,10 +7,11 @@
   ],
   "scripts": {
     "build": "npm run build --prefix packages/frontend",
+    "build:backend": "npm run build --prefix packages/backend",
     "dev:backend": "npm run --prefix packages/backend dev",
-    "dev:frontend": "npm run --prefix packages/frontend dev"
-  },
-  "dependencies": {
-    "bull": "^4.16.5"
+    "dev:worker": "npm run --prefix packages/backend dev:worker",
+    "dev:frontend": "npm run --prefix packages/frontend dev",
+    "start:backend": "npm run --prefix packages/backend start",
+    "start:worker": "npm run --prefix packages/backend start:worker"
   }
 }

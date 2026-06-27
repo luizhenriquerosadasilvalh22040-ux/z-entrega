@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 // Carrega as variáveis de ambiente antes de qualquer importação de config
 dotenv.config();
+process.env.PROCESS_QUEUES = process.env.PROCESS_QUEUES || 'false';
 
 // Validação crítica de variáveis em produção para evitar texto claro inseguro
 if (process.env.NODE_ENV === 'production') {
@@ -25,7 +26,6 @@ import { connectDatabase } from './config/database';
 import logger from './config/logger';
 import { errorHandler } from './middlewares/errors';
 import { OrderService } from './services/OrderService';
-import { deliveryTimeoutQueue } from './queues/deliveryQueue';
 
 
 // Importa Rotas
@@ -68,6 +68,7 @@ if (process.env.REDIS_URL) {
 const PORT = process.env.PORT || 3000;
 
 // Middlewares Globais
+app.set('trust proxy', 1);
 app.use(helmet());
 
 const allowedOrigins = process.env.FRONTEND_URL
@@ -90,7 +91,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
 
 // Configuração de diretório de uploads
 import path from 'path';
@@ -156,14 +157,17 @@ app.use(errorHandler);
 const startServer = async () => {
   await connectDatabase();
   
-  // Inicializa a rotina de cancelamento automático de pedidos de PIX expirados (10 min)
-  setInterval(async () => {
-    try {
-      await OrderService.cancelUnpaidPixOrders(io);
-    } catch (err) {
-      logger.error('Erro na rotina de cancelamento automático de PIX:', err);
-    }
-  }, 60 * 1000); // Roda a cada 60 segundos
+  const shouldRunScheduler = process.env.RUN_SCHEDULER === 'true' || process.env.NODE_ENV !== 'production';
+  if (shouldRunScheduler) {
+    // Inicializa a rotina de cancelamento automático de pedidos de PIX expirados (10 min)
+    setInterval(async () => {
+      try {
+        await OrderService.cancelUnpaidPixOrders(io);
+      } catch (err) {
+        logger.error('Erro na rotina de cancelamento automático de PIX:', err);
+      }
+    }, 60 * 1000); // Roda a cada 60 segundos
+  }
 
   server.listen(PORT, () => {
     logger.info(`🚀 Server running on port ${PORT}`);

@@ -5,6 +5,86 @@ import { IAddress } from '../types';
 import logger from '../config/logger';
 import { formatCustomer } from './CustomerService';
 import { deliveryTimeoutQueue } from '../queues/deliveryQueue';
+import { createDeliveryResponseToken } from '../utils/deliveryResponseToken';
+import { businessConfig, isSupportedServiceArea } from '../config/business';
+
+type OrderActorRole = 'customer' | 'merchant' | 'deliverer' | 'admin';
+type OrderStatus =
+  | 'PENDING'
+  | 'PAID'
+  | 'ACCEPTED'
+  | 'PREPARING'
+  | 'READY'
+  | 'DISPATCHED'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'CANCELLED';
+
+const ONLINE_PAYMENT_METHODS = new Set(['PIX', 'Cartão']);
+
+const getApiPublicUrl = (): string => {
+  return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+};
+
+const buildDeliveryResponseUrl = (
+  orderId: string,
+  delivererId: string,
+  action: 'accept' | 'reject'
+): string => {
+  const token = createDeliveryResponseToken(orderId, delivererId, action);
+  return `${getApiPublicUrl()}/api/orders/${orderId}/delivery-response?delivererId=${delivererId}&action=${action}&token=${encodeURIComponent(token)}`;
+};
+
+const assertCanTransitionOrder = (order: any, nextStatus: OrderStatus, actorRole: OrderActorRole): void => {
+  const currentStatus = order.status as OrderStatus;
+
+  if (currentStatus === nextStatus) {
+    return;
+  }
+
+  if (currentStatus === 'CANCELLED' || currentStatus === 'DELIVERED') {
+    throw new Error('Este pedido já foi finalizado e não pode mudar de status.');
+  }
+
+  const canAcceptPending =
+    currentStatus === 'PENDING' &&
+    nextStatus === 'ACCEPTED' &&
+    actorRole === 'merchant' &&
+    (!ONLINE_PAYMENT_METHODS.has(order.paymentMethod) || order.paymentStatus === 'RECEIVED');
+
+  const allowedByRole: Record<OrderActorRole, Partial<Record<OrderStatus, OrderStatus[]>>> = {
+    customer: {
+      PENDING: ['CANCELLED'],
+      PAID: ['CANCELLED']
+    },
+    merchant: {
+      PENDING: ['CANCELLED'],
+      PAID: ['ACCEPTED', 'CANCELLED'],
+      ACCEPTED: ['PREPARING', 'READY', 'CANCELLED'],
+      PREPARING: ['READY', 'CANCELLED'],
+      READY: ['DISPATCHED', 'CANCELLED']
+    },
+    deliverer: {
+      READY: ['DISPATCHED'],
+      DISPATCHED: ['IN_TRANSIT'],
+      IN_TRANSIT: ['DELIVERED']
+    },
+    admin: {
+      PENDING: ['PAID', 'ACCEPTED', 'CANCELLED'],
+      PAID: ['ACCEPTED', 'CANCELLED'],
+      ACCEPTED: ['PREPARING', 'READY', 'CANCELLED'],
+      PREPARING: ['READY', 'CANCELLED'],
+      READY: ['DISPATCHED', 'CANCELLED'],
+      DISPATCHED: ['IN_TRANSIT', 'CANCELLED'],
+      IN_TRANSIT: ['DELIVERED', 'CANCELLED']
+    }
+  };
+
+  const allowedStatuses = allowedByRole[actorRole][currentStatus] || [];
+  if (!canAcceptPending && !allowedStatuses.includes(nextStatus)) {
+    throw new Error(`Transição de status inválida: ${currentStatus} -> ${nextStatus}`);
+  }
+};
 
 export const formatOrder = (order: any) => {
   if (!order) return null;
@@ -319,19 +399,26 @@ export class OrderService {
         });
       }
 
-      const subtotalWithDiscount = Math.max(0, subtotal - couponDiscount);
-      const commission = 0.0;
-      const deliveryFee = 5.00;
-      const total = subtotalWithDiscount + deliveryFee;
-
       const finalAddress = deliveryAddress || formatCustomer(customer)?.address;
       if (!finalAddress) {
         throw new Error('Endereço de entrega não definido.');
       }
+      if (!isSupportedServiceArea(finalAddress.city, finalAddress.state)) {
+        throw new Error(`No momento atendemos apenas ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
+      }
+      if (!isSupportedServiceArea(merchant.city, merchant.state)) {
+        throw new Error(`Esta loja está fora da área piloto ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
+      }
+
+      const subtotalWithDiscount = Math.max(0, subtotal - couponDiscount);
+      const commission = Number((subtotalWithDiscount * businessConfig.platformCommissionRate).toFixed(2));
+      const deliveryFee = businessConfig.platformDeliveryFee;
+      const total = subtotalWithDiscount + deliveryFee;
 
       let mpPaymentId = undefined;
       let pixQrCode = undefined;
       let pixCopyAndPaste = undefined;
+      let paymentConfirmedNow = false;
 
       const createdOrder = await tx.order.create({
         data: {
@@ -387,7 +474,7 @@ export class OrderService {
         }
       }
 
-      const applicationFee = commission + deliveryFee;
+      const applicationFee = deliveryFee + commission;
       const customerData = formatCustomer(customer)!;
 
       if (paymentMethod === 'PIX') {
@@ -437,13 +524,17 @@ export class OrderService {
           cancelled: 'CANCELLED'
         };
         const mpStatus = paymentStatusMap[cardPaymentResult.status] || 'PENDING';
+        if (mpStatus === 'REJECTED' || mpStatus === 'CANCELLED') {
+          throw new Error('Pagamento com cartão não aprovado. O pedido não foi criado.');
+        }
+        paymentConfirmedNow = mpStatus === 'RECEIVED';
 
         await tx.order.update({
           where: { id: createdOrder.id },
           data: {
             mpPaymentId,
             paymentStatus: mpStatus,
-            status: mpStatus === 'RECEIVED' ? 'ACCEPTED' : 'PENDING'
+            status: mpStatus === 'RECEIVED' ? 'PAID' : 'PENDING'
           }
         });
 
@@ -451,19 +542,35 @@ export class OrderService {
           await tx.orderStatusHistory.create({
             data: {
               orderId: createdOrder.id,
-              status: 'ACCEPTED'
+              status: 'PAID'
             }
           });
         }
       }
+
+      const notificationIds: string[] = [];
 
       const notificationId = await NotificationService.queueNotification({
         userId: customer.id,
         userType: 'Customer',
         type: 'WhatsApp',
         target: customer.phone,
-        content: `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do lojista!`
+        content: paymentMethod === 'PIX'
+          ? `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do pagamento PIX.`
+          : `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do lojista!`
       }, tx);
+      notificationIds.push(notificationId);
+
+      if (paymentMethod === 'Dinheiro' || paymentConfirmedNow) {
+        const merchantNotificationId = await NotificationService.queueNotification({
+          userId: merchant.id,
+          userType: 'Merchant',
+          type: 'WhatsApp',
+          target: merchant.phone,
+          content: `Novo pedido aguardando aceite.\n\nPedido: *${createdOrder.id}*\nCliente: *${customer.name}*\nPagamento: *${paymentMethod}*\nTotal: R$ ${total.toFixed(2)}\n\nAcesse o painel do lojista para aceitar ou cancelar.`
+        }, tx);
+        notificationIds.push(merchantNotificationId);
+      }
 
       const order = await tx.order.findUnique({
         where: { id: createdOrder.id },
@@ -481,11 +588,13 @@ export class OrderService {
         }
       });
 
-      return { order, notificationId };
+      return { order, notificationIds };
     });
 
     try {
-      await NotificationService.addJobToQueue(savedOrder.notificationId);
+      for (const notificationId of savedOrder.notificationIds) {
+        await NotificationService.addJobToQueue(notificationId);
+      }
     } catch (err) {
       console.error('Erro ao adicionar notificação pós-commit à fila:', err);
     }
@@ -493,14 +602,103 @@ export class OrderService {
     return formatOrder(savedOrder.order);
   }
 
+  public static async confirmPaymentApproved(orderId: string): Promise<any | null> {
+    const notificationsToQueue: string[] = [];
+
+    const savedOrder = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
+            }
+          }
+        }
+      });
+
+      if (!order) throw new Error('Order not found');
+      if (order.paymentStatus === 'RECEIVED' && order.status !== 'PENDING') {
+        return order;
+      }
+      if (order.status !== 'PENDING') {
+        return order;
+      }
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'RECEIVED',
+          status: 'PAID'
+        }
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: 'PAID'
+        }
+      });
+
+      const customerNotificationId = await NotificationService.queueNotification({
+        userId: order.customer.id,
+        userType: 'Customer',
+        type: 'WhatsApp',
+        target: order.customer.phone,
+        content: `Olá, *${order.customer.name}*! O pagamento do pedido nº *${order.id}* foi confirmado. Agora estamos aguardando o aceite de *${order.merchant.name}*.`
+      }, tx);
+      notificationsToQueue.push(customerNotificationId);
+
+      const merchantNotificationId = await NotificationService.queueNotification({
+        userId: order.merchant.id,
+        userType: 'Merchant',
+        type: 'WhatsApp',
+        target: order.merchant.phone,
+        content: `Novo pedido pago aguardando aceite.\n\nPedido: *${order.id}*\nCliente: *${order.customer.name}*\nTotal: R$ ${order.total.toFixed(2)}\n\nAcesse o painel do lojista para aceitar ou cancelar.`
+      }, tx);
+      notificationsToQueue.push(merchantNotificationId);
+
+      return await tx.order.findUnique({
+        where: { id: order.id },
+        include: {
+          customer: true,
+          merchant: true,
+          deliverer: true,
+          statusHistory: true,
+          items: {
+            include: {
+              options: true,
+              product: true
+            }
+          }
+        }
+      });
+    });
+
+    for (const nId of notificationsToQueue) {
+      try {
+        await NotificationService.addJobToQueue(nId);
+      } catch (err) {
+        console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+      }
+    }
+
+    return formatOrder(savedOrder);
+  }
+
   /**
    * Atualiza o status do pedido e mantém histórico
    */
   public static async updateStatus(
     orderId: string, 
-    status: any, 
+    status: OrderStatus, 
     actorId: string, 
-    actorRole: 'customer' | 'merchant' | 'deliverer'
+    actorRole: OrderActorRole
   ): Promise<any | null> {
     const notificationsToQueue: string[] = [];
 
@@ -519,6 +717,8 @@ export class OrderService {
       if (actorRole === 'deliverer' && order.delivererId !== actorId) {
         throw new Error('Unauthorized');
       }
+
+      assertCanTransitionOrder(order, status, actorRole);
 
       let delivererId = order.delivererId;
       let delivererStatus = order.delivererStatus;
@@ -623,7 +823,7 @@ export class OrderService {
             userType: 'Deliverer',
             type: 'WhatsApp',
             target: deliverer.phone,
-            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: http://localhost:3000/api/orders/${updatedOrder.id}/delivery-response?delivererId=${deliverer.id}&action=accept\nRecusar: http://localhost:3000/api/orders/${updatedOrder.id}/delivery-response?delivererId=${deliverer.id}&action=reject`
+            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: ${buildDeliveryResponseUrl(updatedOrder.id, deliverer.id, 'accept')}\nRecusar: ${buildDeliveryResponseUrl(updatedOrder.id, deliverer.id, 'reject')}`
           }, tx);
           notificationsToQueue.push(nId1);
 
@@ -689,12 +889,13 @@ export class OrderService {
     if (status === 'READY' && savedOrder.delivererId) {
       try {
         await deliveryTimeoutQueue.add(
+          'deliveryTimeout',
           { orderId: savedOrder.id, delivererId: savedOrder.delivererId },
           { delay: 5 * 60 * 1000 }
         );
         logger.info(`⏰ [Timeout Scheduled] Timeout de 5 minutos agendado para o pedido ${savedOrder.id} (Entregador: ${savedOrder.delivererId})`);
       } catch (err) {
-        logger.error('Erro ao agendar timeout de entrega na fila Bull:', err);
+        logger.error('Erro ao agendar timeout de entrega na fila BullMQ:', err);
       }
     }
 
@@ -789,18 +990,19 @@ export class OrderService {
 
     // 2. Contagem de pedidos pendentes
     const pendingOrders = await prisma.order.count({
-      where: { merchantId, status: 'PENDING' }
+      where: { merchantId, status: { in: ['PENDING', 'PAID'] } }
     });
 
     // 3. Agregações para pedidos concluídos (não PENDING e não CANCELLED)
     const aggregates = await prisma.order.aggregate({
       where: {
         merchantId,
-        status: { notIn: ['PENDING', 'CANCELLED'] }
+        status: { notIn: ['PENDING', 'PAID', 'CANCELLED'] }
       },
       _sum: {
         subtotal: true,
-        commission: true
+        commission: true,
+        deliveryFee: true
       },
       _count: {
         id: true
@@ -808,7 +1010,7 @@ export class OrderService {
     });
 
     const revenue = aggregates._sum.subtotal || 0;
-    const totalCommission = aggregates._sum.commission || 0;
+    const totalCommission = (aggregates._sum.commission || 0) + (aggregates._sum.deliveryFee || 0);
     const completedOrdersCount = aggregates._count.id || 0;
     const averageTicket = completedOrdersCount > 0 ? revenue / completedOrdersCount : 0;
 
@@ -817,7 +1019,7 @@ export class OrderService {
       by: ['paymentMethod'],
       where: {
         merchantId,
-        status: { notIn: ['PENDING', 'CANCELLED'] }
+        status: { notIn: ['PENDING', 'PAID', 'CANCELLED'] }
       },
       _sum: {
         subtotal: true
@@ -876,29 +1078,11 @@ export class OrderService {
               isPaidOnGateway = true;
               logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Mercado Pago (${mpStatus}). Processando confirmação.`);
               
-              // Atualiza o pedido como pago e ACCEPTED de forma transacional e segura
-              await prisma.$transaction(async (tx) => {
-                const currentOrder = await tx.order.findUnique({ where: { id: order.id } });
-                if (currentOrder && currentOrder.status === 'PENDING') {
-                  await tx.order.update({
-                    where: { id: order.id },
-                    data: {
-                      paymentStatus: 'RECEIVED',
-                      status: 'ACCEPTED'
-                    }
-                  });
-                  await tx.orderStatusHistory.create({
-                    data: {
-                      orderId: order.id,
-                      status: 'ACCEPTED'
-                    }
-                  });
-                }
-              });
+              await OrderService.confirmPaymentApproved(order.id);
 
               if (io) {
-                io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
-                io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
+                io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
+                io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
               }
             }
           } catch (err: any) {
@@ -1108,7 +1292,7 @@ export class OrderService {
           userType: 'Deliverer',
           type: 'WhatsApp',
           target: newDriver.phone,
-          content: `Olá, *${newDriver.name}*! O pedido nº *${orderId}* foi reatribuído a você. Coleta em: *${order.merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: http://localhost:3000/api/orders/${orderId}/delivery-response?delivererId=${newDriver.id}&action=accept\nRecusar: http://localhost:3000/api/orders/${orderId}/delivery-response?delivererId=${newDriver.id}&action=reject`
+          content: `Olá, *${newDriver.name}*! O pedido nº *${orderId}* foi reatribuído a você. Coleta em: *${order.merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: ${buildDeliveryResponseUrl(orderId, newDriver.id, 'accept')}\nRecusar: ${buildDeliveryResponseUrl(orderId, newDriver.id, 'reject')}`
         }, tx);
 
         return { updatedOrder, notificationId: nId };
@@ -1146,12 +1330,13 @@ export class OrderService {
       if (result.updatedOrder && result.updatedOrder.delivererId) {
         try {
           await deliveryTimeoutQueue.add(
+            'deliveryTimeout',
             { orderId: result.updatedOrder.id, delivererId: result.updatedOrder.delivererId },
             { delay: 5 * 60 * 1000 }
           );
           logger.info(`⏰ [Timeout Scheduled] Próximo timeout de 5 minutos agendado para o pedido ${result.updatedOrder.id} (Entregador: ${result.updatedOrder.delivererId})`);
         } catch (err) {
-          logger.error('Erro ao agendar timeout de entrega na fila Bull:', err);
+          logger.error('Erro ao agendar timeout de entrega na fila BullMQ:', err);
         }
       }
     }

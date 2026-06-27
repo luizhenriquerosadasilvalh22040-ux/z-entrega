@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
 import prisma from '../config/prisma';
+import { verifyDeliveryResponseToken } from '../utils/deliveryResponseToken';
 
 export class OrderController {
   public static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -240,9 +241,9 @@ export class OrderController {
   public static async handleDelivererResponse(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const { delivererId, action } = req.query;
+      const { delivererId, action, token } = req.query;
 
-      if (!delivererId || !action || (action !== 'accept' && action !== 'reject')) {
+      if (!delivererId || !action || !token || (action !== 'accept' && action !== 'reject')) {
         res.status(400).send(`
           <html>
             <head>
@@ -286,6 +287,62 @@ export class OrderController {
               <div class="card">
                 <h1>Solicitação Inválida</h1>
                 <p>Parâmetros obrigatórios ausentes ou incorretos na requisição.</p>
+              </div>
+            </body>
+          </html>
+        `);
+        return;
+      }
+
+      const isValidToken = verifyDeliveryResponseToken(
+        token as string,
+        id,
+        delivererId as string,
+        action as 'accept' | 'reject'
+      );
+
+      if (!isValidToken) {
+        res.status(403).send(`
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Link Expirado - Traz Pra Cá</title>
+              <style>
+                body {
+                  background: linear-gradient(135deg, #121214 0%, #1e1e24 100%);
+                  color: #e1e1e6;
+                  font-family: 'Outfit', 'Inter', sans-serif;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  height: 100vh;
+                  margin: 0;
+                }
+                .card {
+                  background: rgba(255, 255, 255, 0.05);
+                  border: 1px solid rgba(255, 255, 255, 0.1);
+                  border-radius: 16px;
+                  padding: 40px;
+                  max-width: 400px;
+                  text-align: center;
+                }
+                h1 {
+                  color: #f1c40f;
+                  font-size: 24px;
+                  margin-top: 0;
+                }
+                p {
+                  font-size: 16px;
+                  line-height: 1.6;
+                  color: #a8a8b3;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <h1>Link expirado ou inválido</h1>
+                <p>Essa solicitação não pode mais ser usada. Aguarde uma nova atribuição de entrega.</p>
               </div>
             </body>
           </html>
@@ -421,4 +478,3 @@ export class OrderController {
     }
   }
 }
-

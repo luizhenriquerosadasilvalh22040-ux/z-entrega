@@ -9,6 +9,16 @@ export interface IMercadoPagoPixResponse {
 }
 
 export class MercadoPagoService {
+  private static getApiPublicUrl(): string {
+    return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  private static getWebhookUrl(): string {
+    const baseUrl = `${this.getApiPublicUrl()}/api/payments/webhook/mercadopago`;
+    const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+    return secret ? `${baseUrl}?secret=${encodeURIComponent(secret)}` : baseUrl;
+  }
+
   private static getAccessToken(): string {
     const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
     if (!token && process.env.NODE_ENV === 'production') {
@@ -179,7 +189,7 @@ export class MercadoPagoService {
     value: number,
     mpCustomerId: string,
     merchantId: string,
-    applicationFee: number // Comissão da plataforma + taxa de entrega
+    applicationFee: number // Taxa fixa da plataforma retida no split.
   ): Promise<IMercadoPagoPixResponse> {
     logger.info(`💳 [Mercado Pago] Iniciando checkout Pix para o pedido #${orderId}. Valor: R$ ${value}, Split Plataforma: R$ ${applicationFee}`);
 
@@ -230,7 +240,7 @@ export class MercadoPagoService {
       },
       application_fee: Number(applicationFee.toFixed(2)),
       external_reference: orderId,
-      notification_url: `${process.env.FRONTEND_URL || 'https://z-entrega.vercel.app'}/api/payments/webhook/mercadopago`
+      notification_url: this.getWebhookUrl()
     };
 
     try {
@@ -320,7 +330,7 @@ export class MercadoPagoService {
       },
       application_fee: Number(applicationFee.toFixed(2)),
       external_reference: orderId,
-      notification_url: `${process.env.FRONTEND_URL || 'https://z-entrega.vercel.app'}/api/payments/webhook/mercadopago`
+      notification_url: this.getWebhookUrl()
     };
 
     try {

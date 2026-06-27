@@ -1,15 +1,35 @@
 import Redis from 'ioredis';
 import logger from './logger';
 
+const REDIS_URL = process.env.REDIS_URL;
 const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
 
-const redisConfig = {
+const parseRedisUrl = (url: string) => {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname,
+    port: Number(parsed.port || 6379),
+    username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+    password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+    tls: parsed.protocol === 'rediss:' ? {} : undefined,
+  };
+};
+
+const baseRedisConfig = {
+  maxRetriesPerRequest: null,
+  enableOfflineQueue: false,
+  connectTimeout: REDIS_URL ? 5000 : 2000,
+};
+
+const redisConnection = REDIS_URL ? parseRedisUrl(REDIS_URL) : {
   host: REDIS_HOST,
   port: REDIS_PORT,
-  maxRetriesPerRequest: null, // Requerido por Bull
-  enableOfflineQueue: false,  // Rejeita comandos imediatamente se estiver offline
-  connectTimeout: 2000,       // Timeout de 2s para conexões
+};
+
+const redisConfig = {
+  ...redisConnection,
+  ...baseRedisConfig,
 };
 
 export const redisClient = new Redis(redisConfig);
@@ -41,4 +61,3 @@ redisClient.on('error', (err) => {
 
 export const getRedisConnectionOptions = () => redisConfig;
 export default redisClient;
-

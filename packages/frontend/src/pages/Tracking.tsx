@@ -81,7 +81,8 @@ export const Tracking: React.FC = () => {
 
   // Helper para desenhar a timeline de status
   const statuses = [
-    { key: 'PENDING', label: 'Confirmado', desc: 'Aguardando aprovação do estabelecimento', icon: Clock },
+    { key: 'PENDING', label: 'Pedido criado', desc: 'Aguardando confirmação de pagamento ou aprovação', icon: Clock },
+    { key: 'PAID', label: 'Pagamento confirmado', desc: 'Aguardando aceite do estabelecimento', icon: CheckCircle2 },
     { key: 'ACCEPTED', label: 'Aceito', desc: 'Estabelecimento aceitou seu pedido', icon: CheckCircle2 },
     { key: 'PREPARING', label: 'Em Preparação', desc: 'Seu pedido está sendo preparado', icon: ChefHat },
     { key: 'READY', label: 'Pronto', desc: 'Seu pedido já está pronto para despacho', icon: Check },

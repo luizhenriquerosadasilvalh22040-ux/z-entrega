@@ -4,6 +4,24 @@ import { MercadoPagoService } from '../services/MercadoPagoService';
 import logger from '../config/logger';
 import prisma from '../config/prisma';
 
+const getWebhookSecret = (req: Request): string | undefined => {
+  const headerSecret = req.header('x-webhook-secret') || req.header('x-mercadopago-webhook-secret');
+  const querySecret = typeof req.query.secret === 'string' ? req.query.secret : undefined;
+  return headerSecret || querySecret;
+};
+
+const assertWebhookAuthorized = (req: Request): void => {
+  const expectedSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
+  if (!expectedSecret) return;
+
+  const receivedSecret = getWebhookSecret(req);
+  if (!receivedSecret || receivedSecret !== expectedSecret) {
+    const err: any = new Error('Webhook não autorizado.');
+    err.statusCode = 401;
+    throw err;
+  }
+};
+
 export class PaymentController {
   /**
    * Redireciona o lojista para a página de autorização do Mercado Pago
@@ -117,6 +135,8 @@ export class PaymentController {
    */
   public static async webhook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      assertWebhookAuthorized(req);
+
       const { type, action, data } = req.body;
 
       if (!data || !data.id) {
@@ -147,20 +167,13 @@ export class PaymentController {
         if (mpStatus === 'approved') {
           if (order.status === 'PENDING') {
             logger.info(`💳 [Mercado Pago Webhook] Confirmando pagamento do pedido ${order.id}...`);
-            
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { paymentStatus: 'RECEIVED' }
-            });
-
-            // Atualiza o status do pedido para ACCEPTED (Pago e aceito)
-            const updatedOrder = await OrderService.updateStatus(order.id, 'ACCEPTED', order.merchantId, 'merchant');
+            const updatedOrder = await OrderService.confirmPaymentApproved(order.id);
 
             // Notifica em tempo real via WebSocket
             const io = req.app.get('io');
             if (io) {
-              io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
-              io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'ACCEPTED' });
+              io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
+              io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
               io.to(`merchant:${order.merchantId}`).emit('newOrder', updatedOrder);
             }
             

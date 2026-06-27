@@ -31,6 +31,14 @@ logs/
 coverage/
 .nyc_output/
 
+# Runtime storage
+uploads/
+packages/backend/uploads/
+
+# Package caches
+.npm-cache/
+.pnpm-store/
+
 # IDE files
 .idea/
 .vscode/

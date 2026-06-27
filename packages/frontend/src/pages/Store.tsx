@@ -7,6 +7,8 @@ import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
 import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2 } from 'lucide-react';
 import { CheckoutCardForm } from '../components/CheckoutCardForm';
 
+const DELIVERY_FEE = Number(import.meta.env.VITE_DELIVERY_FEE || '5');
+
 interface IMerchant {
   _id: string;
   name: string;
@@ -398,7 +400,7 @@ export const Store: React.FC = () => {
   });
 
   const cartTotal = cart.reduce((total, item) => total + (getItemTotalPrice(item) * item.quantity), 0);
-  const deliveryFee = 5.00;
+  const deliveryFee = DELIVERY_FEE;
   
   const discountAmount = appliedCoupon
     ? appliedCoupon.discountType === 'PERCENTAGE'
@@ -1146,7 +1148,7 @@ export const Store: React.FC = () => {
             )}
             <div className="flex justify-between text-xs text-slate-500">
               <span>Taxa de Entrega:</span>
-              <span>R$ 5.00</span>
+              <span>R$ {deliveryFee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-slate-800 dark:text-white font-extrabold pt-2 border-t border-slate-50 dark:border-slate-800/60 mt-1">
               <span>Total Geral:</span>

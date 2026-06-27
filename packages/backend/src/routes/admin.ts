@@ -3,7 +3,7 @@ import { AdminController } from '../controllers/AdminController';
 import { authenticate, authorize } from '../middlewares/auth';
 
 import { createBullBoard } from '@bull-board/api';
-import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { notificationQueue } from '../services/NotificationService';
 import { deliveryTimeoutQueue } from '../queues/deliveryQueue';
@@ -19,8 +19,8 @@ serverAdapter.setBasePath('/api/admin/queues');
 
 createBullBoard({
   queues: [
-    new BullAdapter(notificationQueue),
-    new BullAdapter(deliveryTimeoutQueue)
+    new BullMQAdapter(notificationQueue),
+    new BullMQAdapter(deliveryTimeoutQueue)
   ],
   serverAdapter: serverAdapter
 });

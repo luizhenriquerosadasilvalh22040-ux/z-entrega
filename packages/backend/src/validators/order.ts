@@ -40,6 +40,7 @@ export const createOrderSchema = Joi.object({
 export const updateOrderStatusSchema = Joi.object({
   status: Joi.string().valid(
     'PENDING', 
+    'PAID',
     'ACCEPTED', 
     'PREPARING', 
     'READY', 

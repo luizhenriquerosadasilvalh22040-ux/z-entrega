@@ -4,6 +4,7 @@ import prisma from '../config/prisma';
 import { formatMerchant } from '../services/MerchantService';
 import { formatOrder } from '../services/OrderService';
 import { formatDeliverer } from '../services/DelivererService';
+import { businessConfig } from '../config/business';
 
 export class AdminController {
   /**
@@ -42,9 +43,7 @@ export class AdminController {
       // 3. Receita total e do dia
       const orders = await prisma.order.findMany({
         where: {
-          status: {
-            not: 'CANCELLED'
-          }
+          status: 'DELIVERED'
         }
       });
       const totalSales = orders.reduce((sum, order) => sum + Number(order.total), 0);
@@ -473,7 +472,7 @@ export class AdminController {
           vehicle: driver.vehicleType,
           plate: driver.licensePlate || '',
           completedDeliveries,
-          totalPay: completedDeliveries * 5.00
+          totalPay: completedDeliveries * businessConfig.delivererPayPerDelivery
         };
       });
 
