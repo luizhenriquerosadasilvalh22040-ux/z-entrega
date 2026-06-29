@@ -9,6 +9,22 @@ export interface IMercadoPagoPixResponse {
   qrCodeBase64: string;
 }
 
+export const buildMercadoPagoPixPayer = (
+  mpCustomerId: string | null | undefined,
+  customerEmail: string,
+  customerName: string
+) => {
+  if (mpCustomerId) {
+    return { id: mpCustomerId };
+  }
+
+  return {
+    email: customerEmail,
+    first_name: customerName.split(' ')[0] || 'Comprador',
+    last_name: customerName.split(' ').slice(1).join(' ') || 'Traz Pra Ca'
+  };
+};
+
 export class MercadoPagoService {
   private static getApiPublicUrl(): string {
     return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -245,11 +261,7 @@ export class MercadoPagoService {
       transaction_amount: value,
       description: `Pedido #${orderId.substring(0, 8)} - Traz Pra Ca`,
       payment_method_id: 'pix',
-      payer: {
-        email: customerEmail,
-        first_name: customerName.split(' ')[0] || 'Comprador',
-        last_name: customerName.split(' ').slice(1).join(' ') || 'Traz Pra Ca'
-      },
+      payer: buildMercadoPagoPixPayer(mpCustomerId, customerEmail, customerName),
       application_fee: Number(applicationFee.toFixed(2)),
       external_reference: orderId,
       notification_url: this.getWebhookUrl()

@@ -116,6 +116,8 @@ Pendencia observada:
 - Antes do teste ponta a ponta, revisar no painel do Mercado Pago se os dados de endereco/cadastro exigidos para cobranca sandbox estao completos.
 - Criacao de Pix usando e-mail de pagador diretamente retornou `Payer email forbidden`.
 - Para esta credencial sandbox, o caminho validado foi criar customer antes e usar `payer.id`.
+- Backend ajustado para montar pagamento Pix com `payer.id` quando `mpCustomerId` estiver disponivel.
+- Teste automatizado adicionado para garantir prioridade de `mpCustomerId` no Pix.
 
 Nao armazenado:
 
