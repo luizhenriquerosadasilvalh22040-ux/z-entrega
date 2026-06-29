@@ -102,11 +102,20 @@ Status: parcialmente validado.
 - Access token de teste validado contra a API oficial do Mercado Pago.
 - Resposta HTTP: 200.
 - Conta retornou como ativa no site `MLB`/Brasil.
+- Endpoint de metodos de pagamento validado.
+- Metodo Pix retornou como ativo.
+- Customer sandbox criado com sucesso.
+- Pagamento Pix sandbox criado com sucesso usando `customer_id`.
+- Consulta de status do pagamento Pix retornou com sucesso.
+- Status atual do Pix criado: `pending`.
+- Detalhe atual: `pending_waiting_transfer`.
 
 Pendencia observada:
 
 - A conta retornou pendencia `address_pending` em alguns blocos de permissao.
 - Antes do teste ponta a ponta, revisar no painel do Mercado Pago se os dados de endereco/cadastro exigidos para cobranca sandbox estao completos.
+- Criacao de Pix usando e-mail de pagador diretamente retornou `Payer email forbidden`.
+- Para esta credencial sandbox, o caminho validado foi criar customer antes e usar `payer.id`.
 
 Nao armazenado:
 
@@ -114,6 +123,10 @@ Nao armazenado:
 - Public key.
 - Usuario/senha do comprador de teste.
 - Codigo de verificacao.
+- QR Code Pix.
+- Pix copia e cola.
+- E-mail completo do customer sandbox.
+- Payment ID completo.
 
 ## Bloqueios para Bloco 1
 
