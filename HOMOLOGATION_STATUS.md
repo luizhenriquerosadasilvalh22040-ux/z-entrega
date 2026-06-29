@@ -37,7 +37,7 @@ Projeto identificado:
 - Regiao: `sa-east-1`
 - Status: `ACTIVE_HEALTHY`
 
-Estado encontrado:
+Estado encontrado inicialmente:
 
 - O banco possui tabelas antigas do dominio.
 - A tabela `_prisma_migrations` nao existe.
@@ -72,6 +72,29 @@ Recomendacao:
 - Para homologacao sem dados importantes, usar um banco limpo ou resetado.
 - Aplicar migrations pelo Prisma para criar `_prisma_migrations` corretamente.
 
+Atualizacao em 2026-06-29:
+
+- A conexao direta PostgreSQL foi validada.
+- O banco existente tinha dados de teste/piloto e nao foi resetado.
+- As migrations SQL incrementais foram aplicadas manualmente com Prisma `db execute`.
+- As migrations foram registradas no historico Prisma com `migrate resolve --applied`.
+- `prisma migrate status` retornou: `Database schema is up to date!`
+- `_prisma_migrations` agora existe.
+- As tabelas criticas agora existem:
+  - `audit_logs`
+  - `delivery_assignments`
+  - `payment_refunds`
+  - `payment_webhook_events`
+  - `whatsapp_templates`
+- Colunas criticas de status foram convertidas para enums PostgreSQL:
+  - `orders.status`
+  - `orders.payment_status`
+  - `orders.deliverer_status`
+  - `merchants.subscription_status`
+  - `deliverers.delivery_status`
+  - `notifications.status`
+  - `coupons.discountType`
+
 ## Mercado Pago sandbox
 
 Status: parcialmente validado.
@@ -96,8 +119,6 @@ Nao armazenado:
 
 Para iniciar homologacao real com servicos integrados, ainda falta:
 
-- `DATABASE_URL` direta do Supabase, com senha do banco.
-- Decisao sobre banco: reset/limpo ou alinhamento preservando tabelas existentes.
 - `REDIS_URL` real para worker/fila.
 - URL publica de API de homologacao.
 - URL publica de frontend de homologacao.
@@ -114,12 +135,10 @@ Para iniciar homologacao real com servicos integrados, ainda falta:
 
 Executar o Bloco 1 em ordem:
 
-1. Decidir se o Supabase `z-entrega` pode ser resetado/limpo para homologacao.
-2. Obter a `DATABASE_URL` direta do Supabase.
-3. Rodar `prisma migrate deploy`.
-4. Validar existencia das tabelas novas.
-5. Rodar seed/admin inicial, se necessario.
-6. Configurar Redis e separar API/worker.
-7. Configurar Mercado Pago sandbox nas envs.
-8. Configurar WhatsApp Cloud API.
-9. Executar pedido ponta a ponta com 1 lojista, 1 cliente e 1 motoboy.
+1. Conferir se o admin, lojistas, produtos e motoboys existentes devem ser usados no teste piloto.
+2. Configurar Redis e separar API/worker.
+3. Configurar ambiente publico de API homologacao.
+4. Configurar ambiente publico de frontend homologacao.
+5. Configurar Mercado Pago sandbox nas envs.
+6. Configurar WhatsApp Cloud API.
+7. Executar pedido ponta a ponta com 1 lojista, 1 cliente e 1 motoboy.

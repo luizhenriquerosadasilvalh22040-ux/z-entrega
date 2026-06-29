@@ -16,7 +16,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "payment_refunds_provider_refund_id_key"
 
 CREATE UNIQUE INDEX IF NOT EXISTS "payment_refunds_one_pending_per_payment_idx"
   ON "payment_refunds"("provider", "payment_id")
-  WHERE "status" = 'PENDING';
+  WHERE "status" = 'PENDING'::"PaymentRefundStatus";
 
 CREATE INDEX IF NOT EXISTS "delivery_assignments_order_id_status_created_at_idx"
   ON "delivery_assignments"("order_id", "status", "created_at");

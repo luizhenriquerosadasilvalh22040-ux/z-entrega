@@ -64,6 +64,10 @@ ALTER TABLE "deliverers"
   ALTER COLUMN "delivery_status" SET DEFAULT 'AVAILABLE';
 
 ALTER TABLE "orders"
+  DROP CONSTRAINT IF EXISTS "orders_status_check",
+  DROP CONSTRAINT IF EXISTS "orders_payment_status_check";
+
+ALTER TABLE "orders"
   ALTER COLUMN "status" DROP DEFAULT,
   ALTER COLUMN "status" TYPE "OrderStatus" USING "status"::"OrderStatus",
   ALTER COLUMN "status" SET DEFAULT 'PENDING',
@@ -230,7 +234,7 @@ CREATE INDEX IF NOT EXISTS "coupons_merchant_id_is_active_expiration_date_idx" O
 -- Constraints that encode invariants relied on by order/payment/delivery services.
 CREATE UNIQUE INDEX IF NOT EXISTS "delivery_assignments_one_pending_per_order_idx"
   ON "delivery_assignments"("order_id")
-  WHERE "status" = 'PENDING';
+  WHERE "status" = 'PENDING'::"DeliveryAssignmentStatus";
 
 DO $$ BEGIN
   ALTER TABLE "products" ADD CONSTRAINT "products_stock_quantity_non_negative_chk"
