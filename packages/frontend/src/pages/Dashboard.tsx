@@ -6,7 +6,7 @@ import {
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
   AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
   Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike, Sparkles,
-  CheckCircle2, ChefHat, Search, Truck, XCircle, MessageSquare
+  CheckCircle2, ChefHat, Search, Truck, XCircle, MessageSquare, Copy
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
@@ -154,6 +154,7 @@ export const Dashboard: React.FC = () => {
   const pendingOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'PAID');
   const waitingPaymentOrders = pendingOrders.filter((order) => order.status === 'PENDING' && ['PIX', 'Cartão'].includes(order.paymentMethod));
   const actionableNewOrders = pendingOrders.filter((order) => order.status === 'PAID' || !['PIX', 'Cartão'].includes(order.paymentMethod));
+  const publicStoreLink = user?._id ? `${window.location.origin}/store/${user._id}` : '';
 
   // Controle de áudio do alarme
   useEffect(() => {
@@ -478,6 +479,17 @@ export const Dashboard: React.FC = () => {
       }
     } catch (err) {
       setToast({ message: 'Erro ao alterar o status de funcionamento', type: 'error' });
+    }
+  };
+
+  const handleCopyPublicStoreLink = async () => {
+    if (!publicStoreLink) return;
+
+    try {
+      await navigator.clipboard.writeText(publicStoreLink);
+      setToast({ message: 'Link copiado com sucesso.', type: 'success' });
+    } catch (err) {
+      setToast({ message: 'Erro ao copiar link da loja', type: 'error' });
     }
   };
 
@@ -1213,6 +1225,29 @@ export const Dashboard: React.FC = () => {
           {/* TAB: SETTINGS */}
           {activeTab === 'settings' && (
             <>
+              <Card className="max-w-2xl mx-auto mb-6 space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <MessageSquare size={20} className="text-energy" /> Divulgar minha loja
+                  </h3>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+                    <span className="block truncate">{publicStoreLink}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCopyPublicStoreLink}
+                    className="flex items-center gap-2"
+                  >
+                    <Copy size={16} />
+                    Copiar link
+                  </Button>
+                </div>
+              </Card>
+
               <Card className="max-w-2xl mx-auto space-y-6">
               <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Settings size={20} className="text-energy" /> Detalhes do Estabelecimento
