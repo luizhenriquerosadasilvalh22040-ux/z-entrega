@@ -41,7 +41,12 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (identifier: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
-  requestOtp: (phone: string, name?: string, address?: any) => Promise<{ isNewUser: boolean; isMock?: boolean }>;
+  requestOtp: (
+    phone: string,
+    name?: string,
+    address?: any,
+    privacy?: { termsAccepted?: boolean; privacyAccepted?: boolean; marketingConsent?: boolean }
+  ) => Promise<{ isNewUser: boolean; isMock?: boolean }>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -97,11 +102,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  requestOtp: async (phone, name, address) => {
+  requestOtp: async (phone, name, address, privacy) => {
     set({ isLoading: true, error: null });
     try {
       const cleanPhone = phone.replace(/\D/g, '');
-      const res = await apiClient.post('/auth/customer/request-otp', { phone: cleanPhone, name, address });
+      const res = await apiClient.post('/auth/customer/request-otp', {
+        phone: cleanPhone,
+        name,
+        address,
+        termsAccepted: privacy?.termsAccepted,
+        privacyAccepted: privacy?.privacyAccepted,
+        marketingConsent: privacy?.marketingConsent
+      });
       set({ isLoading: false });
       return res.data.data;
     } catch (error: any) {

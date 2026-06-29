@@ -5,7 +5,7 @@ import { Button, Card, Badge, Input, Toast, Modal } from '../components/ui';
 import { 
   DollarSign, Users, Store, Bike, Plus, Trash2, Check, X, 
   Settings, UserPlus, ShieldCheck, TrendingUp, AlertCircle, ClipboardList,
-  RefreshCw, Eye, MessageSquare, Image
+  RefreshCw, Eye, MessageSquare, Image, AlertTriangle, Clock, Send
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -43,6 +43,9 @@ interface IMerchant {
   isVerified: boolean;
   isActive: boolean;
   subscriptionPrice?: number;
+  subscriptionStatus?: 'INACTIVE' | 'PENDING' | 'ACTIVE' | 'PAUSED' | 'CANCELLED' | 'FAILED';
+  isPubliclyVisible?: boolean;
+  publicationBlockReason?: string;
 }
 
 interface IBanner {
@@ -66,6 +69,65 @@ interface ICoupon {
   merchant?: { name: string };
 }
 
+interface IWhatsAppTemplate {
+  key: string;
+  label: string;
+  description: string;
+  variables: string[];
+  defaultBody: string;
+  body: string;
+  isActive: boolean;
+  locale: string;
+  updatedAt?: string;
+}
+
+type OperationalSeverity = 'critical' | 'high' | 'medium' | 'info';
+
+interface IOperationalIssue {
+  id: string;
+  severity?: OperationalSeverity;
+  ageMinutes?: number;
+  recommendedAction?: string;
+  [key: string]: any;
+}
+
+interface IOperationalEvent {
+  id: string;
+  action: string;
+  label: string;
+  severity: OperationalSeverity;
+  actorType: string;
+  entityType: string;
+  entityId?: string;
+  orderId?: string;
+  merchantId?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+interface IOperationalIssues {
+  issues: {
+    failedRefunds: IOperationalIssue[];
+    stalePendingRefunds: IOperationalIssue[];
+    failedNotifications: IOperationalIssue[];
+    ordersWithoutDeliverer: IOperationalIssue[];
+    deliveriesAwaitingResponse: IOperationalIssue[];
+    stalePendingPayments: IOperationalIssue[];
+    paidOrdersAwaitingMerchant: IOperationalIssue[];
+    failedPaymentWebhooks: IOperationalIssue[];
+    inactiveSubscriptionMerchants: IOperationalIssue[];
+  };
+  counts: Record<string, number>;
+  summary?: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    lastCheckedAt: string;
+  };
+  recentEvents?: IOperationalEvent[];
+}
+
 export const AdminDashboard: React.FC = () => {
   const { user, role, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
@@ -74,8 +136,12 @@ export const AdminDashboard: React.FC = () => {
   const [deliverers, setDeliverers] = useState<IDeliverer[]>([]);
   const [merchants, setMerchants] = useState<IMerchant[]>([]);
   const [defaultPrice, setDefaultPrice] = useState<number>(150);
-  const [activeTab, setActiveTab] = useState<'merchants' | 'deliverers' | 'orders_monitor' | 'deliverers_closing' | 'banners' | 'coupons'>('merchants');
+  const [activeTab, setActiveTab] = useState<'merchants' | 'deliverers' | 'orders_monitor' | 'operational' | 'whatsapp_templates' | 'deliverers_closing' | 'banners' | 'coupons'>('merchants');
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
+  const [operationalIssues, setOperationalIssues] = useState<IOperationalIssues | null>(null);
+  const [runningReconciliation, setRunningReconciliation] = useState(false);
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState<IWhatsAppTemplate[]>([]);
+  const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null);
   const [dailyReport, setDailyReport] = useState<any[]>([]);
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<any | null>(null);
   const [refreshingOrders, setRefreshingOrders] = useState(false);
@@ -188,6 +254,16 @@ export const AdminDashboard: React.FC = () => {
         setActiveOrders(activeOrdersRes.data.data.orders);
       }
 
+      const operationalRes = await apiClient.get('/admin/operational-issues');
+      if (operationalRes.data?.status === 'success') {
+        setOperationalIssues(operationalRes.data.data);
+      }
+
+      const templatesRes = await apiClient.get('/admin/whatsapp-templates');
+      if (templatesRes.data?.status === 'success') {
+        setWhatsAppTemplates(templatesRes.data.data.templates);
+      }
+
       const dailyReportRes = await apiClient.get('/admin/deliverers/daily-report');
       if (dailyReportRes.data?.status === 'success') {
         setDailyReport(dailyReportRes.data.data.report);
@@ -197,6 +273,102 @@ export const AdminDashboard: React.FC = () => {
       setToast({ message: 'Erro ao carregar dados do administrador', type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshOperationalIssues = async () => {
+    try {
+      const operationalRes = await apiClient.get('/admin/operational-issues');
+      if (operationalRes.data?.status === 'success') {
+        setOperationalIssues(operationalRes.data.data);
+      }
+    } catch (err) {
+      setToast({ message: 'Erro ao atualizar incidentes operacionais', type: 'error' });
+    }
+  };
+
+  const handleRequeueNotification = async (id: string) => {
+    try {
+      await apiClient.post(`/admin/notifications/${id}/requeue`);
+      setToast({ message: 'Notificação reenfileirada.', type: 'success' });
+      await handleRefreshOperationalIssues();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erro ao reenfileirar notificação', type: 'error' });
+    }
+  };
+
+  const handleRetryRefund = async (id: string) => {
+    try {
+      await apiClient.post(`/admin/refunds/${id}/retry`);
+      setToast({ message: 'Refund reenviado para processamento.', type: 'success' });
+      await handleRefreshOperationalIssues();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erro ao retentar refund', type: 'error' });
+    }
+  };
+
+  const handleDispatchReadyOrder = async (id: string) => {
+    try {
+      await apiClient.post(`/admin/orders/${id}/dispatch-ready`);
+      setToast({ message: 'Pedido enviado para motoboy disponível.', type: 'success' });
+      await handleRefreshOperationalIssues();
+      await handleRefreshOrders();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erro ao despachar pedido', type: 'error' });
+    }
+  };
+
+  const handleRunOperationalReconciliation = async () => {
+    try {
+      setRunningReconciliation(true);
+      const res = await apiClient.post('/admin/operational-reconciliation/run');
+      const data = res.data?.data;
+      const checked = Number(data?.pendingPayments?.checked || 0) +
+        Number(data?.failedWebhooks?.checked || 0) +
+        Number(data?.pendingRefunds?.checked || 0);
+      const updated = Number(data?.pendingPayments?.updated || 0) +
+        Number(data?.failedWebhooks?.updated || 0) +
+        Number(data?.pendingRefunds?.updated || 0);
+      setToast({ message: `Reconciliação concluída: ${checked} verificados, ${updated} atualizados.`, type: 'success' });
+      await handleRefreshOperationalIssues();
+      await handleRefreshOrders();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erro ao executar reconciliação operacional', type: 'error' });
+    } finally {
+      setRunningReconciliation(false);
+    }
+  };
+
+  const handleTemplateBodyChange = (key: string, body: string) => {
+    setWhatsAppTemplates(prev => prev.map(template => (
+      template.key === key ? { ...template, body } : template
+    )));
+  };
+
+  const handleTemplateActiveChange = (key: string, isActive: boolean) => {
+    setWhatsAppTemplates(prev => prev.map(template => (
+      template.key === key ? { ...template, isActive } : template
+    )));
+  };
+
+  const handleSaveWhatsAppTemplate = async (template: IWhatsAppTemplate) => {
+    try {
+      setSavingTemplateKey(template.key);
+      const res = await apiClient.put(`/admin/whatsapp-templates/${template.key}`, {
+        body: template.body,
+        isActive: template.isActive,
+        locale: template.locale || 'pt-BR'
+      });
+      if (res.data?.status === 'success') {
+        setWhatsAppTemplates(prev => prev.map(item => (
+          item.key === template.key ? res.data.data.template : item
+        )));
+        setToast({ message: 'Template de WhatsApp salvo.', type: 'success' });
+      }
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erro ao salvar template de WhatsApp', type: 'error' });
+    } finally {
+      setSavingTemplateKey(null);
     }
   };
 
@@ -278,6 +450,118 @@ export const AdminDashboard: React.FC = () => {
     if (addr.complement) text += `, ${addr.complement}`;
     if (addr.referencePoint) text += ` (Ref: ${addr.referencePoint})`;
     return text;
+  };
+
+  const formatIssueAge = (minutes?: number) => {
+    if (minutes === undefined || minutes === null) return 'tempo não informado';
+    if (minutes < 1) return 'agora';
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}min` : `${hours}h`;
+  };
+
+  const formatDateTime = (value?: string | Date | null) => {
+    if (!value) return 'sem prazo';
+    return new Date(value).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getDeliveryAssignmentStatusLabel = (status?: string | null) => {
+    const labels: Record<string, string> = {
+      PENDING: 'aguardando resposta',
+      ACCEPTED: 'aceito',
+      REJECTED: 'recusado',
+      TIMED_OUT: 'tempo esgotado',
+      CANCELLED: 'cancelado'
+    };
+    return status ? labels[status] || status : 'sem tentativa';
+  };
+
+  const getSeverityUi = (severity?: OperationalSeverity) => {
+    const map = {
+      critical: {
+        label: 'Crítico',
+        badge: 'red' as const,
+        border: 'border-l-red-500',
+        icon: AlertTriangle,
+        tone: 'text-red-500'
+      },
+      high: {
+        label: 'Alta',
+        badge: 'orange' as const,
+        border: 'border-l-orange-500',
+        icon: AlertCircle,
+        tone: 'text-orange-500'
+      },
+      medium: {
+        label: 'Média',
+        badge: 'blue' as const,
+        border: 'border-l-blue-500',
+        icon: Clock,
+        tone: 'text-blue-500'
+      },
+      info: {
+        label: 'Info',
+        badge: 'gray' as const,
+        border: 'border-l-slate-300 dark:border-l-slate-700',
+        icon: ClipboardList,
+        tone: 'text-slate-500'
+      }
+    };
+    return map[severity || 'medium'];
+  };
+
+  const formatEventMetadata = (metadata?: Record<string, any>) => {
+    const entries = Object.entries(metadata || {});
+    if (entries.length === 0) return null;
+    return entries
+      .slice(0, 4)
+      .map(([key, value]) => `${key}: ${String(value)}`)
+      .join(' · ');
+  };
+
+  const operationalTotal = operationalIssues
+    ? Object.values(operationalIssues.counts).reduce((sum, count) => sum + count, 0)
+    : 0;
+
+  const renderIssueMeta = (issue: IOperationalIssue) => {
+    const severityUi = getSeverityUi(issue.severity);
+    const SeverityIcon = severityUi.icon;
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Badge variant={severityUi.badge}>
+          <SeverityIcon size={12} className="mr-1" />
+          {severityUi.label}
+        </Badge>
+        <Badge variant="gray">
+          <Clock size={12} className="mr-1" />
+          parado há {formatIssueAge(issue.ageMinutes)}
+        </Badge>
+      </div>
+    );
+  };
+
+  const renderRecommendedAction = (issue: IOperationalIssue) => (
+    <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      {issue.recommendedAction || 'Verificar manualmente antes de executar nova ação operacional.'}
+    </p>
+  );
+
+  const getSubscriptionStatusUi = (status?: IMerchant['subscriptionStatus']) => {
+    const map = {
+      ACTIVE: { label: 'Assinatura ativa', variant: 'green' as const },
+      PENDING: { label: 'Assinatura pendente', variant: 'orange' as const },
+      PAUSED: { label: 'Assinatura pausada', variant: 'orange' as const },
+      CANCELLED: { label: 'Assinatura cancelada', variant: 'red' as const },
+      FAILED: { label: 'Pagamento falhou', variant: 'red' as const },
+      INACTIVE: { label: 'Sem assinatura', variant: 'gray' as const }
+    };
+    return map[status || 'INACTIVE'];
   };
 
   // Atualizar Preço Padrão da Assinatura
@@ -454,7 +738,7 @@ export const AdminDashboard: React.FC = () => {
             <TrendingUp size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-450 dark:text-slate-500 font-semibold uppercase">Volume de Vendas</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Volume de Vendas</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               R$ {stats?.totalSales.toFixed(2)}
             </p>
@@ -466,7 +750,7 @@ export const AdminDashboard: React.FC = () => {
             <ClipboardList size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-455 dark:text-slate-500 font-semibold uppercase">Pedidos de Hoje</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Pedidos de Hoje</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               {stats?.dailyOrdersVolume} <span className="text-xs font-normal text-slate-400">pedidos</span>
             </p>
@@ -478,7 +762,7 @@ export const AdminDashboard: React.FC = () => {
             <Bike size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-455 dark:text-slate-500 font-semibold uppercase">Entregadores Escalados</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Entregadores Escalados</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               {stats?.activeDeliverersToday} <span className="text-xs font-normal text-slate-400">/ {stats?.totalDeliverers}</span>
             </p>
@@ -490,7 +774,7 @@ export const AdminDashboard: React.FC = () => {
             <Store size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-455 dark:text-slate-500 font-semibold uppercase">Lojistas Ativos</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Lojistas Ativos</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               {stats?.verifiedMerchants} <span className="text-xs font-normal text-slate-400">/ {stats?.totalMerchants}</span>
             </p>
@@ -498,11 +782,11 @@ export const AdminDashboard: React.FC = () => {
         </Card>
 
         <Card className="flex items-center gap-4 p-5">
-          <div className="p-3 bg-amber-500/10 text-amber-550 rounded-2xl">
+          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl">
             <DollarSign size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-455 dark:text-slate-500 font-semibold uppercase">Mensalidade Padrão</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Mensalidade Padrão</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               R$ {stats?.defaultSubscriptionPrice.toFixed(2)}
             </p>
@@ -517,7 +801,7 @@ export const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'merchants'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <Store size={16} />
@@ -528,7 +812,7 @@ export const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'deliverers'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <Bike size={16} />
@@ -539,18 +823,45 @@ export const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'orders_monitor'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <ClipboardList size={16} />
           Monitor de Pedidos
         </button>
         <button
+          onClick={() => setActiveTab('operational')}
+          className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'operational'
+              ? 'border-energy text-energy font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <AlertCircle size={16} />
+          Incidentes
+          {operationalTotal > 0 && (
+            <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] flex items-center justify-center">
+              {operationalTotal}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('whatsapp_templates')}
+          className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'whatsapp_templates'
+              ? 'border-energy text-energy font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <MessageSquare size={16} />
+          Templates WhatsApp
+        </button>
+        <button
           onClick={() => setActiveTab('deliverers_closing')}
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'deliverers_closing'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <DollarSign size={16} />
@@ -561,7 +872,7 @@ export const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'banners'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <Image size={16} />
@@ -572,7 +883,7 @@ export const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 py-3.5 px-5 font-bold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
             activeTab === 'coupons'
               ? 'border-energy text-energy font-black'
-              : 'border-transparent text-slate-500 hover:text-slate-850 dark:text-slate-400 dark:hover:text-slate-200'
+              : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           <DollarSign size={16} />
@@ -589,7 +900,7 @@ export const AdminDashboard: React.FC = () => {
               <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Settings size={20} className="text-energy" /> Assinaturas Globais
               </h2>
-              <p className="text-xs text-slate-450 dark:text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Defina o preço padrão mensal cobrado de todos os lojistas ativos no sistema. Preços personalizados podem ser definidos por loja.
               </p>
 
@@ -614,12 +925,13 @@ export const AdminDashboard: React.FC = () => {
               <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
                       <tr>
                         <th className="p-4">Lojista</th>
                         <th className="p-4">Categoria / CNPJ</th>
                         <th className="p-4">Telefone</th>
                         <th className="p-4">Aprovação / Status</th>
+                        <th className="p-4">Publicação</th>
                         <th className="p-4">Mensalidade</th>
                         <th className="p-4 text-center">Ações</th>
                       </tr>
@@ -627,15 +939,17 @@ export const AdminDashboard: React.FC = () => {
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {merchants.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-400">
+                          <td colSpan={7} className="p-8 text-center text-slate-400">
                             Nenhum lojista cadastrado.
                           </td>
                         </tr>
                       ) : (
-                        merchants.map((merchant) => (
-                          <tr key={merchant._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                        merchants.map((merchant) => {
+                          const subscriptionUi = getSubscriptionStatusUi(merchant.subscriptionStatus);
+                          return (
+                          <tr key={merchant._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                             <td className="p-4">
-                              <p className="font-bold text-slate-850 dark:text-white">{merchant.name}</p>
+                              <p className="font-bold text-slate-900 dark:text-white">{merchant.name}</p>
                               <p className="text-xs text-slate-400">{merchant.email}</p>
                             </td>
                             <td className="p-4">
@@ -653,7 +967,20 @@ export const AdminDashboard: React.FC = () => {
                               </span>
                             </td>
                             <td className="p-4">
-                              <p className="font-semibold text-slate-850 dark:text-white">
+                              <div className="flex flex-col items-start gap-1.5">
+                                <Badge variant={merchant.isPubliclyVisible ? 'green' : 'red'}>
+                                  {merchant.isPubliclyVisible ? 'Publicada' : 'Bloqueada'}
+                                </Badge>
+                                <Badge variant={subscriptionUi.variant}>{subscriptionUi.label}</Badge>
+                                {!merchant.isPubliclyVisible && merchant.publicationBlockReason && (
+                                  <span className="max-w-[180px] text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                                    {merchant.publicationBlockReason}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <p className="font-semibold text-slate-900 dark:text-white">
                                 R$ {(merchant.subscriptionPrice ?? defaultPrice).toFixed(2)}
                               </p>
                               {merchant.subscriptionPrice !== undefined && (
@@ -679,7 +1006,7 @@ export const AdminDashboard: React.FC = () => {
                                     setEditingMerchant(merchant);
                                     setCustomSubPrice(merchant.subscriptionPrice?.toString() ?? '');
                                   }}
-                                  className="text-xs font-semibold px-2 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-605 dark:text-slate-300"
+                                  className="text-xs font-semibold px-2 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300"
                                   aria-label={`Definir preço de mensalidade customizado para ${merchant.name}`}
                                 >
                                   Preço
@@ -687,7 +1014,8 @@ export const AdminDashboard: React.FC = () => {
                               </div>
                             </td>
                           </tr>
-                        ))
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -701,7 +1029,7 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'deliverers' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Bike size={22} className="text-energy" /> Escala de Motoboys do Dia
               </h2>
               <Button size="sm" onClick={() => setIsAddDriverOpen(true)} className="flex items-center gap-1.5">
@@ -712,7 +1040,7 @@ export const AdminDashboard: React.FC = () => {
             <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th className="p-4">Nome</th>
                       <th className="p-4">Veículo / Placa</th>
@@ -730,9 +1058,9 @@ export const AdminDashboard: React.FC = () => {
                       </tr>
                     ) : (
                       deliverers.map((driver) => (
-                        <tr key={driver._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                        <tr key={driver._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                           <td className="p-4">
-                            <p className="font-bold text-slate-850 dark:text-white">{driver.name}</p>
+                            <p className="font-bold text-slate-900 dark:text-white">{driver.name}</p>
                             <p className="text-xs text-slate-400">{driver.email}</p>
                           </td>
                           <td className="p-4">
@@ -780,7 +1108,7 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'orders_monitor' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <ClipboardList size={22} className="text-energy" /> Monitor de Pedidos do Dia
               </h2>
               <Button 
@@ -798,7 +1126,7 @@ export const AdminDashboard: React.FC = () => {
             <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th className="p-4">Pedido / Hora</th>
                       <th className="p-4">Lojista</th>
@@ -836,7 +1164,7 @@ export const AdminDashboard: React.FC = () => {
                         };
 
                         return (
-                          <tr key={order._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                          <tr key={order._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                             <td className="p-4">
                               <span className="font-bold text-slate-800 dark:text-white block">
                                 #{order._id.substring(order._id.length - 6).toUpperCase()}
@@ -845,18 +1173,18 @@ export const AdminDashboard: React.FC = () => {
                                 {new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </td>
-                            <td className="p-4 font-bold text-slate-850 dark:text-white">
+                            <td className="p-4 font-bold text-slate-900 dark:text-white">
                               {order.merchantId?.name || 'Lojista Excluído'}
                             </td>
                             <td className="p-4">
-                              <span className="font-semibold text-slate-850 dark:text-white block">
+                              <span className="font-semibold text-slate-900 dark:text-white block">
                                 {order.customerId?.name || 'Cliente'}
                               </span>
                               <span className="text-xs text-slate-400 block">
                                 {order.customerId?.phone}
                               </span>
                             </td>
-                            <td className="p-4 max-w-xs truncate text-xs text-slate-650 dark:text-slate-350">
+                            <td className="p-4 max-w-xs truncate text-xs text-slate-600 dark:text-slate-350">
                               {formatAddress(order.deliveryAddress)}
                             </td>
                             <td className="p-4 font-black text-energy">
@@ -902,11 +1230,442 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* Tab: Operational issues */}
+        {activeTab === 'operational' && (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <AlertCircle size={22} className="text-red-500" /> Incidentes Operacionais
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Priorize falhas que travam dinheiro, preparo, WhatsApp e entrega.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRefreshOperationalIssues}
+                className="flex items-center gap-1.5"
+              >
+                <RefreshCw size={14} />
+                Atualizar
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleRunOperationalReconciliation}
+                disabled={runningReconciliation}
+                className="flex items-center gap-1.5"
+              >
+                <ShieldCheck size={14} />
+                {runningReconciliation ? 'Reconciliando...' : 'Reconciliar'}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {[
+                ['Total aberto', operationalIssues?.summary?.total ?? operationalTotal, 'text-slate-900 dark:text-white'],
+                ['Crítico', operationalIssues?.summary?.critical || 0, 'text-red-500'],
+                ['Alta prioridade', operationalIssues?.summary?.high || 0, 'text-orange-500'],
+                ['Média prioridade', operationalIssues?.summary?.medium || 0, 'text-blue-500']
+              ].map(([label, count, color]) => (
+                <Card key={label} className="p-4">
+                  <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-500">{label}</p>
+                  <p className={`text-2xl font-black mt-1 ${color}`}>
+                    {count}
+                  </p>
+                </Card>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+              {[
+                ['Refund falhou', operationalIssues?.counts.failedRefunds || 0],
+                ['Refund pendente', operationalIssues?.counts.stalePendingRefunds || 0],
+                ['WhatsApp falhou', operationalIssues?.counts.failedNotifications || 0],
+                ['Sem motoboy', operationalIssues?.counts.ordersWithoutDeliverer || 0],
+                ['Motoboy sem resposta', operationalIssues?.counts.deliveriesAwaitingResponse || 0],
+                ['Pagamento pendente', operationalIssues?.counts.stalePendingPayments || 0],
+                ['Webhook falhou', operationalIssues?.counts.failedPaymentWebhooks || 0],
+                ['Pago sem aceite', operationalIssues?.counts.paidOrdersAwaitingMerchant || 0],
+                ['Assinatura inativa', operationalIssues?.counts.inactiveSubscriptionMerchants || 0]
+              ].map(([label, count]) => (
+                <div key={label} className="rounded-2xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-500">{label}</p>
+                  <p className={`text-xl font-black mt-1 ${Number(count) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                    {count}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <Card className="p-0 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <ClipboardList size={18} className="text-slate-600 dark:text-slate-300" /> Linha do tempo operacional
+                </h3>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {(operationalIssues?.recentEvents || []).length === 0 ? (
+                  <p className="p-4 text-sm text-slate-400">Nenhum evento operacional recente.</p>
+                ) : (
+                  (operationalIssues?.recentEvents || []).slice(0, 12).map((event) => {
+                    const severityUi = getSeverityUi(event.severity);
+                    const SeverityIcon = severityUi.icon;
+                    const metadataText = formatEventMetadata(event.metadata);
+                    return (
+                      <div key={event.id} className={`p-4 border-l-4 ${severityUi.border}`}>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-bold text-sm text-slate-900 dark:text-white">
+                              {event.label}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {event.actorType} · {event.entityType}
+                              {event.orderId ? ` · pedido #${event.orderId.slice(-6).toUpperCase()}` : ''}
+                            </p>
+                            {metadataText && (
+                              <p className="mt-1 text-xs text-slate-500 line-clamp-1">{metadataText}</p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            <Badge variant={severityUi.badge}>
+                              <SeverityIcon size={12} className="mr-1" />
+                              {severityUi.label}
+                            </Badge>
+                            <Badge variant="gray">
+                              <Clock size={12} className="mr-1" />
+                              {formatDateTime(event.createdAt)}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              <Card className="p-0 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <DollarSign size={18} className="text-red-500" /> Refunds com falha
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Dinheiro do cliente em risco. Pendências longas precisam de reconciliação.
+                  </p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(operationalIssues?.issues.failedRefunds || []).map((refund) => {
+                      const severityUi = getSeverityUi(refund.severity);
+                      return (
+                      <div key={refund.id} className={`p-4 border-l-4 ${severityUi.border} flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-slate-900 dark:text-white">
+                            Pedido #{refund.orderId?.slice(-6).toUpperCase()}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {refund.order?.merchant?.name || 'Loja'} · cliente {refund.customerPhoneMasked || 'sem telefone'} · R$ {Number(refund.amount || 0).toFixed(2)}
+                          </p>
+                          <p className="text-xs text-red-500 mt-1 line-clamp-1">{refund.errorMessage || 'Falha sem detalhe'}</p>
+                          {renderIssueMeta(refund)}
+                          {renderRecommendedAction(refund)}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => handleRetryRefund(refund.id)}>
+                          Retentar
+                        </Button>
+                      </div>
+                      );
+                    })}
+                  {(operationalIssues?.issues.stalePendingRefunds || []).map((refund) => {
+                    const severityUi = getSeverityUi(refund.severity);
+                    return (
+                      <div key={refund.id} className={`p-4 border-l-4 ${severityUi.border}`}>
+                        <p className="font-bold text-sm text-slate-900 dark:text-white">
+                          Refund pendente #{refund.orderId?.slice(-6).toUpperCase()}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {refund.order?.merchant?.name || 'Loja'} · R$ {Number(refund.amount || 0).toFixed(2)}
+                        </p>
+                        {renderIssueMeta(refund)}
+                        {renderRecommendedAction(refund)}
+                      </div>
+                    );
+                  })}
+                  {operationalIssues &&
+                    operationalIssues.issues.failedRefunds.length === 0 &&
+                    operationalIssues.issues.stalePendingRefunds.length === 0 && (
+                      <p className="p-4 text-sm text-slate-400">Nenhum refund falhado ou pendente antigo.</p>
+                    )}
+                </div>
+              </Card>
+
+              <Card className="p-0 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <MessageSquare size={18} className="text-orange-500" /> WhatsApp com falha
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Notificações críticas não podem falhar em silêncio.
+                  </p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(operationalIssues?.issues.failedNotifications || []).length === 0 ? (
+                    <p className="p-4 text-sm text-slate-400">Nenhuma notificação falhada.</p>
+                  ) : (
+                    operationalIssues!.issues.failedNotifications.map((notification) => {
+                      const severityUi = getSeverityUi(notification.severity);
+                      return (
+                      <div key={notification.id} className={`p-4 border-l-4 ${severityUi.border} flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-slate-900 dark:text-white">
+                            {notification.userType} · {notification.type}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Tentativas: {notification.attempts || 0} · destino protegido
+                          </p>
+                          <p className="text-xs text-red-500 mt-1 line-clamp-1">{notification.errorMessage || 'Falha sem detalhe'}</p>
+                          {renderIssueMeta(notification)}
+                          {renderRecommendedAction(notification)}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => handleRequeueNotification(notification.id)} className="gap-1.5">
+                          <Send size={13} />
+                          Reenfileirar
+                        </Button>
+                      </div>
+                      );
+                    })
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-0 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Bike size={18} className="text-red-500" /> Pedidos prontos sem motoboy
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Pedido pronto parado degrada experiência do cliente e do lojista.
+                  </p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(operationalIssues?.issues.ordersWithoutDeliverer || []).map((order) => {
+                      const severityUi = getSeverityUi(order.severity);
+                      return (
+                      <div key={order.id} className={`p-4 border-l-4 ${severityUi.border} flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-slate-900 dark:text-white">
+                            #{order.id.slice(-6).toUpperCase()} · {order.merchant?.name || 'Loja'}
+                          </p>
+                          <p className="text-xs text-slate-500">{order.customer?.name || 'Cliente'} · R$ {Number(order.total).toFixed(2)}</p>
+                          {order.dispatch && (
+                            <div className="mt-2 grid grid-cols-1 gap-1.5 rounded-2xl bg-slate-50 p-3 text-[11px] font-semibold text-slate-600 dark:bg-slate-800/50 dark:text-slate-300 sm:grid-cols-3">
+                              <span>Tentativas: {order.dispatch.attemptCount || 0}</span>
+                              <span>Motoboys: {order.dispatch.attemptedDelivererCount || 0}</span>
+                              <span>Último: {getDeliveryAssignmentStatusLabel(order.dispatch.lastStatus)}</span>
+                              {order.dispatch.pendingAssignment && (
+                                <span className="sm:col-span-3">
+                                  Aguardando {order.dispatch.pendingAssignment.deliverer?.name || 'motoboy'} até {formatDateTime(order.dispatch.nextTimeoutAt)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {renderIssueMeta(order)}
+                          {renderRecommendedAction(order)}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => handleDispatchReadyOrder(order.id)}>
+                          Despachar
+                        </Button>
+                      </div>
+                      );
+                    })}
+                  {(operationalIssues?.issues.deliveriesAwaitingResponse || []).map((order) => {
+                    const severityUi = getSeverityUi(order.severity);
+                    return (
+                      <div key={order.id} className={`p-4 border-l-4 ${severityUi.border}`}>
+                        <p className="font-bold text-sm text-slate-900 dark:text-white">
+                          Aguardando motoboy #{order.id.slice(-6).toUpperCase()}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {order.merchant?.name || 'Loja'} · {order.deliverer?.name || 'Motoboy'}
+                        </p>
+                        {order.dispatch && (
+                          <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                            Tentativas: {order.dispatch.attemptCount || 0} · último: {getDeliveryAssignmentStatusLabel(order.dispatch.lastStatus)}
+                          </p>
+                        )}
+                        {renderIssueMeta(order)}
+                        {renderRecommendedAction(order)}
+                      </div>
+                    );
+                  })}
+                  {operationalIssues &&
+                    operationalIssues.issues.ordersWithoutDeliverer.length === 0 &&
+                    operationalIssues.issues.deliveriesAwaitingResponse.length === 0 && (
+                      <p className="p-4 text-sm text-slate-400">Nenhum alerta de despacho de motoboy.</p>
+                    )}
+                </div>
+              </Card>
+
+              <Card className="p-0 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-blue-500" /> Pagamentos e assinaturas
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Visão de pedidos travados e lojas ativas com assinatura inconsistente.
+                  </p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(operationalIssues?.issues.stalePendingPayments || []).slice(0, 6).map((order) => (
+                    <div key={order.id} className={`p-4 border-l-4 ${getSeverityUi(order.severity).border}`}>
+                      <p className="font-bold text-sm text-slate-900 dark:text-white">
+                        Pagamento pendente #{order.id.slice(-6).toUpperCase()}
+                      </p>
+                      <p className="text-xs text-slate-500">{order.merchant?.name || 'Loja'} · {order.paymentMethod}</p>
+                      {renderIssueMeta(order)}
+                      {renderRecommendedAction(order)}
+                    </div>
+                  ))}
+                  {(operationalIssues?.issues.paidOrdersAwaitingMerchant || []).slice(0, 6).map((order) => (
+                    <div key={order.id} className={`p-4 border-l-4 ${getSeverityUi(order.severity).border}`}>
+                      <p className="font-bold text-sm text-slate-900 dark:text-white">
+                        Pago sem aceite #{order.id.slice(-6).toUpperCase()}
+                      </p>
+                      <p className="text-xs text-slate-500">{order.merchant?.name || 'Loja'} · R$ {Number(order.total).toFixed(2)}</p>
+                      {renderIssueMeta(order)}
+                      {renderRecommendedAction(order)}
+                    </div>
+                  ))}
+                  {(operationalIssues?.issues.failedPaymentWebhooks || []).slice(0, 6).map((event) => (
+                    <div key={event.id} className={`p-4 border-l-4 ${getSeverityUi(event.severity).border}`}>
+                      <p className="font-bold text-sm text-slate-900 dark:text-white">
+                        Webhook falhou {event.resourceId ? `#${String(event.resourceId).slice(-6).toUpperCase()}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {event.provider} · {event.action || event.eventType || 'evento de pagamento'}
+                      </p>
+                      <p className="text-xs text-red-500 mt-1 line-clamp-1">{event.errorMessage || 'Falha sem detalhe'}</p>
+                      {renderIssueMeta(event)}
+                      {renderRecommendedAction(event)}
+                    </div>
+                  ))}
+                  {(operationalIssues?.issues.inactiveSubscriptionMerchants || []).slice(0, 6).map((merchant) => (
+                    <div key={merchant.id} className={`p-4 border-l-4 ${getSeverityUi(merchant.severity).border}`}>
+                      <p className="font-bold text-sm text-slate-900 dark:text-white">
+                        Assinatura {merchant.subscriptionStatus}
+                      </p>
+                      <p className="text-xs text-slate-500">{merchant.name} · {merchant.phoneMasked || 'telefone protegido'}</p>
+                      {renderIssueMeta(merchant)}
+                      {renderRecommendedAction(merchant)}
+                    </div>
+                  ))}
+                  {operationalIssues &&
+                    operationalIssues.issues.stalePendingPayments.length === 0 &&
+                    operationalIssues.issues.paidOrdersAwaitingMerchant.length === 0 &&
+                    operationalIssues.issues.failedPaymentWebhooks.length === 0 &&
+                    operationalIssues.issues.inactiveSubscriptionMerchants.length === 0 && (
+                      <p className="p-4 text-sm text-slate-400">Nenhum alerta de pagamento ou assinatura.</p>
+                    )}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: WhatsApp templates */}
+        {activeTab === 'whatsapp_templates' && (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <MessageSquare size={22} className="text-energy" /> Templates de WhatsApp
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Edite mensagens críticas sem alterar código. Use somente as variáveis permitidas em cada template.
+                </p>
+              </div>
+              <Badge variant="gray">{whatsAppTemplates.length} templates</Badge>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              {whatsAppTemplates.length === 0 ? (
+                <Card className="xl:col-span-2 py-10 text-center text-slate-400">
+                  Nenhum template disponível.
+                </Card>
+              ) : (
+                whatsAppTemplates.map((template) => (
+                  <Card key={template.key} className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="font-black text-slate-900 dark:text-white">{template.label}</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          {template.description}
+                        </p>
+                      </div>
+                      <Badge variant={template.isActive ? 'green' : 'gray'}>
+                        {template.isActive ? 'Ativo' : 'Fallback'}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-xs font-bold uppercase text-slate-500">Variáveis permitidas</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {template.variables.map(variable => (
+                          <span key={variable} className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {'{{'}{variable}{'}}'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={template.body}
+                      onChange={(e) => handleTemplateBodyChange(template.key, e.target.value)}
+                      rows={7}
+                      className="w-full resize-y rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-relaxed text-slate-800 outline-none transition focus:border-energy focus:ring-4 focus:ring-orange-500/10 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    />
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={template.isActive}
+                          onChange={(e) => handleTemplateActiveChange(template.key, e.target.checked)}
+                          className="h-4 w-4 accent-orange-500"
+                        />
+                        Usar este template
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleTemplateBodyChange(template.key, template.defaultBody)}
+                        >
+                          Restaurar padrão
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveWhatsAppTemplate(template)}
+                          disabled={savingTemplateKey === template.key}
+                        >
+                          {savingTemplateKey === template.key ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab: Deliverers daily closing report */}
         {activeTab === 'deliverers_closing' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <DollarSign size={22} className="text-energy" /> Fechamento de Motoboys do Dia
               </h2>
               <Button 
@@ -924,7 +1683,7 @@ export const AdminDashboard: React.FC = () => {
             <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th className="p-4">Entregador</th>
                       <th className="p-4">Veículo / Placa</th>
@@ -947,9 +1706,9 @@ export const AdminDashboard: React.FC = () => {
                         const waLink = `https://api.whatsapp.com/send?phone=55${cleanPhone}&text=${encodeURIComponent(msgText)}`;
 
                         return (
-                          <tr key={driver.delivererId} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                          <tr key={driver.delivererId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                             <td className="p-4">
-                              <p className="font-bold text-slate-850 dark:text-white">{driver.name}</p>
+                              <p className="font-bold text-slate-900 dark:text-white">{driver.name}</p>
                               <p className="text-xs text-slate-400">{driver.phone}</p>
                             </td>
                             <td className="p-4">
@@ -989,7 +1748,7 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'banners' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Image size={22} className="text-energy" /> Controle de Banners Promocionais
               </h2>
               <Button size="sm" onClick={() => setIsAddBannerOpen(true)} className="flex items-center gap-1.5">
@@ -1018,12 +1777,12 @@ export const AdminDashboard: React.FC = () => {
                           {banner.title || 'Sem título'}
                         </h4>
                         {banner.linkUrl && (
-                          <p className="text-xs text-slate-450 mt-1 truncate">
+                          <p className="text-xs text-slate-500 mt-1 truncate">
                             Link: {banner.linkUrl}
                           </p>
                         )}
                       </div>
-                      <div className="flex justify-end border-t border-slate-50 dark:border-slate-850 pt-2">
+                      <div className="flex justify-end border-t border-slate-50 dark:border-slate-800 pt-2">
                         <button
                           onClick={() => handleDeleteBanner(banner._id)}
                           className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
@@ -1044,7 +1803,7 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'coupons' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <DollarSign size={22} className="text-energy" /> Controle de Cupons de Desconto
               </h2>
               <Button size="sm" onClick={() => setIsAddCouponOpen(true)} className="flex items-center gap-1.5">
@@ -1055,7 +1814,7 @@ export const AdminDashboard: React.FC = () => {
             <Card className="p-0 overflow-hidden border border-slate-100 dark:border-slate-800/80">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-550 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th className="p-4">Código</th>
                       <th className="p-4">Tipo / Valor</th>
@@ -1075,7 +1834,7 @@ export const AdminDashboard: React.FC = () => {
                       </tr>
                     ) : (
                       coupons.map((coupon) => (
-                        <tr key={coupon._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20">
+                        <tr key={coupon._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                           <td className="p-4 font-bold text-slate-805 dark:text-white">
                             {coupon.code}
                           </td>
@@ -1086,7 +1845,7 @@ export const AdminDashboard: React.FC = () => {
                               {coupon.discountType === 'PERCENTAGE' ? `${coupon.discountValue}%` : `R$ ${coupon.discountValue.toFixed(2)}`}
                             </span>
                           </td>
-                          <td className="p-4 text-slate-650 dark:text-slate-350 font-semibold">
+                          <td className="p-4 text-slate-600 dark:text-slate-350 font-semibold">
                             {coupon.merchant ? coupon.merchant.name : <Badge variant="orange">Global (Todas)</Badge>}
                           </td>
                           <td className="p-4 text-slate-500">
@@ -1225,7 +1984,7 @@ export const AdminDashboard: React.FC = () => {
             </label>
             <div className="flex gap-4 items-center">
               {bannerForm.imageUrl ? (
-                <div className="relative w-24 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-850 flex-shrink-0">
+                <div className="relative w-24 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 flex-shrink-0">
                   <img src={bannerForm.imageUrl} alt="Banner Preview" className="w-full h-full object-cover" />
                   <button
                     type="button"
@@ -1296,7 +2055,7 @@ export const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 mb-1.5">Tipo de Desconto *</label>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Tipo de Desconto *</label>
               <select
                 value={couponForm.discountType}
                 onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value as any })}
@@ -1347,7 +2106,7 @@ export const AdminDashboard: React.FC = () => {
             />
 
             <div>
-              <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 mb-1.5">Loja Vinculada (Opcional)</label>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Loja Vinculada (Opcional)</label>
               <select
                 value={couponForm.merchantId}
                 onChange={(e) => setCouponForm({ ...couponForm, merchantId: e.target.value })}
@@ -1381,19 +2140,19 @@ export const AdminDashboard: React.FC = () => {
         {selectedOrderForModal && (
           <div className="space-y-4 text-sm">
             <div>
-              <p className="text-xs text-slate-450 font-bold uppercase">Estabelecimento</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">Estabelecimento</p>
               <p className="font-bold text-slate-800 dark:text-white">{selectedOrderForModal.merchantId?.name}</p>
             </div>
             
             <div>
-              <p className="text-xs text-slate-450 font-bold uppercase">Cliente</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">Cliente</p>
               <p className="font-bold text-slate-800 dark:text-white">
                 {selectedOrderForModal.customerId?.name} ({selectedOrderForModal.customerId?.phone})
               </p>
             </div>
 
             <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <p className="text-xs text-slate-455 font-bold uppercase mb-2">Itens do Pedido</p>
+              <p className="text-xs text-slate-500 font-bold uppercase mb-2">Itens do Pedido</p>
               <div className="space-y-2">
                 {selectedOrderForModal.items.map((item: any, idx: number) => (
                   <div key={idx} className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl flex gap-3">
@@ -1410,12 +2169,12 @@ export const AdminDashboard: React.FC = () => {
                         <span className="text-xs">R$ {(item.price * item.quantity).toFixed(2)}</span>
                       </div>
                       {item.description && (
-                        <p className="text-[10px] text-slate-450 dark:text-slate-500 truncate">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-500 truncate">
                           {item.description}
                         </p>
                       )}
                       {item.chosenOptions && item.chosenOptions.length > 0 && (
-                        <div className="text-[10px] text-slate-455">
+                        <div className="text-[10px] text-slate-500">
                           {item.chosenOptions.map((opt: any, oIdx: number) => (
                             <div key={oIdx}>
                               + {opt.groupName}: {opt.optionName} {opt.price > 0 ? `(+R$ ${opt.price.toFixed(2)})` : ''}
@@ -1434,7 +2193,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-1.5 text-slate-605 dark:text-slate-350">
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-1.5 text-slate-600 dark:text-slate-350">
               <div className="flex justify-between text-xs">
                 <span>Subtotal</span>
                 <span>R$ {selectedOrderForModal.subtotal.toFixed(2)}</span>
@@ -1443,14 +2202,14 @@ export const AdminDashboard: React.FC = () => {
                 <span>Taxa de Entrega</span>
                 <span>R$ {selectedOrderForModal.deliveryFee.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-black text-base text-energy pt-1 border-t border-slate-50 dark:border-slate-850">
+              <div className="flex justify-between font-black text-base text-energy pt-1 border-t border-slate-50 dark:border-slate-800">
                 <span>Total</span>
                 <span>R$ {selectedOrderForModal.total.toFixed(2)}</span>
               </div>
             </div>
 
             <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
-              <p className="text-xs text-slate-450 font-bold uppercase">Forma de Pagamento</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">Forma de Pagamento</p>
               <p className="font-semibold text-slate-750 dark:text-slate-300 mt-0.5">
                 {selectedOrderForModal.paymentMethod === 'PIX' ? 'Pix' :
                  selectedOrderForModal.paymentMethod === 'CARD' ? 'Cartão de Crédito/Débito' : 'Dinheiro'}

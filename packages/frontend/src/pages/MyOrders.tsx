@@ -6,6 +6,7 @@ import { Button, Card, Badge, Toast, Modal } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, ArrowRight, Star } from 'lucide-react';
 import io from 'socket.io-client';
+import { getOrderStatusUi, getPaymentStatusUi } from '../utils/orderStatusUi';
 
 interface IOrder {
   _id: string;
@@ -24,6 +25,8 @@ interface IOrder {
   deliveryFee: number;
   total: number;
   status: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
   createdAt: string;
   review?: {
     id: string;
@@ -84,7 +87,10 @@ export const MyOrders: React.FC = () => {
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
     const socketUrl = API_URL.replace('/api', '');
-    const socket = io(socketUrl);
+    const socket = io(socketUrl, {
+      auth: { token: localStorage.getItem('accessToken') || undefined },
+      withCredentials: true
+    });
 
     activeOrders.forEach((o) => {
       socket.emit('joinOrderRoom', o._id);
@@ -104,23 +110,6 @@ export const MyOrders: React.FC = () => {
       socket.disconnect();
     };
   }, [orders.map(o => `${o._id}-${o.status}`).join(',')]);
-
-  const getStatusBadge = (status: string) => {
-    const statuses: { [key: string]: { text: string; variant: 'orange' | 'green' | 'blue' | 'red' | 'gray' } } = {
-      PENDING: { text: 'Aguardando Aprovação', variant: 'gray' },
-      PAID: { text: 'Pago, aguardando loja', variant: 'orange' },
-      ACCEPTED: { text: 'Aceito', variant: 'blue' },
-      PREPARING: { text: 'Em Preparação', variant: 'orange' },
-      READY: { text: 'Pronto para Entrega', variant: 'orange' },
-      DISPATCHED: { text: 'Despachado', variant: 'blue' },
-      IN_TRANSIT: { text: 'Em Trânsito', variant: 'blue' },
-      DELIVERED: { text: 'Entregue', variant: 'green' },
-      CANCELLED: { text: 'Cancelado', variant: 'red' },
-    };
-
-    const current = statuses[status] || { text: status, variant: 'gray' };
-    return <Badge variant={current.variant}>{current.text}</Badge>;
-  };
 
   const handleReorder = (order: IOrder) => {
     try {
@@ -174,14 +163,58 @@ export const MyOrders: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {orders.map((order) => (
-            <Card key={order._id} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
+            <Card key={order._id} className="space-y-4">
+              {(() => {
+                const statusUi = getOrderStatusUi(order.status);
+                const paymentUi = getPaymentStatusUi(order.paymentStatus);
+                const StatusIcon = statusUi.icon;
+                const PaymentIcon = paymentUi?.icon;
+
+                return (
+                  <>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${
+                            statusUi.isProblem
+                              ? 'bg-red-50 text-red-600 dark:bg-red-950/30'
+                              : 'bg-orange-50 text-energy dark:bg-orange-950/30'
+                          }`}>
+                            <StatusIcon size={20} />
+                          </span>
                   <h3 className="font-extrabold text-slate-850 dark:text-white text-base">
                     {order.merchantId?.name}
                   </h3>
-                  {getStatusBadge(order.status)}
-                </div>
+                          <Badge variant={statusUi.variant}>{statusUi.label}</Badge>
+                        </div>
+
+                        <div className="max-w-xl space-y-1">
+                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            {statusUi.description}
+                          </p>
+                          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                            {statusUi.customerHint}
+                          </p>
+                        </div>
+
+                        <div className="h-2 max-w-xl overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className={`h-full rounded-full ${
+                              statusUi.isProblem ? 'bg-red-500' : statusUi.variant === 'green' ? 'bg-green-500' : 'bg-energy'
+                            }`}
+                            style={{ width: `${statusUi.progress}%` }}
+                          />
+                        </div>
+
+                        {paymentUi && (
+                          <div className="flex w-fit items-start gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-850/40">
+                            {PaymentIcon && <PaymentIcon size={15} className="mt-0.5 text-energy" />}
+                            <div>
+                              <p className="text-xs font-extrabold text-slate-700 dark:text-slate-200">{paymentUi.label}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">{paymentUi.description}</p>
+                            </div>
+                          </div>
+                        )}
 
                 {order.review && (
                   <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/10 px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-600 w-fit">
@@ -205,7 +238,26 @@ export const MyOrders: React.FC = () => {
                 <div className="text-xs text-slate-400">
                   Realizado em: {new Date(order.createdAt).toLocaleDateString('pt-BR')} às {new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
+                      </div>
 
+                      <div className="text-left md:text-right">
+                        <div className="text-xs text-slate-400">Total do Pedido</div>
+                        <div className="text-lg font-black text-energy">
+                          R$ {order.total.toFixed(2)}
+                        </div>
+                        {order.paymentMethod && (
+                          <div className="mt-1 text-[11px] font-semibold text-slate-400">
+                            {order.paymentMethod}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-3">
                 {/* Items preview */}
                 <div className="space-y-2 mt-3">
                   {order.items.map((item, idx) => (
@@ -239,13 +291,6 @@ export const MyOrders: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 flex-wrap">
-                <div className="text-left md:text-right">
-                  <div className="text-xs text-slate-400">Total do Pedido</div>
-                  <div className="text-lg font-black text-energy">
-                    R$ {order.total.toFixed(2)}
-                  </div>
-                </div>
-                
                 <div className="flex items-center gap-2 flex-wrap">
                   {order.status === 'DELIVERED' && (
                     <Button
@@ -279,6 +324,7 @@ export const MyOrders: React.FC = () => {
                     Rastrear <ArrowRight size={14} />
                   </Button>
                 </div>
+              </div>
               </div>
             </Card>
           ))}

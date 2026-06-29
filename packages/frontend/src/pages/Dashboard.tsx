@@ -5,16 +5,26 @@ import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
   AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
-  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike, Sparkles
+  Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike, Sparkles,
+  CheckCircle2, ChefHat, Search, Truck, XCircle, MessageSquare
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { SubscriptionForm } from '../components/SubscriptionForm';
+import { getPaymentStatusUi } from '../utils/orderStatusUi';
 
 interface IOrder {
   _id: string;
   customerId: { name: string; phone: string };
-  items: { name: string; quantity: number; price: number; image?: string; description?: string }[];
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    image?: string;
+    description?: string;
+    chosenOptions?: { groupName: string; optionName: string; price: number }[];
+    notes?: string;
+  }[];
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -22,6 +32,7 @@ interface IOrder {
   createdAt: string;
   deliveryAddress: { street: string; number: string };
   paymentMethod: string;
+  paymentStatus?: string;
   commission?: number;
 }
 
@@ -104,7 +115,10 @@ export const Dashboard: React.FC = () => {
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
     const socketUrl = API_URL.replace('/api', '');
-    const socket = io(socketUrl);
+    const socket = io(socketUrl, {
+      auth: { token: localStorage.getItem('accessToken') || undefined },
+      withCredentials: true
+    });
 
     socket.emit('joinMerchantRoom', user._id);
 
@@ -138,6 +152,8 @@ export const Dashboard: React.FC = () => {
   }, [isAuthenticated, role]);
 
   const pendingOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'PAID');
+  const waitingPaymentOrders = pendingOrders.filter((order) => order.status === 'PENDING' && ['PIX', 'Cartão'].includes(order.paymentMethod));
+  const actionableNewOrders = pendingOrders.filter((order) => order.status === 'PAID' || !['PIX', 'Cartão'].includes(order.paymentMethod));
 
   // Controle de áudio do alarme
   useEffect(() => {
@@ -302,15 +318,26 @@ export const Dashboard: React.FC = () => {
     }
   }, [user]);
 
+  const getStatusUpdateErrorMessage = (err: any, newStatus: string): string => {
+    const message = err.response?.data?.message || '';
+    if (/Transição de status inválida|unpaid|pagamento|payment/i.test(message)) {
+      return 'Este pedido ainda não pode avançar. Confira se o pagamento foi aprovado ou se o status atual permite essa ação.';
+    }
+    if (/refund|estorno/i.test(message)) {
+      return 'O pedido foi cancelado, mas o estorno precisa de acompanhamento operacional.';
+    }
+    return message || `Erro ao atualizar o pedido para ${getMerchantStatusUi(newStatus).label}.`;
+  };
+
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     try {
       const response = await apiClient.post(`/orders/${orderId}/status`, { status: newStatus });
       if (response.data?.status === 'success') {
-        setToast({ message: `Pedido atualizado para: ${newStatus}`, type: 'success' });
+        setToast({ message: `Pedido atualizado: ${getMerchantStatusUi(newStatus).label}`, type: 'success' });
         fetchDashboardData();
       }
-    } catch (err) {
-      setToast({ message: 'Erro ao atualizar status do pedido', type: 'error' });
+    } catch (err: any) {
+      setToast({ message: getStatusUpdateErrorMessage(err, newStatus), type: 'error' });
     }
   };
 
@@ -584,13 +611,74 @@ export const Dashboard: React.FC = () => {
   const activeOrders = orders.filter(o => ['ACCEPTED', 'PREPARING', 'READY', 'DISPATCHED', 'IN_TRANSIT'].includes(o.status));
 
   // Helper para obter o próximo status
+  const getMerchantStatusUi = (status: string) => {
+    const statuses: Record<string, { label: string; description: string; variant: 'orange' | 'green' | 'blue' | 'red' | 'gray'; icon: any }> = {
+      PENDING: {
+        label: 'Aguardando pagamento',
+        description: 'Não prepare ainda. O pagamento online ainda não foi confirmado.',
+        variant: 'gray',
+        icon: Clock
+      },
+      PAID: {
+        label: 'Pago, precisa de aceite',
+        description: 'Pagamento aprovado. Aceite para começar o preparo ou recuse para iniciar estorno.',
+        variant: 'orange',
+        icon: CreditCard
+      },
+      ACCEPTED: {
+        label: 'Aceito',
+        description: 'Pedido aceito. Próximo passo: iniciar preparo.',
+        variant: 'blue',
+        icon: CheckCircle2
+      },
+      PREPARING: {
+        label: 'Em preparo',
+        description: 'Pedido em produção. Avise quando estiver pronto para chamar motoboy.',
+        variant: 'orange',
+        icon: ChefHat
+      },
+      READY: {
+        label: 'Buscando motoboy',
+        description: 'Pedido pronto. O sistema está tentando atribuir um motoboy.',
+        variant: 'orange',
+        icon: Search
+      },
+      DISPATCHED: {
+        label: 'Motoboy acionado',
+        description: 'A entrega foi acionada. Aguarde avanço do motoboy.',
+        variant: 'blue',
+        icon: Truck
+      },
+      IN_TRANSIT: {
+        label: 'Em entrega',
+        description: 'Pedido saiu para entrega.',
+        variant: 'blue',
+        icon: Bike
+      },
+      DELIVERED: {
+        label: 'Entregue',
+        description: 'Pedido concluído.',
+        variant: 'green',
+        icon: CheckCircle2
+      },
+      CANCELLED: {
+        label: 'Cancelado',
+        description: 'Pedido recusado/cancelado. Verifique estorno quando houver pagamento online.',
+        variant: 'red',
+        icon: XCircle
+      }
+    };
+    return statuses[status] || { label: status, description: 'Status recebido do sistema.', variant: 'gray' as const, icon: Clock };
+  };
+
+  const canAcceptNewOrder = (order: IOrder) => {
+    return order.status === 'PAID' || !['PIX', 'Cartão'].includes(order.paymentMethod);
+  };
+
   const getNextStatusAction = (status: string) => {
     const flows: { [key: string]: { label: string; next: string } } = {
       ACCEPTED: { label: 'Iniciar Preparação', next: 'PREPARING' },
-      PREPARING: { label: 'Marcar como Pronto', next: 'READY' },
-      READY: { label: 'Despachar Pedido', next: 'DISPATCHED' },
-      DISPATCHED: { label: 'Iniciar Trânsito', next: 'IN_TRANSIT' },
-      IN_TRANSIT: { label: 'Confirmar Entrega', next: 'DELIVERED' }
+      PREPARING: { label: 'Pedido pronto / Chamar motoboy', next: 'READY' }
     };
     return flows[status];
   };
@@ -710,7 +798,7 @@ export const Dashboard: React.FC = () => {
             <ShoppingCart size={22} />
           </div>
           <div>
-            <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Total de Pedidos</span>
+            <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Total de Pedidos</span>
             <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">{stats.totalOrders}</span>
           </div>
         </Card>
@@ -720,8 +808,18 @@ export const Dashboard: React.FC = () => {
             <Clock size={22} />
           </div>
           <div>
-            <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Pedidos Pendentes</span>
+            <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Pedidos Pendentes</span>
             <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">{stats.pendingOrders}</span>
+          </div>
+        </Card>
+
+        <Card className="flex items-center gap-4 p-5">
+          <div className="p-3 bg-orange-500/10 rounded-2xl text-energy">
+            <CreditCard size={22} />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Aguardando Pagamento</span>
+            <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">{waitingPaymentOrders.length}</span>
           </div>
         </Card>
 
@@ -730,17 +828,17 @@ export const Dashboard: React.FC = () => {
             <DollarSign size={22} />
           </div>
           <div>
-            <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento</span>
+            <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Faturamento</span>
             <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">R$ {stats.revenue.toFixed(2)}</span>
           </div>
         </Card>
 
         <Card className="flex items-center gap-4 p-5">
-          <div className="p-3 bg-orange-500/10 rounded-2xl text-energy">
+          <div className="p-3 bg-purple-500/10 rounded-2xl text-purple-500">
             <BarChart3 size={22} />
           </div>
           <div>
-            <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Ticket Médio</span>
+            <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Ticket Médio</span>
             <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">R$ {stats.averageTicket.toFixed(2)}</span>
           </div>
         </Card>
@@ -760,9 +858,9 @@ export const Dashboard: React.FC = () => {
               <div className="lg:col-span-1 space-y-4">
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                    <AlertCircle size={20} className="text-yellow-500" /> Novos Pedidos ({pendingOrders.length})
+                    <AlertCircle size={20} className="text-yellow-500" /> Precisa de Ação ({actionableNewOrders.length})
                   </h3>
-                  {pendingOrders.length > 0 && (
+                  {actionableNewOrders.length > 0 && (
                     <button
                       onClick={toggleMute}
                       className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-energy transition-colors flex items-center gap-1 text-xs font-semibold"
@@ -782,10 +880,31 @@ export const Dashboard: React.FC = () => {
                   )}
                 </div>
                 
-                {pendingOrders.length === 0 ? (
-                  <Card className="py-8 text-center text-slate-400">Nenhum novo pedido na fila.</Card>
+                {waitingPaymentOrders.length > 0 && (
+                  <Card className="border border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-850/40">
+                    <div className="flex items-start gap-3">
+                      <CreditCard size={18} className="mt-0.5 text-energy" />
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-800 dark:text-white">
+                          {waitingPaymentOrders.length} pedido(s) aguardando pagamento
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                          Não aceite nem prepare pedidos online até o pagamento virar aprovado. O sistema move para a fila de ação quando estiver seguro.
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {actionableNewOrders.length === 0 ? (
+                  <Card className="py-8 text-center text-slate-400">Nenhum pedido aguardando aceite.</Card>
                 ) : (
-                  pendingOrders.map((order) => (
+                  actionableNewOrders.map((order) => {
+                    const statusUi = getMerchantStatusUi(order.status);
+                    const StatusIcon = statusUi.icon;
+                    const paymentUi = getPaymentStatusUi(order.paymentStatus);
+                    const PaymentIcon = paymentUi?.icon;
+                    return (
                     <Card key={order._id} className="border-l-4 border-l-yellow-500/60 space-y-4 shadow-sm">
                        <div className="flex justify-between items-start">
                         <div>
@@ -802,11 +921,32 @@ export const Dashboard: React.FC = () => {
                             </button>
                           </div>
                           <p className="text-xs text-slate-400">{order.customerId?.phone}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Badge variant={statusUi.variant}>{statusUi.label}</Badge>
+                            {paymentUi && <Badge variant={paymentUi.variant}>{paymentUi.label}</Badge>}
+                          </div>
                         </div>
                         <div className="text-right">
                           <span className="text-xs text-slate-400">Total</span>
                           <p className="text-sm font-black text-energy">R$ {order.total.toFixed(2)}</p>
                         </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-850/40">
+                        <div className="flex items-start gap-2">
+                          <StatusIcon size={16} className="mt-0.5 text-energy" />
+                          <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                            {statusUi.description}
+                          </p>
+                        </div>
+                        {paymentUi && PaymentIcon && (
+                          <div className="mt-2 flex items-start gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+                            <PaymentIcon size={15} className="mt-0.5 text-slate-400" />
+                            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                              {paymentUi.description}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       <div className="text-xs text-slate-650 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl space-y-2.5">
@@ -835,15 +975,29 @@ export const Dashboard: React.FC = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button variant="danger" size="sm" className="flex-1" onClick={() => handleUpdateStatus(order._id, 'CANCELLED')}>
-                          Recusar
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => {
+                            const needsRefund = ['PIX', 'Cartão'].includes(order.paymentMethod) && order.paymentStatus === 'RECEIVED';
+                            const confirmed = window.confirm(
+                              needsRefund
+                                ? 'Recusar este pedido vai cancelar o preparo e iniciar fluxo de estorno. Confirma?'
+                                : 'Recusar este pedido? O cliente será avisado.'
+                            );
+                            if (confirmed) handleUpdateStatus(order._id, 'CANCELLED');
+                          }}
+                        >
+                          Recusar pedido
                         </Button>
-                        <Button size="sm" className="flex-1" onClick={() => handleUpdateStatus(order._id, 'ACCEPTED')}>
+                        <Button size="sm" className="flex-1" disabled={!canAcceptNewOrder(order)} onClick={() => handleUpdateStatus(order._id, 'ACCEPTED')}>
                           Aceitar Pedido
                         </Button>
                       </div>
                     </Card>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -859,6 +1013,9 @@ export const Dashboard: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {activeOrders.map((order) => {
                       const nextAction = getNextStatusAction(order.status);
+                      const statusUi = getMerchantStatusUi(order.status);
+                      const StatusIcon = statusUi.icon;
+                      const paymentUi = getPaymentStatusUi(order.paymentStatus);
                       return (
                         <Card key={order._id} className="space-y-4 flex flex-col justify-between shadow-sm">
                           <div className="space-y-3">
@@ -878,9 +1035,22 @@ export const Dashboard: React.FC = () => {
                                 </div>
                                 <span className="text-xs text-slate-400 block">{order.deliveryAddress?.street}, {order.deliveryAddress?.number}</span>
                               </div>
-                              <Badge variant={order.status === 'READY' ? 'green' : 'orange'}>
-                                {order.status}
-                              </Badge>
+                              <Badge variant={statusUi.variant}>{statusUi.label}</Badge>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-850/40">
+                              <div className="flex items-start gap-2">
+                                <StatusIcon size={16} className="mt-0.5 text-energy" />
+                                <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                                  {statusUi.description}
+                                </p>
+                              </div>
+                              {paymentUi && (
+                                <div className="mt-2 flex items-center gap-2 border-t border-slate-100 pt-2 text-[11px] font-bold text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                                  <CreditCard size={13} className="text-slate-400" />
+                                  {paymentUi.label} · {order.paymentMethod}
+                                </div>
+                              )}
                             </div>
 
                             <div className="text-xs text-slate-500 space-y-2 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg">
@@ -914,6 +1084,22 @@ export const Dashboard: React.FC = () => {
                               <Button fullWidth size="sm" onClick={() => handleUpdateStatus(order._id, nextAction.next)}>
                                 {nextAction.label}
                               </Button>
+                            )}
+                            {!nextAction && order.status === 'READY' && (
+                              <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-3 text-xs font-semibold leading-relaxed text-slate-600 dark:border-orange-900/40 dark:bg-orange-950/10 dark:text-slate-300">
+                                <div className="flex items-start gap-2">
+                                  <Search size={15} className="mt-0.5 text-energy" />
+                                  <span>Pedido pronto. A busca por motoboy já foi iniciada. Se ficar parado por muito tempo, o admin operacional deve intervir.</span>
+                                </div>
+                              </div>
+                            )}
+                            {!nextAction && ['DISPATCHED', 'IN_TRANSIT'].includes(order.status) && (
+                              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold leading-relaxed text-slate-600 dark:border-blue-900/40 dark:bg-blue-950/10 dark:text-slate-300">
+                                <div className="flex items-start gap-2">
+                                  <MessageSquare size={15} className="mt-0.5 text-blue-500" />
+                                  <span>Entrega em andamento. O cliente será atualizado pelo app e WhatsApp.</span>
+                                </div>
+                              </div>
                             )}
                           </div>
                         </Card>
@@ -1233,7 +1419,7 @@ export const Dashboard: React.FC = () => {
                     <DollarSign size={24} />
                   </div>
                   <div>
-                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Total</span>
+                    <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Faturamento Total</span>
                     <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
                       R$ {(stats.revenue || 0).toFixed(2)}
                     </span>
@@ -1245,7 +1431,7 @@ export const Dashboard: React.FC = () => {
                     <TrendingUp size={24} />
                   </div>
                   <div>
-                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento PIX</span>
+                    <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Faturamento PIX</span>
                     <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
                       R$ {(stats.pixRevenue || 0).toFixed(2)}
                     </span>
@@ -1257,7 +1443,7 @@ export const Dashboard: React.FC = () => {
                     <DollarSign size={24} />
                   </div>
                   <div>
-                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Dinheiro</span>
+                    <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Faturamento Dinheiro</span>
                     <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
                       R$ {(stats.cashRevenue || 0).toFixed(2)}
                     </span>
@@ -1269,7 +1455,7 @@ export const Dashboard: React.FC = () => {
                     <CreditCard size={24} />
                   </div>
                   <div>
-                    <span className="text-xs text-slate-450 font-semibold block uppercase tracking-wider">Faturamento Cartão</span>
+                    <span className="text-xs text-slate-500 font-semibold block uppercase tracking-wider">Faturamento Cartão</span>
                     <span className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
                       R$ {(stats.cardRevenue || 0).toFixed(2)}
                     </span>
@@ -1304,7 +1490,7 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-energy/10 shadow-sm flex flex-col items-center md:items-end min-w-[200px] justify-center">
-                    <span className="text-xs text-slate-450 font-semibold uppercase tracking-wider">Taxa da Plataforma</span>
+                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Taxa da Plataforma</span>
                     <span className="text-3xl font-black text-energy mt-1">
                       R$ {(stats.totalCommission || 0).toFixed(2)}
                     </span>
@@ -1584,7 +1770,7 @@ export const Dashboard: React.FC = () => {
                   {/* Options List */}
                   <div className="space-y-2 pl-4 border-l border-slate-200 dark:border-slate-800">
                     <div className="flex justify-between items-center">
-                      <h5 className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+                      <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         Opções deste Grupo
                       </h5>
                       <button

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Button, Input, Card, Toast } from '../components/ui';
+import { Button, Input, Card, LegalConsent, Toast } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ShieldCheck, ArrowRight, MapPin, User } from 'lucide-react';
+import { ArrowRight, Clock, MapPin, MessageSquare, ShieldCheck, ShoppingBag, User } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { requestOtp, verifyOtp, login, error, isAuthenticated, role } = useAuthStore();
@@ -24,6 +24,9 @@ export const Login: React.FC = () => {
   const [code, setCode] = useState('');
   const [rememberPhone, setRememberPhone] = useState(false);
   const [isMockOtp, setIsMockOtp] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
 
   React.useEffect(() => {
@@ -97,10 +100,18 @@ export const Login: React.FC = () => {
       setToast({ message: 'Preencha seu nome e endereço para entrega', type: 'error' });
       return;
     }
+    if (!termsAccepted || !privacyAccepted) {
+      setToast({ message: 'Aceite os termos e a política de privacidade para continuar', type: 'error' });
+      return;
+    }
 
     setLoading(true);
     try {
-      const data = await requestOtp(phone, name, address);
+      const data = await requestOtp(phone, name, address, {
+        termsAccepted,
+        privacyAccepted,
+        marketingConsent
+      });
       if (data?.isMock) {
         setIsMockOtp(true);
       } else {
@@ -163,30 +174,63 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto my-12">
-      <Card className="relative overflow-hidden">
-        {/* Banner Strip */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 to-amber-500"></div>
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 py-8 lg:grid-cols-[1fr_440px] lg:items-center">
+      <section className="hidden lg:block">
+        <div className="space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-2 text-sm font-extrabold text-energy ring-1 ring-orange-100">
+            <ShoppingBag size={16} />
+            Delivery local, rápido e direto no WhatsApp
+          </div>
+          <div className="space-y-3">
+            <h1 className="max-w-xl text-5xl font-black leading-tight tracking-tight text-slate-950 dark:text-white">
+              Entre, escolha a loja e acompanhe seu pedido sem complicação.
+            </h1>
+            <p className="max-w-lg text-base font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+              Login por WhatsApp, endereço salvo e atualizações essenciais do pedido. O fluxo foi pensado para pedir rápido e sair do app.
+            </p>
+          </div>
+          <div className="grid max-w-xl grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <MessageSquare className="mb-3 text-energy" size={22} />
+              <p className="text-sm font-extrabold text-slate-800 dark:text-white">WhatsApp</p>
+              <p className="mt-1 text-xs text-slate-500">Código e avisos do pedido.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <MapPin className="mb-3 text-energy" size={22} />
+              <p className="text-sm font-extrabold text-slate-800 dark:text-white">Endereço</p>
+              <p className="mt-1 text-xs text-slate-500">Salvo para próximos pedidos.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <Clock className="mb-3 text-energy" size={22} />
+              <p className="text-sm font-extrabold text-slate-800 dark:text-white">Prático</p>
+              <p className="mt-1 text-xs text-slate-500">Poucas etapas até pedir.</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <div className="text-center space-y-2 mb-8 pt-4">
-          <div className="inline-flex p-3.5 bg-orange-500/10 rounded-2xl text-energy animate-pulse">
+      <Card className="relative overflow-hidden border-slate-100 p-0 shadow-xl">
+        <div className="bg-energy px-6 py-6 text-white">
+          <div className="mb-4 inline-flex rounded-2xl bg-white/15 p-3">
             {step === 'otp' ? <ShieldCheck size={28} /> : <MessageSquare size={28} />}
           </div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">
+          <h2 className="text-2xl font-black tracking-tight">
             {step === 'phone' && 'Entrar no Traz Pra Cá'}
-            {step === 'register' && 'Criar Conta Rápido'}
-            {step === 'otp' && 'Verificar Telefone'}
+            {step === 'register' && 'Só falta seu endereço'}
+            {step === 'otp' && 'Confirme seu WhatsApp'}
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {step === 'phone' && 'Digite seu WhatsApp para iniciar.'}
-            {step === 'register' && 'Complete os dados para entrega.'}
-            {step === 'otp' && `Digite o código enviado para ${phone}`}
+          <p className="mt-1 text-sm font-medium text-white/85">
+            {step === 'phone' && 'Use seu WhatsApp para entrar ou criar conta.'}
+            {step === 'register' && 'Cadastro rápido para entregar no lugar certo.'}
+            {step === 'otp' && `Código enviado para ${phone}`}
           </p>
         </div>
 
+        <div className="p-6">
+
         {/* Toggle Switch para método de login (apenas no passo inicial) */}
         {step === 'phone' && (
-          <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl mb-6">
+          <div className="mb-6 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80">
             <button
               type="button"
               onClick={() => setLoginMethod('otp')}
@@ -239,7 +283,7 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
-              {loading ? 'Enviando...' : 'Receber Código no WhatsApp'} <ArrowRight size={16} />
+              {loading ? 'Enviando...' : 'Receber código'} <ArrowRight size={16} />
             </Button>
           </form>
         )}
@@ -288,7 +332,7 @@ export const Login: React.FC = () => {
         {step === 'register' && (
           <form onSubmit={handleRegisterAndRequestOtp} className="space-y-4">
             <div className="space-y-1">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <h4 className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400">
                 <User size={13} /> Seus Dados
               </h4>
               <Input
@@ -301,7 +345,7 @@ export const Login: React.FC = () => {
             </div>
 
             <div className="space-y-3 pt-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <h4 className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400">
                 <MapPin size={13} /> Endereço de Entrega
               </h4>
               
@@ -335,12 +379,22 @@ export const Login: React.FC = () => {
               />
             </div>
 
+            <LegalConsent
+              termsAccepted={termsAccepted}
+              privacyAccepted={privacyAccepted}
+              marketingConsent={marketingConsent}
+              onTermsChange={setTermsAccepted}
+              onPrivacyChange={setPrivacyAccepted}
+              onMarketingChange={setMarketingConsent}
+              compact
+            />
+
             <div className="pt-4 flex gap-3">
               <Button type="button" variant="outline" fullWidth onClick={() => setStep('phone')}>
                 Voltar
               </Button>
               <Button type="submit" fullWidth disabled={loading}>
-                {loading ? 'Processando...' : 'Enviar Código OTP'}
+                {loading ? 'Processando...' : 'Enviar código'}
               </Button>
             </div>
           </form>
@@ -387,6 +441,7 @@ export const Login: React.FC = () => {
               Acesse o Portal de Parceiros
             </button>
           </p>
+        </div>
         </div>
       </Card>
 

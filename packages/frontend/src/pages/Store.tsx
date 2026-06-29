@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
-import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2 } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2, MessageSquare, Store as StoreIcon, Truck } from 'lucide-react';
 import { CheckoutCardForm } from '../components/CheckoutCardForm';
 
 const DELIVERY_FEE = Number(import.meta.env.VITE_DELIVERY_FEE || '5');
@@ -411,6 +411,41 @@ export const Store: React.FC = () => {
   const finalDiscount = Math.min(cartTotal, discountAmount);
   const grandTotal = Math.max(0, cartTotal - finalDiscount + deliveryFee);
 
+  const paymentCopy: Record<string, { title: string; description: string; badge: string }> = {
+    PIX: {
+      title: 'PIX',
+      description: 'Liberação após confirmação do pagamento. O QR Code aparece na próxima etapa.',
+      badge: 'Mais rápido'
+    },
+    Dinheiro: {
+      title: 'Dinheiro',
+      description: 'A loja confirma o pedido e o pagamento acontece na entrega.',
+      badge: 'Na entrega'
+    },
+    Cartão: {
+      title: 'Cartão',
+      description: 'Pagamento online processado com Mercado Pago.',
+      badge: 'Online'
+    }
+  };
+
+  const getCheckoutErrorMessage = (err: any): string => {
+    const message = err.response?.data?.message || err.message || '';
+    if (/estoque|stock/i.test(message)) {
+      return 'Algum item ficou sem estoque. Revise o carrinho e tente novamente.';
+    }
+    if (/pagamento|payment|card|cart/i.test(message)) {
+      return 'Não foi possível confirmar o pagamento. Confira os dados ou tente outra forma de pagamento.';
+    }
+    if (/cupom|coupon/i.test(message)) {
+      return 'O cupom não pôde ser aplicado para este pedido.';
+    }
+    if (/assinatura|subscription|inactive/i.test(message)) {
+      return 'Esta loja não está disponível para receber pedidos agora.';
+    }
+    return message || 'Erro ao finalizar pedido. Tente novamente em instantes.';
+  };
+
   const handleCheckout = async (mpToken?: string, mpIssuerId?: string, mpPaymentMethodId?: string, mpInstallments?: number) => {
     if (!isAuthenticated) {
       setToast({ message: 'Faça login antes de finalizar o pedido', type: 'error' });
@@ -495,12 +530,11 @@ export const Store: React.FC = () => {
           setIsPixCopied(false);
           setIsPixModalOpen(true);
         } else {
-          setTimeout(() => navigate('/orders'), 1500);
+          setTimeout(() => navigate(`/tracking?id=${order.id || order._id}`), 1000);
         }
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Erro ao finalizar pedido';
-      setToast({ message: msg, type: 'error' });
+      setToast({ message: getCheckoutErrorMessage(err), type: 'error' });
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -775,14 +809,14 @@ export const Store: React.FC = () => {
                 </span>
               </div>
               <div className="hidden sm:block">
-                <p className="text-xs text-slate-400">Seu Pedido</p>
-                <p className="text-sm font-black text-slate-800 dark:text-white">R$ {cartTotal.toFixed(2)}</p>
+                <p className="text-xs text-slate-400">Total com entrega</p>
+                <p className="text-sm font-black text-slate-800 dark:text-white">R$ {grandTotal.toFixed(2)}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
               <span className="text-xs text-slate-400 dark:text-slate-500 hidden md:block">
-                Sem pedido mínimo
+                {cart.length} {cart.length === 1 ? 'item' : 'itens'} no carrinho
               </span>
               <Button 
                 size="lg" 
@@ -803,11 +837,30 @@ export const Store: React.FC = () => {
       {/* Checkout Modal */}
       <Modal isOpen={isCheckingOut} onClose={() => setIsCheckingOut(false)} title="Finalizar Pedido">
         <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Revisar', icon: ShoppingCart },
+              { label: 'Pagar', icon: CreditCard },
+              { label: 'Acompanhar', icon: Truck }
+            ].map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-850/40">
+                  <Icon size={17} className="mx-auto mb-1 text-energy" />
+                  <p className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">{index + 1}. {step.label}</p>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="space-y-2 border-b border-slate-50 dark:border-slate-800 pb-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
               <Shield size={14} className="text-energy" /> Estabelecimento
             </h4>
             <p className="text-sm font-bold text-slate-800 dark:text-white">{merchant.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              A loja precisa aceitar o pedido antes do preparo. Você acompanha tudo pelo app e WhatsApp.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -1037,23 +1090,51 @@ export const Store: React.FC = () => {
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
               <CreditCard size={14} className="text-energy" /> Forma de Pagamento
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {['PIX', 'Dinheiro', 'Cartão'].map((method) => (
                 <button
                   key={method}
                   type="button"
                   onClick={() => setPaymentMethod(method)}
-                  className={`py-3 rounded-xl border text-center text-xs font-bold transition-all ${
+                  className={`rounded-xl border p-3 text-left transition-all ${
                     paymentMethod === method
                       ? 'border-energy bg-energy/5 text-energy shadow-sm'
                       : 'border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850/50 text-slate-500'
                   }`}
                 >
-                  {method}
+                  <span className="block text-xs font-black">{paymentCopy[method].title}</span>
+                  <span className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 shadow-sm dark:bg-slate-900">
+                    {paymentCopy[method].badge}
+                  </span>
+                  <span className="mt-2 block text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                    {paymentCopy[method].description}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
+
+          {paymentMethod === 'PIX' && (
+            <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-3 dark:border-orange-900/40 dark:bg-orange-950/10">
+              <div className="flex items-start gap-2">
+                <MessageSquare size={16} className="mt-0.5 text-energy" />
+                <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                  Depois de confirmar, pague o PIX em até 10 minutos. O pedido só segue para a loja quando o pagamento for confirmado.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {paymentMethod === 'Dinheiro' && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-850/40">
+              <div className="flex items-start gap-2">
+                <StoreIcon size={16} className="mt-0.5 text-energy" />
+                <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                  A loja recebe o pedido pendente e decide aceitar ou rejeitar. Tenha o valor combinado disponível na entrega.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Mercado Pago transparent credit card form */}
           {paymentMethod === 'Cartão' && (
@@ -1421,7 +1502,7 @@ export const Store: React.FC = () => {
             <div className="w-full border-t border-slate-100 dark:border-slate-800 pt-4 flex flex-col gap-2">
               <Button fullWidth onClick={() => {
                 setIsPixModalOpen(false);
-                navigate('/orders');
+                navigate(`/tracking?id=${pixData.orderId}`);
               }}>
                 Acompanhar Pedido
               </Button>
@@ -1429,7 +1510,7 @@ export const Store: React.FC = () => {
                 type="button" 
                 onClick={() => {
                   setIsPixModalOpen(false);
-                  navigate('/orders');
+                  navigate(`/tracking?id=${pixData.orderId}`);
                 }} 
                 className="text-xs text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 transition-colors font-bold py-1"
               >

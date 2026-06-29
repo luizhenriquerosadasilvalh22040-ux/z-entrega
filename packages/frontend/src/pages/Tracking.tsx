@@ -5,6 +5,7 @@ import { Button, Card, Badge, Toast } from '../components/ui';
 import { useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import { MapPin, ShieldAlert, CheckCircle2, Clock, Truck, ChefHat, Check } from 'lucide-react';
+import { getOrderStatusUi, getPaymentStatusUi } from '../utils/orderStatusUi';
 
 interface IOrder {
   _id: string;
@@ -14,6 +15,8 @@ interface IOrder {
   deliveryFee: number;
   total: number;
   status: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
   createdAt: string;
   deliveryAddress: { street: string; number: string; neighborhood: string };
   statusHistory: { status: string; changedAt: string }[];
@@ -54,7 +57,10 @@ export const Tracking: React.FC = () => {
 
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
       const socketUrl = API_URL.replace('/api', '');
-      const socket = io(socketUrl);
+      const socket = io(socketUrl, {
+        auth: { token: localStorage.getItem('accessToken') || undefined },
+        withCredentials: true
+      });
       
       socket.emit('joinOrderRoom', orderId);
       
@@ -96,6 +102,9 @@ export const Tracking: React.FC = () => {
   };
 
   const currentIdx = order ? getStatusIndex(order.status) : -1;
+  const currentStatusUi = order ? getOrderStatusUi(order.status) : null;
+  const currentPaymentUi = order ? getPaymentStatusUi(order.paymentStatus) : null;
+  const CurrentPaymentIcon = currentPaymentUi?.icon;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -127,20 +136,55 @@ export const Tracking: React.FC = () => {
       {orderId && order && (
         <div className="space-y-6 animate-float-in">
           {/* Header de Status */}
-          <Card className="bg-gradient-to-r from-energy/10 to-transparent border-l-4 border-l-energy">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
+          <Card className={`border-l-4 ${currentStatusUi?.isProblem ? 'border-l-red-500 bg-red-50/50 dark:bg-red-950/10' : 'border-l-energy bg-gradient-to-r from-energy/10 to-transparent'}`}>
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-3">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Acompanhando Pedido</span>
                 <h3 className="text-lg font-bold text-slate-850 dark:text-white mt-0.5">
                   De: {order.merchantId?.name}
                 </h3>
+                {currentStatusUi && (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={currentStatusUi.variant}>{currentStatusUi.label}</Badge>
+                      {currentPaymentUi && (
+                        <Badge variant={currentPaymentUi.variant}>{currentPaymentUi.label}</Badge>
+                      )}
+                    </div>
+                    <p className="max-w-xl text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      {currentStatusUi.description}
+                    </p>
+                    <p className="max-w-xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      {currentStatusUi.customerHint}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="text-left md:text-right">
                 <span className="text-xs text-slate-400">Código do Pedido</span>
                 <p className="text-sm font-semibold truncate max-w-xs">{order._id}</p>
+                {order.paymentMethod && (
+                  <p className="mt-1 text-xs font-semibold text-slate-400">
+                    Pagamento: {order.paymentMethod}
+                  </p>
+                )}
               </div>
             </div>
           </Card>
+
+          {currentPaymentUi && currentPaymentUi.variant !== 'green' && (
+            <Card className="border border-amber-100 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/10">
+              <div className="flex items-start gap-3">
+                {CurrentPaymentIcon && <CurrentPaymentIcon size={20} className="mt-0.5 text-amber-600" />}
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">{currentPaymentUi.label}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-350">
+                    {currentPaymentUi.description}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Timeline Visual */}
           <Card className="space-y-8">
@@ -148,8 +192,9 @@ export const Tracking: React.FC = () => {
             
             <div className="relative pl-6 border-l border-slate-200 dark:border-slate-800 ml-4 space-y-8">
               {statuses.map((step, idx) => {
-                const isCompleted = idx <= currentIdx;
-                const isCurrent = idx === currentIdx;
+                const isCancelled = order.status === 'CANCELLED';
+                const isCompleted = !isCancelled && idx <= currentIdx;
+                const isCurrent = !isCancelled && idx === currentIdx;
                 const Icon = step.icon;
 
                 return (
@@ -178,6 +223,20 @@ export const Tracking: React.FC = () => {
                   </div>
                 );
               })}
+
+              {order.status === 'CANCELLED' && (
+                <div className="relative">
+                  <span className="absolute -left-[35px] top-0.5 rounded-full border-2 border-red-500 bg-red-500 p-1 text-white ring-4 ring-red-500/20">
+                    <ShieldAlert size={14} />
+                  </span>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-red-500">Pedido cancelado</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      A preparação e a entrega não vão avançar. Se houve pagamento online, acompanhe o estorno.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 

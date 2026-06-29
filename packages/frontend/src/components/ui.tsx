@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, X } from 'lucide-react';
+import { ShieldCheck, X } from 'lucide-react';
 
 // ==========================================
 // 1. BUTTON
@@ -239,6 +239,75 @@ export const Toast: React.FC<ToastProps> = ({
       <button onClick={onClose} className="hover:opacity-80">
         <X size={16} />
       </button>
+    </div>
+  );
+};
+
+// ==========================================
+// 7. LEGAL CONSENT
+// ==========================================
+interface LegalConsentProps {
+  termsAccepted: boolean;
+  privacyAccepted: boolean;
+  marketingConsent: boolean;
+  onTermsChange: (checked: boolean) => void;
+  onPrivacyChange: (checked: boolean) => void;
+  onMarketingChange: (checked: boolean) => void;
+  compact?: boolean;
+}
+
+export const LegalConsent: React.FC<LegalConsentProps> = ({
+  termsAccepted,
+  privacyAccepted,
+  marketingConsent,
+  onTermsChange,
+  onPrivacyChange,
+  onMarketingChange,
+  compact = false
+}) => {
+  const checkboxClass = "mt-0.5 h-4 w-4 rounded border-slate-300 text-energy focus:ring-energy dark:border-slate-700 dark:bg-slate-900";
+
+  return (
+    <div className={`rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40 ${compact ? 'space-y-2' : 'space-y-3'}`}>
+      <div className="flex items-start gap-2 text-slate-700 dark:text-slate-200">
+        <ShieldCheck size={16} className="mt-0.5 flex-shrink-0 text-energy" />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide">Privacidade e segurança</p>
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            Usamos seus dados apenas para login, entrega, pagamento, suporte e comunicações essenciais do pedido.
+          </p>
+        </div>
+      </div>
+
+      <label className="flex items-start gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(event) => onTermsChange(event.target.checked)}
+          className={checkboxClass}
+        />
+        <span>Li e aceito os Termos de Uso do Traz Pra Cá.</span>
+      </label>
+
+      <label className="flex items-start gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={privacyAccepted}
+          onChange={(event) => onPrivacyChange(event.target.checked)}
+          className={checkboxClass}
+        />
+        <span>Li e aceito a Política de Privacidade.</span>
+      </label>
+
+      <label className="flex items-start gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+        <input
+          type="checkbox"
+          checked={marketingConsent}
+          onChange={(event) => onMarketingChange(event.target.checked)}
+          className={checkboxClass}
+        />
+        <span>Quero receber novidades e ofertas. Opcional.</span>
+      </label>
     </div>
   );
 };

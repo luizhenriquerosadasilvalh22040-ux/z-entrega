@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Button, Input, Card, Toast, Badge } from '../components/ui';
+import { Button, Input, Card, LegalConsent, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
 import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus, Sparkles, Pizza, ShoppingBag, Package, Rocket } from 'lucide-react';
 
@@ -54,6 +54,9 @@ export const PartnerPortal: React.FC = () => {
       zipCode: '87800-000'
     }
   });
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -157,6 +160,10 @@ export const PartnerPortal: React.FC = () => {
       setToast({ message: 'Preencha todos os dados obrigatórios da sua loja', type: 'error' });
       return;
     }
+    if (!termsAccepted || !privacyAccepted) {
+      setToast({ message: 'Aceite os termos e a política de privacidade para cadastrar sua loja', type: 'error' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -166,7 +173,10 @@ export const PartnerPortal: React.FC = () => {
       const payload = {
         ...regForm,
         phone: cleanPhone,
-        cnpj: cleanCnpj
+        cnpj: cleanCnpj,
+        termsAccepted,
+        privacyAccepted,
+        marketingConsent
       };
       
       const registerRes = await apiClient.post('/auth/merchant/register', payload);
@@ -189,8 +199,6 @@ export const PartnerPortal: React.FC = () => {
       
       {/* Landing Hero Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-gradient-to-tr from-slate-950 via-slate-900 to-black text-white rounded-3xl p-8 md:p-12 relative overflow-hidden border border-slate-800 shadow-2xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-orange-500/10 rounded-full filter blur-3xl"></div>
-        
         {/* Floating 3D Icons */}
         <div className="absolute top-4 left-1/2 animate-float opacity-30 select-none hidden md:block" style={{ animationDelay: '0.4s', animationDuration: '4s' }}>
           <Pizza size={24} className="text-orange-500" />
@@ -415,7 +423,7 @@ export const PartnerPortal: React.FC = () => {
             )}
 
             {forgotMode === 'none' && activeTab === 'merchant_register' && (
-              <form onSubmit={handleMerchantRegister} className="space-y-4 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
+              <form onSubmit={handleMerchantRegister} className="max-h-[min(560px,calc(100dvh-190px))] space-y-4 overflow-y-auto pr-2">
                 <div className="text-center pb-2">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
                     <UserPlus size={18} className="text-energy" /> Cadastrar Meu Estabelecimento
@@ -521,6 +529,16 @@ export const PartnerPortal: React.FC = () => {
                     required
                   />
                 </div>
+
+                <LegalConsent
+                  termsAccepted={termsAccepted}
+                  privacyAccepted={privacyAccepted}
+                  marketingConsent={marketingConsent}
+                  onTermsChange={setTermsAccepted}
+                  onPrivacyChange={setPrivacyAccepted}
+                  onMarketingChange={setMarketingConsent}
+                  compact
+                />
 
                 <div className="pt-2">
                   <Button type="submit" fullWidth disabled={loading}>
