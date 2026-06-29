@@ -1,4 +1,5 @@
 import prisma from '../config/prisma';
+import { MERCHANT_SUBSCRIPTION_STATUS } from '../domain/subscriptionStatus';
 
 export const formatProduct = (product: any) => {
   if (!product) return null;
@@ -197,6 +198,12 @@ export class ProductService {
     const products = await prisma.product.findMany({
       where: {
         isAvailable: true,
+        isPaused: false,
+        merchant: {
+          isActive: true,
+          isVerified: true,
+          subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
+        },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },

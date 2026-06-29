@@ -1,26 +1,32 @@
 import prisma from '../config/prisma';
-import { MercadoPagoService } from './MercadoPagoService';
+import { InventoryService } from './InventoryService';
+import { DeliveryDispatchService } from './DeliveryDispatchService';
+import { PaymentRefundService } from './PaymentRefundService';
 import { NotificationService } from './NotificationService';
+import { OrderNotificationService } from './OrderNotificationService';
+import { OrderPaymentSyncService } from './OrderPaymentSyncService';
+import { OrderCreationService } from './OrderCreationService';
+import { AuditLogService, type AuditRequestContext } from './AuditLogService';
+import { WhatsAppTemplateService } from './WhatsAppTemplateService';
 import { IAddress } from '../types';
 import logger from '../config/logger';
-import { formatCustomer } from './CustomerService';
-import { deliveryTimeoutQueue } from '../queues/deliveryQueue';
+import { WhatsAppTemplateType } from '@prisma/client';
+import { scheduleDeliveryTimeout } from '../queues/deliveryQueue';
 import { createDeliveryResponseToken } from '../utils/deliveryResponseToken';
-import { businessConfig, isSupportedServiceArea } from '../config/business';
-
-type OrderActorRole = 'customer' | 'merchant' | 'deliverer' | 'admin';
-type OrderStatus =
-  | 'PENDING'
-  | 'PAID'
-  | 'ACCEPTED'
-  | 'PREPARING'
-  | 'READY'
-  | 'DISPATCHED'
-  | 'IN_TRANSIT'
-  | 'DELIVERED'
-  | 'CANCELLED';
-
-const ONLINE_PAYMENT_METHODS = new Set(['PIX', 'Cartão']);
+import { canTryAnotherDeliverer } from '../domain/deliveryDispatchPolicy';
+import {
+  DELIVERER_RESPONSE_STATUS,
+  DELIVERER_WORK_STATUS,
+  ORDER_STATUS,
+  PAYMENT_STATUS,
+  ONLINE_PAYMENT_METHODS,
+  type OrderStatus
+} from '../domain/orderStatus';
+import {
+  MERCHANT_REVENUE_ORDER_EXCLUDED_STATUSES,
+  assertCanTransitionOrder,
+  type OrderActorRole
+} from '../domain/orderStateMachine';
 
 const getApiPublicUrl = (): string => {
   return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -33,57 +39,6 @@ const buildDeliveryResponseUrl = (
 ): string => {
   const token = createDeliveryResponseToken(orderId, delivererId, action);
   return `${getApiPublicUrl()}/api/orders/${orderId}/delivery-response?delivererId=${delivererId}&action=${action}&token=${encodeURIComponent(token)}`;
-};
-
-const assertCanTransitionOrder = (order: any, nextStatus: OrderStatus, actorRole: OrderActorRole): void => {
-  const currentStatus = order.status as OrderStatus;
-
-  if (currentStatus === nextStatus) {
-    return;
-  }
-
-  if (currentStatus === 'CANCELLED' || currentStatus === 'DELIVERED') {
-    throw new Error('Este pedido já foi finalizado e não pode mudar de status.');
-  }
-
-  const canAcceptPending =
-    currentStatus === 'PENDING' &&
-    nextStatus === 'ACCEPTED' &&
-    actorRole === 'merchant' &&
-    (!ONLINE_PAYMENT_METHODS.has(order.paymentMethod) || order.paymentStatus === 'RECEIVED');
-
-  const allowedByRole: Record<OrderActorRole, Partial<Record<OrderStatus, OrderStatus[]>>> = {
-    customer: {
-      PENDING: ['CANCELLED'],
-      PAID: ['CANCELLED']
-    },
-    merchant: {
-      PENDING: ['CANCELLED'],
-      PAID: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['PREPARING', 'READY', 'CANCELLED'],
-      PREPARING: ['READY', 'CANCELLED'],
-      READY: ['DISPATCHED', 'CANCELLED']
-    },
-    deliverer: {
-      READY: ['DISPATCHED'],
-      DISPATCHED: ['IN_TRANSIT'],
-      IN_TRANSIT: ['DELIVERED']
-    },
-    admin: {
-      PENDING: ['PAID', 'ACCEPTED', 'CANCELLED'],
-      PAID: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['PREPARING', 'READY', 'CANCELLED'],
-      PREPARING: ['READY', 'CANCELLED'],
-      READY: ['DISPATCHED', 'CANCELLED'],
-      DISPATCHED: ['IN_TRANSIT', 'CANCELLED'],
-      IN_TRANSIT: ['DELIVERED', 'CANCELLED']
-    }
-  };
-
-  const allowedStatuses = allowedByRole[actorRole][currentStatus] || [];
-  if (!canAcceptPending && !allowedStatuses.includes(nextStatus)) {
-    throw new Error(`Transição de status inválida: ${currentStatus} -> ${nextStatus}`);
-  }
 };
 
 export const formatOrder = (order: any) => {
@@ -190,8 +145,12 @@ export const formatOrder = (order: any) => {
 
 export class OrderService {
   /**
-   * Cria um novo pedido calculando subtotal, descontos, comissão e total
-   */  public static async createOrder(
+   * Cria um novo pedido calculando subtotal, descontos, comissão e total.
+   *
+   * O fluxo detalhado vive em OrderCreationService para manter o OrderService
+   * como fachada de orquestração compatível com controllers existentes.
+   */
+  public static async createOrder(
     customerId: string,
     merchantId: string,
     itemsData: { 
@@ -207,487 +166,23 @@ export class OrderService {
     paymentMethodId?: string,
     installments?: number
   ): Promise<any> {
-    const savedOrder = await prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.findUnique({
-        where: { id: customerId },
-        include: { addresses: true }
-      });
-      if (!customer) throw new Error('Customer not found');
-
-      const merchant = await tx.merchant.findUnique({
-        where: { id: merchantId }
-      });
-      if (!merchant) throw new Error('Merchant not found');
-
-      if (merchant.subscriptionStatus !== 'ACTIVE') {
-        throw new Error('O estabelecimento não está habilitado para receber pedidos no momento (Assinatura Inativa).');
-      }
-
-      if (merchant.isForceClosed) {
-        throw new Error('O estabelecimento comercial está fechado manualmente pelo proprietário.');
-      }
-
-      // Valida se o método de pagamento selecionado é aceito pelo lojista
-      if (!merchant.paymentMethods.includes(paymentMethod)) {
-        throw new Error('Método de pagamento não aceito por este estabelecimento.');
-      }
-
-      // Verifica se o estabelecimento está aberto no horário atual (baseado no fuso horário do lojista)
-      const now = new Date();
-      const timezone = merchant.timezone || 'America/Sao_Paulo';
-      const localTimeStr = now.toLocaleString('en-US', { timeZone: timezone });
-      const localDate = new Date(localTimeStr);
-      const currentMinutes = localDate.getHours() * 60 + localDate.getMinutes();
-
-      const [openH, openM] = merchant.openTime.split(':').map(Number);
-      const [closeH, closeM] = merchant.closeTime.split(':').map(Number);
-
-      const openMinutes = openH * 60 + openM;
-      const closeMinutes = closeH * 60 + closeM;
-
-      let isOpen = false;
-      if (closeMinutes < openMinutes) {
-        isOpen = (currentMinutes >= openMinutes || currentMinutes < closeMinutes);
-      } else {
-        isOpen = (currentMinutes >= openMinutes && currentMinutes < closeMinutes);
-      }
-
-      if (!isOpen) {
-        throw new Error('O estabelecimento comercial está fechado no momento e não está aceitando pedidos.');
-      }
-
-      // Carrega produtos e calcula subtotal
-      const items = [];
-      let subtotal = 0;
-
-      // Obtém promoções ativas para ver se há desconto
-      const activePromotions = await tx.promotion.findMany({
-        where: {
-          merchantId,
-          expirationDate: { gte: now }
-        }
-      });
-
-      // Busca todos os produtos do pedido de uma vez só (evita N+1 queries em loop)
-      const productIds = itemsData.map(item => item.productId);
-      const dbProducts = await tx.product.findMany({
-        where: { id: { in: productIds } }
-      });
-
-      // Cria um mapa para facilitar a busca rápida em memória
-      const productMap = new Map(dbProducts.map(p => [p.id, p]));
-
-      for (const item of itemsData) {
-        const product = productMap.get(item.productId);
-        
-        if (!product || product.merchantId !== merchantId) throw new Error(`Product not found: ${item.productId}`);
-        if (!product.isAvailable) throw new Error(`Product is not available: ${product.name}`);
-        if (product.stockQuantity < item.quantity) {
-          throw new Error(`Estoque insuficiente para o produto: ${product.name}`);
-        }
-
-        // Decrementa o estoque atômicamente garantindo que não fique negativo
-        try {
-          await tx.product.update({
-            where: { id: product.id, stockQuantity: { gte: item.quantity } },
-            data: { stockQuantity: { decrement: item.quantity } }
-          });
-        } catch (err) {
-          throw new Error(`Estoque insuficiente para o produto: ${product.name}`);
-        }
-
-        const optionsPrice = item.chosenOptions
-          ? item.chosenOptions.reduce((sum, opt) => sum + opt.price, 0)
-          : 0;
-
-        let baseAndOptionsPrice = product.price + optionsPrice;
-
-        // Procura se há alguma promoção ativa que se aplica especificamente a este produto ou categoria
-        const applicablePromo = activePromotions.find(promo => {
-          if (promo.productIds && promo.productIds.length > 0) {
-            return promo.productIds.includes(product.id);
-          }
-          if (promo.categoryApplicable) {
-            return promo.categoryApplicable.toLowerCase() === product.category.toLowerCase();
-          }
-          return true;
-        });
-
-        if (applicablePromo) {
-          baseAndOptionsPrice = baseAndOptionsPrice * (1 - applicablePromo.discountPercentage / 100);
-        }
-
-        const itemTotal = baseAndOptionsPrice * item.quantity;
-        subtotal += itemTotal;
-
-        items.push({
-          productId: product.id,
-          name: product.name,
-          price: baseAndOptionsPrice,
-          quantity: item.quantity,
-          chosenOptions: item.chosenOptions || [],
-          notes: item.notes || ''
-        });
-      }
-
-      // Processamento e validação de cupom
-      let couponDiscount = 0;
-      let appliedCouponId = null;
-
-      if (couponCode) {
-        const coupon = await tx.coupon.findUnique({
-          where: { code: couponCode.toUpperCase() }
-        });
-
-        if (!coupon) throw new Error('Cupom de desconto inválido ou não encontrado.');
-        if (!coupon.isActive) throw new Error('Este cupom não está mais ativo.');
-        if (new Date(coupon.expirationDate) < new Date()) throw new Error('Este cupom já expirou.');
-        if (coupon.merchantId && coupon.merchantId !== merchantId) throw new Error('Este cupom não é válido para esta loja.');
-        if (coupon.minOrderValue && subtotal < coupon.minOrderValue) {
-          throw new Error(`O valor mínimo do pedido para este cupom é de R$ ${coupon.minOrderValue.toFixed(2)}.`);
-        }
-        if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
-          throw new Error('Este cupom atingiu o limite máximo de utilizações.');
-        }
-
-        const usage = await tx.userCouponUsage.findUnique({
-          where: {
-            userId_couponId: {
-              userId: customerId,
-              couponId: coupon.id
-            }
-          }
-        });
-
-        if (usage) throw new Error('Você já utilizou este cupom anteriormente.');
-
-        if (coupon.discountType === 'PERCENTAGE') {
-          couponDiscount = subtotal * (coupon.discountValue / 100);
-        } else {
-          couponDiscount = coupon.discountValue;
-        }
-
-        if (couponDiscount > subtotal) {
-          couponDiscount = subtotal;
-        }
-
-        appliedCouponId = coupon.id;
-
-        // Incrementa contagem de usos do cupom de forma atômica contra condições de corrida
-        try {
-          if (coupon.maxUses !== null) {
-            await tx.coupon.update({
-              where: { id: coupon.id, usedCount: { lt: coupon.maxUses } },
-              data: { usedCount: { increment: 1 } }
-            });
-          } else {
-            await tx.coupon.update({
-              where: { id: coupon.id },
-              data: { usedCount: { increment: 1 } }
-            });
-          }
-        } catch (err) {
-          throw new Error('Este cupom atingiu o limite máximo de utilizações.');
-        }
-
-        // Grava o histórico de uso
-        await tx.userCouponUsage.create({
-          data: {
-            userId: customerId,
-            couponId: coupon.id
-          }
-        });
-      }
-
-      const finalAddress = deliveryAddress || formatCustomer(customer)?.address;
-      if (!finalAddress) {
-        throw new Error('Endereço de entrega não definido.');
-      }
-      if (!isSupportedServiceArea(finalAddress.city, finalAddress.state)) {
-        throw new Error(`No momento atendemos apenas ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
-      }
-      if (!isSupportedServiceArea(merchant.city, merchant.state)) {
-        throw new Error(`Esta loja está fora da área piloto ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
-      }
-
-      const subtotalWithDiscount = Math.max(0, subtotal - couponDiscount);
-      const commission = Number((subtotalWithDiscount * businessConfig.platformCommissionRate).toFixed(2));
-      const deliveryFee = businessConfig.platformDeliveryFee;
-      const total = subtotalWithDiscount + deliveryFee;
-
-      let mpPaymentId = undefined;
-      let pixQrCode = undefined;
-      let pixCopyAndPaste = undefined;
-      let paymentConfirmedNow = false;
-
-      const createdOrder = await tx.order.create({
-        data: {
-          customerId,
-          merchantId,
-          subtotal: subtotalWithDiscount,
-          commission,
-          deliveryFee,
-          total,
-          status: 'PENDING',
-          paymentMethod,
-          deliveryStreet: finalAddress.street,
-          deliveryNumber: finalAddress.number,
-          deliveryNeighborhood: finalAddress.neighborhood,
-          deliveryCity: finalAddress.city,
-          deliveryState: finalAddress.state || 'PR',
-          deliveryZip: finalAddress.zipCode,
-          deliveryComplement: finalAddress.complement || '',
-          deliveryReference: finalAddress.referencePoint || '',
-          paymentStatus: 'PENDING',
-          couponId: appliedCouponId
-        }
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: createdOrder.id,
-          status: 'PENDING'
-        }
-      });
-
-      for (const item of items) {
-        const orderItem = await tx.orderItem.create({
-          data: {
-            orderId: createdOrder.id,
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            notes: item.notes
-          }
-        });
-
-        if (item.chosenOptions && item.chosenOptions.length > 0) {
-          await tx.orderItemOption.createMany({
-            data: item.chosenOptions.map(opt => ({
-              orderItemId: orderItem.id,
-              groupName: opt.groupName,
-              optionName: opt.optionName,
-              price: opt.price
-            }))
-          });
-        }
-      }
-
-      const applicationFee = deliveryFee + commission;
-      const customerData = formatCustomer(customer)!;
-
-      if (paymentMethod === 'PIX') {
-        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(customerData as any);
-        const pixPayment = await MercadoPagoService.createPixPayment(
-          createdOrder.id,
-          total,
-          mpCustomerId,
-          merchantId,
-          applicationFee
-        );
-        mpPaymentId = pixPayment.mpPaymentId;
-        pixQrCode = pixPayment.qrCodeBase64;
-        pixCopyAndPaste = pixPayment.copyAndPaste;
-
-        await tx.order.update({
-          where: { id: createdOrder.id },
-          data: {
-            mpPaymentId,
-            pixQrCode,
-            pixCopyAndPaste
-          }
-        });
-      } else if (paymentMethod === 'Cartão') {
-        if (!cardToken || !paymentMethodId) {
-          throw new Error('Dados do cartão de crédito não fornecidos para pagamento.');
-        }
-        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(customerData as any);
-        const cardPaymentResult = await MercadoPagoService.createCardPayment(
-          createdOrder.id,
-          total,
-          mpCustomerId,
-          cardToken,
-          paymentMethodId,
-          installments || 1,
-          customer.email || 'comprador@trazpraca.com',
-          merchantId,
-          applicationFee
-        );
-
-        mpPaymentId = String(cardPaymentResult.id);
-        const paymentStatusMap: Record<string, string> = {
-          approved: 'RECEIVED',
-          in_process: 'PENDING',
-          pending: 'PENDING',
-          rejected: 'REJECTED',
-          cancelled: 'CANCELLED'
-        };
-        const mpStatus = paymentStatusMap[cardPaymentResult.status] || 'PENDING';
-        if (mpStatus === 'REJECTED' || mpStatus === 'CANCELLED') {
-          throw new Error('Pagamento com cartão não aprovado. O pedido não foi criado.');
-        }
-        paymentConfirmedNow = mpStatus === 'RECEIVED';
-
-        await tx.order.update({
-          where: { id: createdOrder.id },
-          data: {
-            mpPaymentId,
-            paymentStatus: mpStatus,
-            status: mpStatus === 'RECEIVED' ? 'PAID' : 'PENDING'
-          }
-        });
-
-        if (mpStatus === 'RECEIVED') {
-          await tx.orderStatusHistory.create({
-            data: {
-              orderId: createdOrder.id,
-              status: 'PAID'
-            }
-          });
-        }
-      }
-
-      const notificationIds: string[] = [];
-
-      const notificationId = await NotificationService.queueNotification({
-        userId: customer.id,
-        userType: 'Customer',
-        type: 'WhatsApp',
-        target: customer.phone,
-        content: paymentMethod === 'PIX'
-          ? `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do pagamento PIX.`
-          : `Olá, *${customer.name}*! Recebemos o seu pedido nº *${createdOrder.id}* no estabelecimento *${merchant.name}*. Total: R$ ${total.toFixed(2)}. Aguardando confirmação do lojista!`
-      }, tx);
-      notificationIds.push(notificationId);
-
-      if (paymentMethod === 'Dinheiro' || paymentConfirmedNow) {
-        const merchantNotificationId = await NotificationService.queueNotification({
-          userId: merchant.id,
-          userType: 'Merchant',
-          type: 'WhatsApp',
-          target: merchant.phone,
-          content: `Novo pedido aguardando aceite.\n\nPedido: *${createdOrder.id}*\nCliente: *${customer.name}*\nPagamento: *${paymentMethod}*\nTotal: R$ ${total.toFixed(2)}\n\nAcesse o painel do lojista para aceitar ou cancelar.`
-        }, tx);
-        notificationIds.push(merchantNotificationId);
-      }
-
-      const order = await tx.order.findUnique({
-        where: { id: createdOrder.id },
-        include: {
-          customer: true,
-          merchant: true,
-          deliverer: true,
-          statusHistory: true,
-          items: {
-            include: {
-              options: true,
-              product: true
-            }
-          }
-        }
-      });
-
-      return { order, notificationIds };
+    const order = await OrderCreationService.createOrder({
+      customerId,
+      merchantId,
+      itemsData,
+      paymentMethod,
+      deliveryAddress,
+      couponCode,
+      cardToken,
+      paymentMethodId,
+      installments
     });
 
-    try {
-      for (const notificationId of savedOrder.notificationIds) {
-        await NotificationService.addJobToQueue(notificationId);
-      }
-    } catch (err) {
-      console.error('Erro ao adicionar notificação pós-commit à fila:', err);
-    }
-
-    return formatOrder(savedOrder.order);
+    return formatOrder(order);
   }
 
   public static async confirmPaymentApproved(orderId: string): Promise<any | null> {
-    const notificationsToQueue: string[] = [];
-
-    const savedOrder = await prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id: orderId },
-        include: {
-          customer: true,
-          merchant: true,
-          deliverer: true,
-          statusHistory: true,
-          items: {
-            include: {
-              options: true,
-              product: true
-            }
-          }
-        }
-      });
-
-      if (!order) throw new Error('Order not found');
-      if (order.paymentStatus === 'RECEIVED' && order.status !== 'PENDING') {
-        return order;
-      }
-      if (order.status !== 'PENDING') {
-        return order;
-      }
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: 'RECEIVED',
-          status: 'PAID'
-        }
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: order.id,
-          status: 'PAID'
-        }
-      });
-
-      const customerNotificationId = await NotificationService.queueNotification({
-        userId: order.customer.id,
-        userType: 'Customer',
-        type: 'WhatsApp',
-        target: order.customer.phone,
-        content: `Olá, *${order.customer.name}*! O pagamento do pedido nº *${order.id}* foi confirmado. Agora estamos aguardando o aceite de *${order.merchant.name}*.`
-      }, tx);
-      notificationsToQueue.push(customerNotificationId);
-
-      const merchantNotificationId = await NotificationService.queueNotification({
-        userId: order.merchant.id,
-        userType: 'Merchant',
-        type: 'WhatsApp',
-        target: order.merchant.phone,
-        content: `Novo pedido pago aguardando aceite.\n\nPedido: *${order.id}*\nCliente: *${order.customer.name}*\nTotal: R$ ${order.total.toFixed(2)}\n\nAcesse o painel do lojista para aceitar ou cancelar.`
-      }, tx);
-      notificationsToQueue.push(merchantNotificationId);
-
-      return await tx.order.findUnique({
-        where: { id: order.id },
-        include: {
-          customer: true,
-          merchant: true,
-          deliverer: true,
-          statusHistory: true,
-          items: {
-            include: {
-              options: true,
-              product: true
-            }
-          }
-        }
-      });
-    });
-
-    for (const nId of notificationsToQueue) {
-      try {
-        await NotificationService.addJobToQueue(nId);
-      } catch (err) {
-        console.error('Erro ao adicionar notificação pós-commit à fila:', err);
-      }
-    }
-
+    const savedOrder = await OrderPaymentSyncService.confirmPaymentApproved(orderId);
     return formatOrder(savedOrder);
   }
 
@@ -698,7 +193,8 @@ export class OrderService {
     orderId: string, 
     status: OrderStatus, 
     actorId: string, 
-    actorRole: OrderActorRole
+    actorRole: OrderActorRole,
+    auditContext?: AuditRequestContext
   ): Promise<any | null> {
     const notificationsToQueue: string[] = [];
 
@@ -723,35 +219,27 @@ export class OrderService {
       let delivererId = order.delivererId;
       let delivererStatus = order.delivererStatus;
 
-      if (status === 'READY') {
-        const activeDeliverers = await tx.deliverer.findMany({
-          where: { isActiveToday: true, isActive: true, isAvailable: true }
-        });
-        if (activeDeliverers.length > 0) {
-          const delivererIds = activeDeliverers.map(d => d.id);
-          const activeDeliveriesCounts = await tx.order.groupBy({
-            by: ['delivererId'],
-            where: {
-              delivererId: { in: delivererIds },
-              status: { in: ['READY', 'DISPATCHED', 'IN_TRANSIT'] }
-            },
-            _count: { id: true }
-          });
-
-          const countsMap = new Map<string, number>();
-          activeDeliveriesCounts.forEach(c => {
-            if (c.delivererId) countsMap.set(c.delivererId, c._count.id);
-          });
-
-          activeDeliverers.sort((a, b) => {
-            const countA = countsMap.get(a.id) || 0;
-            const countB = countsMap.get(b.id) || 0;
-            return countA - countB;
-          });
-
-          const driver = activeDeliverers[0];
+      if (status === ORDER_STATUS.READY) {
+        const driver = await DeliveryDispatchService.findBestAvailableDeliverer(tx);
+        if (driver) {
           delivererId = driver.id;
-          delivererStatus = 'PENDING';
+          delivererStatus = DELIVERER_RESPONSE_STATUS.PENDING;
+          await DeliveryDispatchService.createPendingAssignment(tx, orderId, driver.id);
+        }
+      }
+
+      let nextPaymentStatus = order.paymentStatus;
+      if (status === ORDER_STATUS.CANCELLED) {
+        await InventoryService.restoreOrderStock(tx, orderId);
+
+        if (
+          ONLINE_PAYMENT_METHODS.has(order.paymentMethod) &&
+          order.paymentStatus === PAYMENT_STATUS.RECEIVED &&
+          order.mpPaymentId
+        ) {
+          nextPaymentStatus = PAYMENT_STATUS.REFUND_PENDING;
+        } else if (order.paymentStatus === PAYMENT_STATUS.PENDING) {
+          nextPaymentStatus = PAYMENT_STATUS.CANCELLED;
         }
       }
 
@@ -767,7 +255,8 @@ export class OrderService {
         data: {
           status,
           delivererId,
-          delivererStatus
+          delivererStatus,
+          paymentStatus: nextPaymentStatus
         },
         include: {
           customer: true,
@@ -783,96 +272,47 @@ export class OrderService {
         }
       });
 
-      const customer = updatedOrder.customer;
-      const merchant = updatedOrder.merchant;
       const deliverer = updatedOrder.deliverer;
+
+      await AuditLogService.record(tx, {
+        actorType: actorRole,
+        actorId,
+        action: 'ORDER_STATUS_CHANGED',
+        entityType: 'Order',
+        entityId: orderId,
+        orderId,
+        merchantId: updatedOrder.merchantId,
+        metadata: {
+          fromStatus: order.status,
+          toStatus: status,
+          paymentStatus: nextPaymentStatus,
+          delivererId
+        },
+        context: auditContext
+      });
 
       // Sincroniza o status do entregador baseado na transição
       if (deliverer) {
-        if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
+        if (status === ORDER_STATUS.DISPATCHED || status === ORDER_STATUS.IN_TRANSIT) {
           await tx.deliverer.update({
             where: { id: deliverer.id },
-            data: { deliveryStatus: 'DELIVERING' }
+            data: { deliveryStatus: DELIVERER_WORK_STATUS.DELIVERING }
           });
-        } else if (status === 'DELIVERED' || status === 'CANCELLED') {
+        } else if (status === ORDER_STATUS.DELIVERED || status === ORDER_STATUS.CANCELLED) {
           await tx.deliverer.update({
             where: { id: deliverer.id },
-            data: { deliveryStatus: 'AVAILABLE' }
+            data: { deliveryStatus: DELIVERER_WORK_STATUS.AVAILABLE }
           });
         }
       }
 
-      if (status === 'ACCEPTED' || status === 'PREPARING') {
-        const nId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi aceito por *${merchant.name}* e já está em preparação!`
-        }, tx);
-        notificationsToQueue.push(nId);
-      } else if (status === 'READY') {
-        if (deliverer) {
-          const pickupAddr = `${merchant.street}, ${merchant.number} - ${merchant.neighborhood}, ${merchant.city}`;
-          const delivAddr = `${updatedOrder.deliveryStreet}, ${updatedOrder.deliveryNumber} - ${updatedOrder.deliveryNeighborhood}, ${updatedOrder.deliveryCity}` +
-            (updatedOrder.deliveryComplement ? `, Complemento: ${updatedOrder.deliveryComplement}` : '') +
-            (updatedOrder.deliveryReference ? ` (Ref: ${updatedOrder.deliveryReference})` : '');
-
-          const nId1 = await NotificationService.queueNotification({
-            userId: deliverer.id,
-            userType: 'Deliverer',
-            type: 'WhatsApp',
-            target: deliverer.phone,
-            content: `Olá, *${deliverer.name}*! Novo pedido pronto para coleta no estabelecimento *${merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa de entrega: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: ${buildDeliveryResponseUrl(updatedOrder.id, deliverer.id, 'accept')}\nRecusar: ${buildDeliveryResponseUrl(updatedOrder.id, deliverer.id, 'reject')}`
-          }, tx);
-          notificationsToQueue.push(nId1);
-
-          const nId2 = await NotificationService.queueNotification({
-            userId: customer.id,
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* está pronto e o entregador *${deliverer.name}* foi acionado para a entrega!`
-          }, tx);
-          notificationsToQueue.push(nId2);
-        } else {
-          const nId = await NotificationService.queueNotification({
-            userId: customer.id,
-            userType: 'Customer',
-            type: 'WhatsApp',
-            target: customer.phone,
-            content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* está pronto e aguardando um entregador disponível.`
-          }, tx);
-          notificationsToQueue.push(nId);
-        }
-      } else if (status === 'DISPATCHED' || status === 'IN_TRANSIT') {
-        const nId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* saiu para entrega e está a caminho do seu endereço!`
-        }, tx);
-        notificationsToQueue.push(nId);
-      } else if (status === 'DELIVERED') {
-        const nId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi entregue! Agradecemos a preferência.`
-        }, tx);
-        notificationsToQueue.push(nId);
-      } else if (status === 'CANCELLED') {
-        const nId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: `Olá, *${customer.name}*! Seu pedido nº *${updatedOrder.id}* foi cancelado.`
-        }, tx);
-        notificationsToQueue.push(nId);
-      }
+      notificationsToQueue.push(
+        ...await OrderNotificationService.queueStatusChanged({ tx }, {
+          order: updatedOrder,
+          status,
+          buildDeliveryResponseUrl
+        })
+      );
 
       return updatedOrder;
     });
@@ -881,19 +321,26 @@ export class OrderService {
       try {
         await NotificationService.addJobToQueue(nId);
       } catch (err) {
-        console.error('Erro ao adicionar notificação pós-commit à fila:', err);
+      logger.error('Erro ao adicionar notificação pós-commit à fila:', err);
       }
     }
 
+    if (
+      status === ORDER_STATUS.CANCELLED &&
+      savedOrder.paymentStatus === PAYMENT_STATUS.REFUND_PENDING &&
+      savedOrder.mpPaymentId
+    ) {
+      await PaymentRefundService.refundCancelledOrder(savedOrder, `Pedido cancelado por ${actorRole}`, {
+        initiatedByActorType: actorRole,
+        initiatedByActorId: actorId,
+        context: auditContext
+      });
+    }
+
     // Agenda o timeout fora da transação
-    if (status === 'READY' && savedOrder.delivererId) {
+    if (status === ORDER_STATUS.READY && savedOrder.delivererId) {
       try {
-        await deliveryTimeoutQueue.add(
-          'deliveryTimeout',
-          { orderId: savedOrder.id, delivererId: savedOrder.delivererId },
-          { delay: 5 * 60 * 1000 }
-        );
-        logger.info(`⏰ [Timeout Scheduled] Timeout de 5 minutos agendado para o pedido ${savedOrder.id} (Entregador: ${savedOrder.delivererId})`);
+        await scheduleDeliveryTimeout(savedOrder.id, savedOrder.delivererId);
       } catch (err) {
         logger.error('Erro ao agendar timeout de entrega na fila BullMQ:', err);
       }
@@ -990,14 +437,14 @@ export class OrderService {
 
     // 2. Contagem de pedidos pendentes
     const pendingOrders = await prisma.order.count({
-      where: { merchantId, status: { in: ['PENDING', 'PAID'] } }
+      where: { merchantId, status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.PAID] } }
     });
 
     // 3. Agregações para pedidos concluídos (não PENDING e não CANCELLED)
     const aggregates = await prisma.order.aggregate({
       where: {
         merchantId,
-        status: { notIn: ['PENDING', 'PAID', 'CANCELLED'] }
+        status: { notIn: [...MERCHANT_REVENUE_ORDER_EXCLUDED_STATUSES] }
       },
       _sum: {
         subtotal: true,
@@ -1019,7 +466,7 @@ export class OrderService {
       by: ['paymentMethod'],
       where: {
         merchantId,
-        status: { notIn: ['PENDING', 'PAID', 'CANCELLED'] }
+        status: { notIn: [...MERCHANT_REVENUE_ORDER_EXCLUDED_STATUSES] }
       },
       _sum: {
         subtotal: true
@@ -1057,81 +504,7 @@ export class OrderService {
    * Cancelamento automático de pedidos de PIX não pagos após 10 minutos
    */
   public static async cancelUnpaidPixOrders(io?: any): Promise<void> {
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const unpaidPixOrders = await prisma.order.findMany({
-      where: {
-        status: 'PENDING',
-        paymentMethod: 'PIX',
-        createdAt: { lt: tenMinutesAgo }
-      }
-    });
-
-    for (const order of unpaidPixOrders) {
-      try {
-        let isPaidOnGateway = false;
-
-        // Se tiver ID de pagamento do Mercado Pago, verifica seu status atual diretamente na API deles
-        if (order.mpPaymentId) {
-          try {
-            const mpStatus = await MercadoPagoService.getPaymentStatus(order.mpPaymentId, order.merchantId);
-            if (mpStatus === 'approved') {
-              isPaidOnGateway = true;
-              logger.info(`💳 [Auto-Cancel Bypass] Pedido ${order.id} pago no Mercado Pago (${mpStatus}). Processando confirmação.`);
-              
-              await OrderService.confirmPaymentApproved(order.id);
-
-              if (io) {
-                io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
-                io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
-              }
-            }
-          } catch (err: any) {
-            logger.error(`❌ [Auto-Cancel] Falha ao verificar status do pagamento ${order.mpPaymentId} no Mercado Pago: ${err.message}`);
-            // Em caso de falha de conexão com a API do Mercado Pago, pulamos este pedido para evitar cancelamento indevido
-            continue;
-          }
-        }
-
-        if (!isPaidOnGateway) {
-          logger.info(`[Auto-Cancel] Expirando pedido PIX não pago: ${order.id}`);
-          
-          // Usamos uma operação atômica de update condicional: só cancela se o status ainda for PENDING no banco.
-          // Isso garante que se o webhook confirmou o pagamento em paralelo, a query de cancelamento não afetará nenhuma linha.
-          const updateResult = await prisma.order.updateMany({
-            where: {
-              id: order.id,
-              status: 'PENDING'
-            },
-            data: {
-              status: 'CANCELLED',
-              paymentStatus: 'OVERDUE'
-            }
-          });
-
-          // Se a linha foi realmente atualizada (ou seja, o status ainda era PENDING e foi alterado para CANCELLED)
-          if (updateResult.count > 0) {
-            await prisma.orderStatusHistory.create({
-              data: {
-                orderId: order.id,
-                status: 'CANCELLED'
-              }
-            });
-
-            if (io) {
-              io.to(`order:${order.id}`).emit('orderStatusUpdated', {
-                orderId: order.id,
-                status: 'CANCELLED'
-              });
-            }
-            logger.info(`[Auto-Cancel] Pedido PIX ${order.id} cancelado com sucesso.`);
-          } else {
-            logger.info(`[Auto-Cancel] Pedido PIX ${order.id} já havia sido alterado em paralelo. Cancelamento abortado.`);
-          }
-        }
-      } catch (err) {
-        console.error(`[Auto-Cancel] Erro ao cancelar automaticamente pedido PIX ${order.id}:`, err);
-      }
-    }
+    await OrderPaymentSyncService.cancelUnpaidPixOrders(io);
   }
 
   /**
@@ -1145,14 +518,14 @@ export class OrderService {
     const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
-        include: { merchant: true, customer: true }
+        include: { merchant: true, customer: true, deliverer: true }
       });
 
       if (!order) {
         throw new Error('Pedido não encontrado.');
       }
 
-      if (order.status !== 'READY') {
+      if (order.status !== ORDER_STATUS.READY) {
         return { success: false, message: 'Este pedido já foi coletado, entregue ou cancelado.' };
       }
 
@@ -1160,20 +533,42 @@ export class OrderService {
         return { success: false, message: 'Esta entrega já foi atribuída a outro motoboy.' };
       }
 
-      if (order.delivererStatus !== 'PENDING') {
+      if (order.delivererStatus !== DELIVERER_RESPONSE_STATUS.PENDING) {
         return { success: false, message: `Você já respondeu a esta entrega anteriormente (Status: ${order.delivererStatus}).` };
       }
 
       if (action === 'accept') {
         // Atualiza status de resposta da entrega e do motoboy
-        await tx.order.update({
-          where: { id: orderId },
-          data: { delivererStatus: 'ACCEPTED' }
+        const accepted = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            status: ORDER_STATUS.READY,
+            delivererId,
+            delivererStatus: DELIVERER_RESPONSE_STATUS.PENDING
+          },
+          data: { delivererStatus: DELIVERER_RESPONSE_STATUS.ACCEPTED }
         });
+
+        if (accepted.count === 0) {
+          return { success: false, message: 'Esta entrega já foi respondida ou atribuída a outro motoboy.' };
+        }
+
+        await DeliveryDispatchService.ensureAssignmentAccepted(tx, orderId, delivererId);
 
         await tx.deliverer.update({
           where: { id: delivererId },
-          data: { deliveryStatus: 'COLLECTING' }
+          data: { deliveryStatus: DELIVERER_WORK_STATUS.COLLECTING }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'deliverer',
+          actorId: delivererId,
+          action: 'DELIVERY_ACCEPTED',
+          entityType: 'Order',
+          entityId: orderId,
+          orderId,
+          merchantId: order.merchantId,
+          metadata: { delivererId }
         });
 
         // Notifica o lojista via WhatsApp
@@ -1182,22 +577,54 @@ export class OrderService {
           userType: 'Merchant',
           type: 'WhatsApp',
           target: order.merchant.phone,
-          content: `O motoboy aceitou a entrega do pedido nº *${orderId}* e está a caminho do estabelecimento.`
+          content: await WhatsAppTemplateService.render(
+            WhatsAppTemplateType.DELIVERY_ACCEPTED,
+            {
+              merchantName: order.merchant.name,
+              orderId,
+              delivererName: order.deliverer?.name || 'Motoboy',
+              delivererPhone: order.deliverer?.phone || ''
+            },
+            'O motoboy aceitou a entrega do pedido nº *{{orderId}}* e está a caminho do estabelecimento.',
+            tx
+          )
         }, tx);
 
         return { success: true, message: 'Você aceitou a entrega com sucesso! Dirija-se ao estabelecimento para a coleta.' };
       } else {
         // Rejeitar: marca o status da entrega como REJECTED
-        await tx.order.update({
-          where: { id: orderId },
+        const rejected = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            status: ORDER_STATUS.READY,
+            delivererId,
+            delivererStatus: DELIVERER_RESPONSE_STATUS.PENDING
+          },
           data: { 
-            delivererStatus: 'REJECTED'
+            delivererStatus: DELIVERER_RESPONSE_STATUS.REJECTED
           }
         });
 
+        if (rejected.count === 0) {
+          return { success: false, message: 'Esta entrega já foi respondida ou atribuída a outro motoboy.' };
+        }
+
+        await DeliveryDispatchService.ensureAssignmentRejected(tx, orderId, delivererId);
+
         await tx.deliverer.update({
           where: { id: delivererId },
-          data: { deliveryStatus: 'AVAILABLE' }
+          data: { deliveryStatus: DELIVERER_WORK_STATUS.AVAILABLE }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'deliverer',
+          actorId: delivererId,
+          action: 'DELIVERY_REJECTED',
+          entityType: 'Order',
+          entityId: orderId,
+          orderId,
+          merchantId: order.merchantId,
+          metadata: { delivererId }
         });
 
         return { success: true, message: 'Você recusou a entrega. O pedido será encaminhado para outro motoboy.' };
@@ -1206,7 +633,7 @@ export class OrderService {
 
     if (action === 'reject' && result.success) {
       // Dispara reatribuição automática de imediato fora da transação
-      this.autoReassignDeliverer(orderId, delivererId).catch(err => {
+      this.autoReassignDeliverer(orderId, delivererId, 'rejected').catch(err => {
         logger.error(`[Process Response] Erro ao reatribuir pedido ${orderId} imediatamente pós-rejeição:`, err);
       });
     }
@@ -1217,7 +644,11 @@ export class OrderService {
   /**
    * Reatribui automaticamente o pedido para outro entregador
    */
-  public static async autoReassignDeliverer(orderId: string, oldDelivererId: string): Promise<void> {
+  public static async autoReassignDeliverer(
+    orderId: string,
+    oldDelivererId: string,
+    reason: 'rejected' | 'timed_out' = 'timed_out'
+  ): Promise<void> {
     logger.info(`🔄 [Auto-Reassign] Iniciando reatribuição para o pedido ${orderId} (Antigo entregador: ${oldDelivererId})...`);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -1226,7 +657,15 @@ export class OrderService {
         include: { merchant: true }
       });
 
-      if (!order || order.status !== 'READY' || order.delivererId !== oldDelivererId || (order.delivererStatus !== 'PENDING' && order.delivererStatus !== 'REJECTED')) {
+      if (
+        !order ||
+        order.status !== ORDER_STATUS.READY ||
+        order.delivererId !== oldDelivererId ||
+        (
+          order.delivererStatus !== DELIVERER_RESPONSE_STATUS.PENDING &&
+          order.delivererStatus !== DELIVERER_RESPONSE_STATUS.REJECTED
+        )
+      ) {
         logger.info(`🔄 [Auto-Reassign] Pedido ${orderId} já foi aceito, cancelado ou o entregador foi alterado. Abortando reatribuição.`);
         return null;
       }
@@ -1234,51 +673,91 @@ export class OrderService {
       // Marca o motoboy que recusou/excedeu o tempo como AVAILABLE
       await tx.deliverer.update({
         where: { id: oldDelivererId },
-        data: { deliveryStatus: 'AVAILABLE' }
+        data: { deliveryStatus: DELIVERER_WORK_STATUS.AVAILABLE }
       });
 
-      // Busca todos os entregadores disponíveis e ativos hoje, excluindo o que recusou/deu timeout
-      const activeDeliverers = await tx.deliverer.findMany({
-        where: { 
-          isActiveToday: true, 
-          isActive: true, 
-          isAvailable: true,
-          id: { not: oldDelivererId }
-        }
+      if (reason === 'timed_out') {
+        await DeliveryDispatchService.markAssignmentTimedOut(tx, orderId, oldDelivererId);
+      }
+
+      const attemptedDelivererIds = await DeliveryDispatchService.getAttemptedDelivererIds(tx, orderId);
+      const attemptsCount = await DeliveryDispatchService.getAttemptCount(tx, orderId);
+
+      if (!canTryAnotherDeliverer(attemptsCount)) {
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            delivererId: null,
+            delivererStatus: null
+          }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'system',
+          action: 'DELIVERY_DISPATCH_ATTEMPTS_EXHAUSTED',
+          entityType: 'Order',
+          entityId: orderId,
+          orderId,
+          merchantId: order.merchantId,
+          metadata: {
+            reason,
+            oldDelivererId,
+            attemptsCount
+          }
+        });
+
+        const nId = await NotificationService.queueNotification({
+          userId: order.merchantId,
+          userType: 'Merchant',
+          type: 'WhatsApp',
+          target: order.merchant.phone,
+          content: await WhatsAppTemplateService.render(
+            WhatsAppTemplateType.STORE_ORDER_CREATED,
+            {
+              customerName: 'Cliente',
+              orderId,
+              paymentMethod: 'Entrega sem motoboy',
+              total: Number(order.total).toFixed(2)
+            },
+            'Atenção: O pedido nº *{{orderId}}* atingiu o limite de tentativas de motoboy e precisa de intervenção do admin.',
+            tx
+          )
+        }, tx);
+
+        return { updatedOrder: null, notificationId: nId };
+      }
+
+      // Busca todos os entregadores disponíveis e ativos hoje, excluindo os que já foram tentados.
+      const newDriver = await DeliveryDispatchService.findBestAvailableDeliverer(tx, {
+        excludeDelivererIds: attemptedDelivererIds
       });
 
-      if (activeDeliverers.length > 0) {
-        const delivererIds = activeDeliverers.map(d => d.id);
-        const activeDeliveriesCounts = await tx.order.groupBy({
-          by: ['delivererId'],
-          where: {
-            delivererId: { in: delivererIds },
-            status: { in: ['READY', 'DISPATCHED', 'IN_TRANSIT'] }
-          },
-          _count: { id: true }
-        });
-
-        const countsMap = new Map<string, number>();
-        activeDeliveriesCounts.forEach(c => {
-          if (c.delivererId) countsMap.set(c.delivererId, c._count.id);
-        });
-
-        activeDeliverers.sort((a, b) => {
-          const countA = countsMap.get(a.id) || 0;
-          const countB = countsMap.get(b.id) || 0;
-          return countA - countB;
-        });
-
-        const newDriver = activeDeliverers[0];
+      if (newDriver) {
 
         // Atualiza a ordem com o novo entregador
         const updatedOrder = await tx.order.update({
           where: { id: orderId },
           data: {
             delivererId: newDriver.id,
-            delivererStatus: 'PENDING'
+            delivererStatus: DELIVERER_RESPONSE_STATUS.PENDING
           },
           include: { deliverer: true, merchant: true }
+        });
+
+        await DeliveryDispatchService.createPendingAssignment(tx, orderId, newDriver.id);
+
+        await AuditLogService.record(tx, {
+          actorType: 'system',
+          action: 'DELIVERY_REASSIGNED',
+          entityType: 'Order',
+          entityId: orderId,
+          orderId,
+          merchantId: order.merchantId,
+          metadata: {
+            reason,
+            oldDelivererId,
+            newDelivererId: newDriver.id
+          }
         });
 
         // Envia notificação ao novo entregador
@@ -1292,7 +771,21 @@ export class OrderService {
           userType: 'Deliverer',
           type: 'WhatsApp',
           target: newDriver.phone,
-          content: `Olá, *${newDriver.name}*! O pedido nº *${orderId}* foi reatribuído a você. Coleta em: *${order.merchant.name}* (Endereço: ${pickupAddr}). Destino: ${delivAddr}. Taxa: R$ ${updatedOrder.deliveryFee.toFixed(2)}.\n\nResponda a esta entrega:\nAceitar: ${buildDeliveryResponseUrl(orderId, newDriver.id, 'accept')}\nRecusar: ${buildDeliveryResponseUrl(orderId, newDriver.id, 'reject')}`
+          content: await WhatsAppTemplateService.render(
+            WhatsAppTemplateType.DELIVERY_REQUEST,
+            {
+              delivererName: newDriver.name,
+              orderId,
+              merchantName: order.merchant.name,
+              pickupAddress: pickupAddr,
+              deliveryAddress: delivAddr,
+              deliveryFee: Number(updatedOrder.deliveryFee).toFixed(2),
+              acceptUrl: buildDeliveryResponseUrl(orderId, newDriver.id, 'accept'),
+              rejectUrl: buildDeliveryResponseUrl(orderId, newDriver.id, 'reject')
+            },
+            undefined,
+            tx
+          )
         }, tx);
 
         return { updatedOrder, notificationId: nId };
@@ -1305,6 +798,19 @@ export class OrderService {
             delivererStatus: null
           }
         });
+
+        await AuditLogService.record(tx, {
+          actorType: 'system',
+          action: 'DELIVERY_UNASSIGNED',
+          entityType: 'Order',
+          entityId: orderId,
+          orderId,
+          merchantId: order.merchantId,
+          metadata: {
+            reason,
+            oldDelivererId
+          }
+        });
         
         // Notifica o merchant
         const nId = await NotificationService.queueNotification({
@@ -1312,7 +818,17 @@ export class OrderService {
           userType: 'Merchant',
           type: 'WhatsApp',
           target: order.merchant.phone,
-          content: `Atenção: O pedido nº *${orderId}* não foi aceito por nenhum motoboy disponível no momento e ficou sem entregador vinculado.`
+          content: await WhatsAppTemplateService.render(
+            WhatsAppTemplateType.STORE_ORDER_CREATED,
+            {
+              customerName: 'Cliente',
+              orderId,
+              paymentMethod: 'Sem motoboy disponível',
+              total: Number(order.total).toFixed(2)
+            },
+            'Atenção: O pedido nº *{{orderId}}* não foi aceito por nenhum motoboy disponível no momento e ficou sem entregador vinculado.',
+            tx
+          )
         }, tx);
 
         return { updatedOrder: null, notificationId: nId };
@@ -1329,12 +845,7 @@ export class OrderService {
       // Se atribuiu a um novo entregador, agenda o timeout para ele também
       if (result.updatedOrder && result.updatedOrder.delivererId) {
         try {
-          await deliveryTimeoutQueue.add(
-            'deliveryTimeout',
-            { orderId: result.updatedOrder.id, delivererId: result.updatedOrder.delivererId },
-            { delay: 5 * 60 * 1000 }
-          );
-          logger.info(`⏰ [Timeout Scheduled] Próximo timeout de 5 minutos agendado para o pedido ${result.updatedOrder.id} (Entregador: ${result.updatedOrder.delivererId})`);
+          await scheduleDeliveryTimeout(result.updatedOrder.id, result.updatedOrder.delivererId);
         } catch (err) {
           logger.error('Erro ao agendar timeout de entrega na fila BullMQ:', err);
         }

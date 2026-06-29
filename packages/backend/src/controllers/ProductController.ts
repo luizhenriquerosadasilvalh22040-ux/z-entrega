@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { ProductService } from '../services/ProductService';
+import { canManageOwnMerchantCatalog } from '../domain/accessControl';
 
 export class ProductController {
   public static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user || req.user.role !== 'merchant') {
+      if (!canManageOwnMerchantCatalog(req.user)) {
         res.status(403).json({ status: 'fail', message: 'Only merchants can manage products' });
         return;
       }
@@ -18,7 +19,7 @@ export class ProductController {
 
   public static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user || req.user.role !== 'merchant') {
+      if (!canManageOwnMerchantCatalog(req.user)) {
         res.status(403).json({ status: 'fail', message: 'Only merchants can manage products' });
         return;
       }
@@ -37,7 +38,7 @@ export class ProductController {
 
   public static async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user || req.user.role !== 'merchant') {
+      if (!canManageOwnMerchantCatalog(req.user)) {
         res.status(403).json({ status: 'fail', message: 'Only merchants can manage products' });
         return;
       }
@@ -80,7 +81,7 @@ export class ProductController {
 
   public static async updateStock(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user || req.user.role !== 'merchant') {
+      if (!canManageOwnMerchantCatalog(req.user)) {
         res.status(403).json({ status: 'fail', message: 'Only merchants can manage product stock' });
         return;
       }

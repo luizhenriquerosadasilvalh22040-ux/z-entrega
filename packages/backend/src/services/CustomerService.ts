@@ -12,14 +12,15 @@ export const formatCustomer = (customer: any) => {
     id: customer.id,
     name: customer.name,
     email: customer.email,
-    passwordHash: customer.passwordHash,
-    cpf: customer.cpf,
     phone: customer.phone,
     isPhoneVerified: customer.isPhoneVerified,
-    verificationCode: customer.verificationCode,
-    verificationCodeExpires: customer.verificationCodeExpires,
-    asaasCustomerId: customer.asaasCustomerId,
+    hasPassword: !!customer.passwordHash,
+    hasCpf: !!customer.cpf,
     isActive: customer.isActive,
+    termsAcceptedAt: customer.termsAcceptedAt || undefined,
+    privacyAcceptedAt: customer.privacyAcceptedAt || undefined,
+    marketingConsent: !!customer.marketingConsent,
+    dataDeletionRequestedAt: customer.dataDeletionRequestedAt || undefined,
     createdAt: customer.createdAt,
     updatedAt: customer.updatedAt,
     address: primaryAddress ? {
@@ -65,9 +66,6 @@ export const formatCustomer = (customer: any) => {
         email: this.email,
         phone: this.phone,
         isPhoneVerified: this.isPhoneVerified,
-        verificationCode: this.verificationCode,
-        verificationCodeExpires: this.verificationCodeExpires,
-        asaasCustomerId: this.asaasCustomerId,
         isActive: this.isActive
       };
       
@@ -210,7 +208,10 @@ export class CustomerService {
   public static async deactivateCustomer(id: string): Promise<any | null> {
     const customer = await prisma.customer.update({
       where: { id },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        dataDeletionRequestedAt: new Date()
+      },
       include: { addresses: true }
     });
     return formatCustomer(customer);
@@ -219,7 +220,10 @@ export class CustomerService {
   public static async reactivateCustomer(id: string): Promise<any | null> {
     const customer = await prisma.customer.update({
       where: { id },
-      data: { isActive: true },
+      data: {
+        isActive: true,
+        dataDeletionRequestedAt: null
+      },
       include: { addresses: true }
     });
     return formatCustomer(customer);

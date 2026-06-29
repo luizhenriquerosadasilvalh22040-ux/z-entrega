@@ -3,24 +3,11 @@ import { OrderService } from '../services/OrderService';
 import { MercadoPagoService } from '../services/MercadoPagoService';
 import logger from '../config/logger';
 import prisma from '../config/prisma';
-
-const getWebhookSecret = (req: Request): string | undefined => {
-  const headerSecret = req.header('x-webhook-secret') || req.header('x-mercadopago-webhook-secret');
-  const querySecret = typeof req.query.secret === 'string' ? req.query.secret : undefined;
-  return headerSecret || querySecret;
-};
-
-const assertWebhookAuthorized = (req: Request): void => {
-  const expectedSecret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
-  if (!expectedSecret) return;
-
-  const receivedSecret = getWebhookSecret(req);
-  if (!receivedSecret || receivedSecret !== expectedSecret) {
-    const err: any = new Error('Webhook não autorizado.');
-    err.statusCode = 401;
-    throw err;
-  }
-};
+import { PaymentWebhookService } from '../services/PaymentWebhookService';
+import { SubscriptionService } from '../services/SubscriptionService';
+import { AuditLogService } from '../services/AuditLogService';
+import { canManageMerchantResource } from '../domain/accessControl';
+import { assertMercadoPagoWebhookAuthorized } from '../domain/webhookSecurity';
 
 export class PaymentController {
   /**
@@ -31,6 +18,10 @@ export class PaymentController {
       const merchantId = req.query.merchantId as string;
       if (!merchantId) {
         res.status(400).json({ status: 'fail', message: 'ID do lojista (merchantId) é obrigatório.' });
+        return;
+      }
+      if (!req.user || !canManageMerchantResource(req.user, merchantId)) {
+        res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
 
@@ -100,7 +91,12 @@ export class PaymentController {
         return;
       }
 
-      const subscription = await MercadoPagoService.createSubscription(req.user.userId, cardToken, email);
+      const subscription = await SubscriptionService.createMerchantSubscription(
+        req.user.userId,
+        cardToken,
+        email,
+        AuditLogService.getRequestContext(req)
+      );
       res.status(201).json({
         status: 'success',
         data: { subscription }
@@ -120,7 +116,7 @@ export class PaymentController {
         return;
       }
 
-      await MercadoPagoService.cancelSubscription(req.user.userId);
+      await SubscriptionService.cancelMerchantSubscription(req.user.userId, AuditLogService.getRequestContext(req));
       res.status(200).json({
         status: 'success',
         message: 'Assinatura cancelada com sucesso.'
@@ -135,7 +131,7 @@ export class PaymentController {
    */
   public static async webhook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      assertWebhookAuthorized(req);
+      assertMercadoPagoWebhookAuthorized((name) => req.header(name), process.env.MERCADO_PAGO_WEBHOOK_SECRET);
 
       const { type, action, data } = req.body;
 
@@ -148,87 +144,8 @@ export class PaymentController {
       const paymentId = String(data.id);
       logger.info(`💳 [Mercado Pago Webhook] Notificação do tipo "${type}" com ação "${action}" para o ID ${paymentId}`);
 
-      // Webhook de pagamento
-      if (type === 'payment') {
-        // Encontra o pedido associado ao pagamento
-        const order = await prisma.order.findFirst({
-          where: { mpPaymentId: paymentId }
-        });
-
-        if (!order) {
-          logger.warn(`⚠️ [Mercado Pago Webhook] Pedido com mpPaymentId ${paymentId} não encontrado no banco.`);
-          res.status(200).json({ status: 'success', message: 'Payment not found in local db, skipping' });
-          return;
-        }
-
-        const mpStatus = await MercadoPagoService.getPaymentStatus(paymentId, order.merchantId);
-        logger.info(`💳 [Mercado Pago Webhook] Status do pagamento ${paymentId} na API: ${mpStatus}`);
-
-        if (mpStatus === 'approved') {
-          if (order.status === 'PENDING') {
-            logger.info(`💳 [Mercado Pago Webhook] Confirmando pagamento do pedido ${order.id}...`);
-            const updatedOrder = await OrderService.confirmPaymentApproved(order.id);
-
-            // Notifica em tempo real via WebSocket
-            const io = req.app.get('io');
-            if (io) {
-              io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
-              io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: 'PAID' });
-              io.to(`merchant:${order.merchantId}`).emit('newOrder', updatedOrder);
-            }
-            
-            logger.info(`💳 [Mercado Pago Webhook] Pedido ${order.id} atualizado com sucesso.`);
-          }
-        } else if (mpStatus === 'cancelled' || mpStatus === 'rejected') {
-          if (order.status === 'PENDING') {
-            logger.info(`💳 [Mercado Pago Webhook] Cancelando pedido ${order.id} por pagamento negado/cancelado.`);
-            
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { paymentStatus: 'CANCELLED' }
-            });
-            
-            await OrderService.updateStatus(order.id, 'CANCELLED', order.merchantId, 'merchant');
-
-            const io = req.app.get('io');
-            if (io) {
-              io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: 'CANCELLED' });
-            }
-          }
-        }
-      }
-
-      // Webhook de assinatura (recorrência)
-      if (type === 'subscription' || type === 'preapproval') {
-        const merchant = await prisma.merchant.findFirst({
-          where: { mpSubscriptionId: paymentId }
-        });
-
-        if (merchant) {
-          logger.info(`💳 [Mercado Pago Webhook] Atualizando status de assinatura do lojista ${merchant.id}`);
-          // Como simplificação, quando o webhook envia atualização de assinatura, nós validamos o status na API
-          // Se action for preapproval.updated ou semelhante, consultamos e salvamos
-          const mpSubUrl = `https://api.mercadopago.com/preapproval/${paymentId}`;
-          const token = process.env.MERCADO_PAGO_ACCESS_TOKEN || 'mock_access_token';
-          const subRes = await fetch(mpSubUrl, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (subRes.ok) {
-            const subData: any = await subRes.json();
-            const statusMap: Record<string, string> = {
-              authorized: 'ACTIVE',
-              paused: 'PAUSED',
-              cancelled: 'INACTIVE'
-            };
-            await prisma.merchant.update({
-              where: { id: merchant.id },
-              data: { subscriptionStatus: statusMap[subData.status] || 'INACTIVE' }
-            });
-          }
-        }
-      }
-
-      res.status(200).json({ status: 'success', received: true });
+      const result = await PaymentWebhookService.processMercadoPagoWebhook(req.body, req.app.get('io'));
+      res.status(200).json({ status: 'success', received: true, data: result });
     } catch (error) {
       logger.error('❌ [Mercado Pago Webhook] Erro ao processar webhook:', error);
       next(error);

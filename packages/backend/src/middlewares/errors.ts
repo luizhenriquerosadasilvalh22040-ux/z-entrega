@@ -7,7 +7,11 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ): void => {
-  logger.error('API Error: %s - Stack: %s', err.message, err.stack);
+  if (process.env.NODE_ENV === 'development') {
+    logger.error('API Error: %s - Stack: %s', err.message, err.stack);
+  } else {
+    logger.error('API Error: %s', err.message);
+  }
 
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';

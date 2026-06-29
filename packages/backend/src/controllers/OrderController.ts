@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
+import { AuditLogService } from '../services/AuditLogService';
 import prisma from '../config/prisma';
 import { verifyDeliveryResponseToken } from '../utils/deliveryResponseToken';
+import { canViewOrder } from '../domain/accessControl';
 
 export class OrderController {
   public static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -69,7 +71,8 @@ export class OrderController {
         id,
         status as any,
         req.user.userId,
-        req.user.role as any
+        req.user.role as any,
+        AuditLogService.getRequestContext(req)
       );
 
       const io = req.app.get('io');
@@ -101,15 +104,17 @@ export class OrderController {
         return;
       }
 
-      // Verifica se o usuário atual tem direito de ver este pedido
       const orderCustomerId = typeof order.customerId === 'object' ? (order.customerId.id || order.customerId._id).toString() : order.customerId.toString();
       const orderMerchantId = typeof order.merchantId === 'object' ? (order.merchantId.id || order.merchantId._id).toString() : order.merchantId.toString();
+      const orderDelivererId = order.delivererId
+        ? (typeof order.delivererId === 'object' ? (order.delivererId.id || order.delivererId._id).toString() : order.delivererId.toString())
+        : null;
 
-      if (req.user.role === 'customer' && orderCustomerId !== req.user.userId) {
-        res.status(403).json({ status: 'fail', message: 'Forbidden access' });
-        return;
-      }
-      if (req.user.role === 'merchant' && orderMerchantId !== req.user.userId) {
+      if (!canViewOrder(req.user, {
+        customerId: orderCustomerId,
+        merchantId: orderMerchantId,
+        delivererId: orderDelivererId
+      })) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -139,6 +144,9 @@ export class OrderController {
       } else if (req.user.role === 'merchant') {
         const { status } = req.query;
         orders = await OrderService.listMerchantOrders(req.user.userId, status as any, page, limit);
+      } else {
+        res.status(403).json({ status: 'fail', message: 'Unauthorized access' });
+        return;
       }
 
       res.status(200).json({
@@ -182,11 +190,6 @@ export class OrderController {
 
       const { id: orderId } = req.params;
       const { rating, comment } = req.body;
-
-      if (rating === undefined || rating < 1 || rating > 5) {
-        res.status(400).json({ status: 'fail', message: 'A nota de avaliação é obrigatória e deve ser entre 1 e 5 estrelas' });
-        return;
-      }
 
       // Busca o pedido para validar
       const order = await prisma.order.findUnique({

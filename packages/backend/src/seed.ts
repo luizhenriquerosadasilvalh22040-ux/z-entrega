@@ -1,5 +1,4 @@
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import prisma from './config/prisma';
 import { encryptDeterministic } from './config/encryption';
 import logger from './config/logger';
@@ -528,7 +527,10 @@ async function seed() {
 
     // 5. Criação Segura do Administrador Geral
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@trazpraca.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(16).toString('hex');
+    if (!process.env.ADMIN_PASSWORD) {
+      throw new Error('ADMIN_PASSWORD precisa estar definido para executar o seed com segurança.');
+    }
+    const adminPassword = process.env.ADMIN_PASSWORD;
     const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
     await prisma.systemAdmin.create({
@@ -539,7 +541,7 @@ async function seed() {
         isActive: true
       }
     });
-    logger.info(`System Admin created successfully. Email: ${adminEmail}, Password: ${process.env.ADMIN_PASSWORD ? '******' : adminPassword}`);
+    logger.info(`System Admin created successfully. Email: ${adminEmail}.`);
 
     // 6. Cria Entregadores de Teste
     await prisma.deliverer.create({

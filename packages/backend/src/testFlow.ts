@@ -45,6 +45,10 @@ async function runTestFlow() {
       state: 'PR',
       zipCode: '87800000',
       coordinates: { lat: -23.415, lng: -52.752 }
+    }, {
+      termsAccepted: true,
+      privacyAccepted: true,
+      marketingConsent: false
     });
     logger.info(`OTP solicitado. Novo usuário? ${otpReq.isNewUser}`);
 

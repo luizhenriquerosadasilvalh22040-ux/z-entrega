@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import logger from '../config/logger';
+import { maskWebhookPhone, verifyMetaSha256Signature } from '../domain/webhookSecurity';
 
 const router = Router();
+
+type RawBodyRequest = Request & { rawBody?: Buffer };
 
 /**
  * GET /api/whatsapp/webhook
@@ -25,7 +28,13 @@ router.get('/webhook', (req: Request, res: Response) => {
  * POST /api/whatsapp/webhook
  * Recebe eventos da Meta: mensagens recebidas, status de entrega, etc.
  */
-router.post('/webhook', (req: Request, res: Response) => {
+router.post('/webhook', (req: RawBodyRequest, res: Response) => {
+  const signature = req.header('x-hub-signature-256');
+  if (!verifyMetaSha256Signature(req.rawBody, process.env.WHATSAPP_APP_SECRET, signature)) {
+    logger.warn('❌ [WhatsApp Webhook] Assinatura inválida.');
+    return res.sendStatus(401);
+  }
+
   const body = req.body;
 
   // A Meta espera 200 imediatamente, independente do processamento
@@ -41,13 +50,12 @@ router.post('/webhook', (req: Request, res: Response) => {
     for (const msg of messages) {
       const from = msg.from;           // número de quem enviou (com DDI)
       const type = msg.type;           // 'text', 'image', 'audio', etc.
-      const text = msg.text?.body;     // conteúdo se for texto
       const msgId = msg.id;
 
-      logger.info(`📩 [WhatsApp] Mensagem recebida de ${from} | tipo: ${type} | id: ${msgId}`);
+      logger.info(`📩 [WhatsApp] Mensagem recebida de ${maskWebhookPhone(from)} | tipo: ${type} | id: ${msgId}`);
 
       if (type === 'text') {
-        logger.info(`   Texto: "${text}"`);
+        logger.info(`📩 [WhatsApp] Texto recebido | id: ${msgId}`);
         // TODO: adicionar lógica de resposta automática aqui se necessário
         // Exemplo: OrderService.handleWhatsAppReply(from, text);
       }
@@ -59,7 +67,7 @@ router.post('/webhook', (req: Request, res: Response) => {
   if (statuses?.length) {
     for (const status of statuses) {
       logger.info(
-        `📊 [WhatsApp] Status atualizado | msgId: ${status.id} | status: ${status.status} | para: ${status.recipient_id}`
+        `📊 [WhatsApp] Status atualizado | msgId: ${status.id} | status: ${status.status} | para: ${maskWebhookPhone(status.recipient_id)}`
       );
       // status.status pode ser: 'sent', 'delivered', 'read', 'failed'
     }

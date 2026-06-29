@@ -2,21 +2,19 @@ import dotenv from 'dotenv';
 // Carrega as variáveis de ambiente antes de qualquer importação de config
 dotenv.config();
 process.env.PROCESS_QUEUES = process.env.PROCESS_QUEUES || 'false';
+import { assertProductionRuntimeConfig } from './config/runtime';
 
 // Validação crítica de variáveis em produção para evitar texto claro inseguro
-if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET) {
-    console.error('❌ CRITICAL ERROR: JWT_SECRET environment variable is missing in production!');
-    process.exit(1);
-  }
-  if (!process.env.ENCRYPTION_KEY && !process.env.ENCRYPTION_SECRET) {
-    console.error('❌ CRITICAL ERROR: ENCRYPTION_KEY or ENCRYPTION_SECRET environment variable is missing in production!');
-    process.exit(1);
-  }
+try {
+  assertProductionRuntimeConfig();
+} catch (err) {
+  console.error(`❌ CRITICAL ERROR: ${(err as Error).message}`);
+  process.exit(1);
 }
 
 import express from 'express';
 import http from 'http';
+import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -24,6 +22,8 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { connectDatabase } from './config/database';
 import logger from './config/logger';
+import prisma from './config/prisma';
+import { authConfig } from './config/auth';
 import { errorHandler } from './middlewares/errors';
 import { OrderService } from './services/OrderService';
 
@@ -91,7 +91,12 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '2mb' }));
+app.use(express.json({
+  limit: process.env.JSON_BODY_LIMIT || '2mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = Buffer.from(buf);
+  }
+}));
 
 // Configuração de diretório de uploads
 import path from 'path';
@@ -126,19 +131,86 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 
+const parseCookieHeader = (cookieHeader?: string): Record<string, string> => {
+  if (!cookieHeader) return {};
+
+  return cookieHeader.split(';').reduce<Record<string, string>>((cookies, cookie) => {
+    const parts = cookie.split('=');
+    const name = parts[0]?.trim();
+    const value = parts.slice(1).join('=');
+    if (name && value) {
+      cookies[name] = decodeURIComponent(value);
+    }
+    return cookies;
+  }, {});
+};
+
+io.use((socket, next) => {
+  try {
+    const cookies = parseCookieHeader(socket.handshake.headers.cookie);
+    const authHeader = socket.handshake.headers.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    const token = socket.handshake.auth?.token || bearerToken || cookies.accessToken;
+
+    if (!token) {
+      return next(new Error('Socket authentication required'));
+    }
+
+    socket.data.user = jwt.verify(token, authConfig.jwtSecret);
+    next();
+  } catch (err) {
+    next(new Error('Invalid socket token'));
+  }
+});
+
+const canJoinOrderRoom = async (user: any, orderId: string): Promise<boolean> => {
+  if (user.role === 'admin') return true;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { customerId: true, merchantId: true, delivererId: true }
+  });
+
+  if (!order) return false;
+  if (user.role === 'customer') return order.customerId === user.userId;
+  if (user.role === 'merchant') return order.merchantId === user.userId;
+  if (user.role === 'deliverer') return order.delivererId === user.userId;
+  return false;
+};
+
+const canJoinMerchantRoom = (user: any, merchantId: string): boolean => {
+  return user.role === 'admin' || (user.role === 'merchant' && user.userId === merchantId);
+};
+
 // Configuração do Socket.io para Rastreamento em Tempo Real
 io.on('connection', (socket) => {
   logger.info(`🔌 Socket connected: ${socket.id}`);
 
-  // Entra na sala do pedido específico
-  socket.on('joinOrderRoom', (orderId: string) => {
-    socket.join(`order:${orderId}`);
-    logger.info(`🔌 Socket ${socket.id} joined room: order:${orderId}`);
+  socket.on('joinOrderRoom', async (orderId: string, callback?: (response: { ok: boolean; message?: string }) => void) => {
+    try {
+      const allowed = await canJoinOrderRoom(socket.data.user, orderId);
+      if (!allowed) {
+        callback?.({ ok: false, message: 'Forbidden' });
+        return;
+      }
+
+      socket.join(`order:${orderId}`);
+      callback?.({ ok: true });
+      logger.info(`🔌 Socket ${socket.id} joined room: order:${orderId}`);
+    } catch (err) {
+      logger.error(`Erro ao autorizar sala do pedido ${orderId}:`, err);
+      callback?.({ ok: false, message: 'Authorization failed' });
+    }
   });
 
-  // Entra na sala do lojista específico
-  socket.on('joinMerchantRoom', (merchantId: string) => {
+  socket.on('joinMerchantRoom', (merchantId: string, callback?: (response: { ok: boolean; message?: string }) => void) => {
+    if (!canJoinMerchantRoom(socket.data.user, merchantId)) {
+      callback?.({ ok: false, message: 'Forbidden' });
+      return;
+    }
+
     socket.join(`merchant:${merchantId}`);
+    callback?.({ ok: true });
     logger.info(`🔌 Socket ${socket.id} joined room: merchant:${merchantId}`);
   });
 

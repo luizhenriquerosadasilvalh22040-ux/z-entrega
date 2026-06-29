@@ -11,6 +11,7 @@ import { IAddress, IOperatingHours } from '../types';
 import { NotificationService } from './NotificationService';
 import { normalizePhone } from '../utils/phone';
 import logger from '../config/logger';
+import { isProduction } from '../config/runtime';
 
 
 export interface ITokenResponse {
@@ -48,6 +49,10 @@ export class AuthService {
     try {
       await redisClient.set(redisKey, value, 'EX', ttlSeconds);
     } catch (err) {
+      if (isProduction()) {
+        logger.error(`❌ [Redis Error] Falha ao salvar refresh token em produção: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error('Falha ao criar sessão segura. Tente novamente.');
+      }
       logger.warn(`⚠️ [Redis Error] Falha ao salvar token no Redis, utilizando cache em memória local: ${err instanceof Error ? err.message : String(err)}`);
       const expiresAt = Date.now() + ttlSeconds * 1000;
       AuthService.memoryTokens.set(refreshToken, { payload, expiresAt });
@@ -66,9 +71,15 @@ export class AuthService {
     cpf: string;
     phone: string;
     address: IAddress;
+    termsAccepted: boolean;
+    privacyAccepted: boolean;
+    marketingConsent?: boolean;
   }): Promise<any> {
     if (data.name.length < 3) {
       throw new Error('Name must be at least 3 characters long');
+    }
+    if (!data.termsAccepted || !data.privacyAccepted) {
+      throw new Error('Termos de uso e política de privacidade precisam ser aceitos.');
     }
 
     const emailExists = await prisma.customer.findUnique({ where: { email: data.email } });
@@ -92,6 +103,9 @@ export class AuthService {
           passwordHash,
           cpf: encryptedCpf,
           phone: normalizePhone(data.phone),
+          termsAcceptedAt: new Date(),
+          privacyAcceptedAt: new Date(),
+          marketingConsent: !!data.marketingConsent,
           isActive: true,
         }
       });
@@ -136,10 +150,16 @@ export class AuthService {
     operatingHours: IOperatingHours;
     paymentMethods: string[];
     address: IAddress;
+    termsAccepted: boolean;
+    privacyAccepted: boolean;
+    marketingConsent?: boolean;
   }): Promise<any> {
     const validCategories = ['Comida', 'Farmácia', 'Construção', 'Geral'];
     if (!validCategories.includes(data.category)) {
       throw new Error('Invalid merchant category');
+    }
+    if (!data.termsAccepted || !data.privacyAccepted) {
+      throw new Error('Termos de uso e política de privacidade precisam ser aceitos.');
     }
 
     const emailExists = await prisma.merchant.findUnique({ where: { email: data.email } });
@@ -174,6 +194,9 @@ export class AuthService {
         zipCode: data.address.zipCode,
         latitude: data.address.coordinates?.lat,
         longitude: data.address.coordinates?.lng,
+        termsAcceptedAt: new Date(),
+        privacyAcceptedAt: new Date(),
+        marketingConsent: !!data.marketingConsent,
         isVerified: false,
         isActive: true,
       }
@@ -275,10 +298,14 @@ export class AuthService {
         await redisClient.del(redisKey);
       }
     } catch (err) {
+      if (isProduction()) {
+        logger.error(`❌ [Redis Error] Falha ao ler refresh token em produção: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error('Sessão temporariamente indisponível. Faça login novamente.');
+      }
       logger.warn(`⚠️ [Redis Error] Falha ao ler do Redis no refreshAccessToken, buscando no cache em memória local: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    if (!value) {
+    if (!value && !isProduction()) {
       const cached = AuthService.memoryTokens.get(refreshToken);
       if (cached) {
         if (Date.now() > cached.expiresAt) {
@@ -346,7 +373,12 @@ export class AuthService {
   /**
    * Solicita um código OTP de verificação via WhatsApp para o cliente
    */
-  public static async requestCustomerOtp(phone: string, name?: string, address?: IAddress): Promise<{ isNewUser: boolean }> {
+  public static async requestCustomerOtp(
+    phone: string,
+    name?: string,
+    address?: IAddress,
+    privacy?: { termsAccepted?: boolean; privacyAccepted?: boolean; marketingConsent?: boolean }
+  ): Promise<{ isNewUser: boolean }> {
     const cleanPhone = normalizePhone(phone);
     let customer = await prisma.customer.findUnique({
       where: { phone: cleanPhone },
@@ -355,6 +387,9 @@ export class AuthService {
     let isNewUser = false;
 
     const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
+    if (isMock && isProduction()) {
+      throw new Error('WhatsApp não configurado. Não é possível enviar código de verificação em produção.');
+    }
     const testingPhone = process.env.TESTING_PHONE;
     const testingOtp = process.env.TESTING_OTP || '1234';
     const code = (isMock || (testingPhone && cleanPhone === testingPhone)) ? testingOtp : Math.floor(1000 + Math.random() * 9000).toString(); 
@@ -374,6 +409,9 @@ export class AuthService {
       if (!name || !address) {
         throw new Error('Customer does not exist and registration details are missing');
       }
+      if (!privacy?.termsAccepted || !privacy?.privacyAccepted) {
+        throw new Error('Termos de uso e política de privacidade precisam ser aceitos.');
+      }
       isNewUser = true;
 
       const created = await prisma.$transaction(async (tx) => {
@@ -383,6 +421,9 @@ export class AuthService {
             phone: cleanPhone,
             verificationCode: code,
             verificationCodeExpires: expires,
+            termsAcceptedAt: new Date(),
+            privacyAcceptedAt: new Date(),
+            marketingConsent: !!privacy.marketingConsent,
             isPhoneVerified: false,
             isActive: true
           }
@@ -445,7 +486,7 @@ export class AuthService {
 
     const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
     const testingOtp = process.env.TESTING_OTP || '1234';
-    const isValidOtp = customer.verificationCode === code || (isMock && code === testingOtp);
+    const isValidOtp = customer.verificationCode === code || (!isProduction() && isMock && code === testingOtp);
 
     if (!customer.verificationCode || !isValidOtp) {
       throw new Error('Código de verificação inválido');

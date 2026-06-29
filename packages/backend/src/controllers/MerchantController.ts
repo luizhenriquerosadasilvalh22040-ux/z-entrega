@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { MerchantService } from '../services/MerchantService';
 import prisma from '../config/prisma';
+import { canManageMerchantResource } from '../domain/accessControl';
 
 export class MerchantController {
   public static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -34,7 +35,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -54,7 +55,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -74,7 +75,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -95,7 +96,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -115,7 +116,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -135,7 +136,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -156,7 +157,7 @@ export class MerchantController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }

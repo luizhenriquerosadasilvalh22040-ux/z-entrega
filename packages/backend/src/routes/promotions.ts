@@ -8,10 +8,10 @@ const router = Router();
 
 // Públicos (ver promoções ativas da loja)
 router.get('/merchant/:merchantId', PromotionController.listActiveByMerchant);
-router.get('/merchant/:merchantId/all', PromotionController.listByMerchant);
 
 // Protegidos (apenas o próprio lojista)
 router.use(authenticate);
+router.get('/merchant/:merchantId/all', PromotionController.listByMerchant);
 router.post('/', validate(createPromotionSchema), PromotionController.create);
 router.put('/:id', validate(updatePromotionSchema), PromotionController.update);
 

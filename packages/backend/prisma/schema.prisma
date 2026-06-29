@@ -7,6 +7,104 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum MerchantSubscriptionStatus {
+  INACTIVE
+  PENDING
+  ACTIVE
+  PAUSED
+  CANCELLED
+  FAILED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  ACCEPTED
+  PREPARING
+  READY
+  DISPATCHED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  RECEIVED
+  REJECTED
+  CANCELLED
+  OVERDUE
+  REFUND_PENDING
+  REFUNDED
+  REFUND_FAILED
+}
+
+enum DelivererResponseStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum DelivererWorkStatus {
+  AVAILABLE
+  COLLECTING
+  DELIVERING
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum PaymentWebhookEventStatus {
+  PROCESSING
+  PROCESSED
+  SKIPPED
+  FAILED
+}
+
+enum PaymentRefundStatus {
+  PENDING
+  approved
+  rejected
+  cancelled
+  REFUND_FAILED
+}
+
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum DeliveryAssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  TIMED_OUT
+  CANCELLED
+}
+
+enum AuditActorType {
+  customer
+  merchant
+  deliverer
+  admin
+  system
+}
+
+enum WhatsAppTemplateType {
+  CUSTOMER_OTP
+  ORDER_CREATED
+  STORE_ORDER_CREATED
+  PAYMENT_APPROVED
+  ORDER_ACCEPTED
+  ORDER_CANCELLED
+  ORDER_READY
+  DELIVERY_REQUEST
+  DELIVERY_ACCEPTED
+}
+
 model Merchant {
   id                String    @id @default(uuid()) @db.Uuid
   name              String
@@ -36,9 +134,12 @@ model Merchant {
   mpRefreshToken    String?   @map("mp_refresh_token")
   mpUserId          String?   @map("mp_user_id")
   mpSubscriptionId  String?   @map("mp_subscription_id")
-  subscriptionStatus String?  @default("INACTIVE") @map("subscription_status")
+  subscriptionStatus MerchantSubscriptionStatus? @default(INACTIVE) @map("subscription_status")
   passwordResetToken  String?   @map("password_reset_token")
   passwordResetExpires DateTime? @map("password_reset_expires")
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+  privacyAcceptedAt DateTime? @map("privacy_accepted_at")
+  marketingConsent Boolean @default(false) @map("marketing_consent")
   timezone          String    @default("America/Sao_Paulo")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -48,7 +149,10 @@ model Merchant {
   promotions        Promotion[]
   reviews           Review[]
   coupons           Coupon[]
+  auditLogs         AuditLog[]
 
+  @@index([isActive, subscriptionStatus])
+  @@index([city, category])
   @@map("merchants")
 }
 
@@ -64,6 +168,10 @@ model Customer {
   verificationCodeExpires DateTime? @map("verification_code_expires")
   mpCustomerId    String?           @map("mp_customer_id")
   isActive        Boolean           @default(true) @map("is_active")
+  termsAcceptedAt DateTime?         @map("terms_accepted_at")
+  privacyAcceptedAt DateTime?       @map("privacy_accepted_at")
+  marketingConsent Boolean          @default(false) @map("marketing_consent")
+  dataDeletionRequestedAt DateTime? @map("data_deletion_requested_at")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
@@ -93,6 +201,7 @@ model CustomerAddress {
 
   customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
+  @@index([customerId])
   @@map("customer_addresses")
 }
 
@@ -107,11 +216,12 @@ model Deliverer {
   isActive      Boolean  @default(true) @map("is_active")
   isAvailable   Boolean  @default(false) @map("is_available")
   isActiveToday Boolean  @default(false) @map("is_active_today")
-  deliveryStatus String   @default("AVAILABLE") @map("delivery_status") // AVAILABLE, COLLECTING, DELIVERING
+  deliveryStatus DelivererWorkStatus @default(AVAILABLE) @map("delivery_status")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   orders        Order[]
+  deliveryAssignments DeliveryAssignment[]
 
   @@map("deliverers")
 }
@@ -134,6 +244,8 @@ model Product {
   optionGroups  ProductOptionGroup[]
   orderItems    OrderItem[]
 
+  @@index([merchantId, isAvailable, isPaused])
+  @@index([merchantId, category])
   @@map("products")
 }
 
@@ -171,7 +283,7 @@ model Order {
   commission         Float
   deliveryFee        Float                @default(5.00) @map("delivery_fee")
   total              Float
-  status             String               @default("PENDING")
+  status             OrderStatus          @default(PENDING)
   paymentMethod      String               @map("payment_method")
   deliveryStreet     String               @map("delivery_street")
   deliveryNumber     String               @map("delivery_number")
@@ -182,11 +294,11 @@ model Order {
   deliveryComplement String?              @map("delivery_complement")
   deliveryReference  String?              @map("delivery_reference")
   mpPaymentId        String?              @map("mp_payment_id")
-  paymentStatus      String?              @default("PENDING") @map("payment_status")
+  paymentStatus      PaymentStatus?       @default(PENDING) @map("payment_status")
   pixQrCode          String?              @map("pix_qr_code")
   pixCopyAndPaste    String?              @map("pix_copy_and_paste")
   couponId           String?              @map("coupon_id") @db.Uuid
-  delivererStatus    String?              @map("deliverer_status") // PENDING, ACCEPTED, REJECTED
+  delivererStatus    DelivererResponseStatus? @map("deliverer_status")
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
 
@@ -197,18 +309,28 @@ model Order {
   items              OrderItem[]
   coupon             Coupon?              @relation(fields: [couponId], references: [id])
   review             Review?
+  paymentWebhookEvents PaymentWebhookEvent[]
+  paymentRefunds     PaymentRefund[]
+  deliveryAssignments DeliveryAssignment[]
+  auditLogs          AuditLog[]
 
+  @@unique([mpPaymentId])
+  @@index([customerId, createdAt])
+  @@index([merchantId, status, createdAt])
+  @@index([delivererId, status])
+  @@index([paymentStatus, createdAt])
   @@map("orders")
 }
 
 model OrderStatusHistory {
   id        String   @id @default(uuid()) @db.Uuid
   orderId   String   @map("order_id") @db.Uuid
-  status    String
+  status    OrderStatus
   changedAt DateTime @default(now()) @map("changed_at")
 
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId, changedAt])
   @@map("order_status_history")
 }
 
@@ -225,6 +347,8 @@ model OrderItem {
   product   Product            @relation(fields: [productId], references: [id])
   options   OrderItemOption[]
 
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }
 
@@ -247,12 +371,62 @@ model Notification {
   type         String
   target       String
   content      String
-  status       String    @default("QUEUED")
+  status       NotificationStatus @default(QUEUED)
   errorMessage String?   @map("error_message")
+  attempts     Int       @default(0)
+  providerMessageId String? @map("provider_message_id")
   createdAt    DateTime  @default(now()) @map("created_at")
   sentAt       DateTime? @map("sent_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
 
+  @@index([status, createdAt])
+  @@index([userId, userType, status, createdAt])
   @@map("notifications")
+}
+
+model PaymentWebhookEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  provider    String
+  eventId     String    @map("event_id")
+  eventType   String?   @map("event_type")
+  action      String?
+  resourceId  String?   @map("resource_id")
+  orderId     String?   @map("order_id") @db.Uuid
+  status      PaymentWebhookEventStatus @default(PROCESSING)
+  payload     Json?
+  errorMessage String?  @map("error_message")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+
+  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([status, receivedAt])
+  @@index([resourceId])
+  @@map("payment_webhook_events")
+}
+
+model PaymentRefund {
+  id          String   @id @default(uuid()) @db.Uuid
+  provider    String
+  orderId     String   @map("order_id") @db.Uuid
+  paymentId   String   @map("payment_id")
+  refundId    String?  @map("refund_id")
+  amount      Float?
+  status      PaymentRefundStatus @default(PENDING)
+  reason      String?
+  errorMessage String? @map("error_message")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status, updatedAt])
+  @@index([paymentId])
+  @@index([provider, paymentId, status])
+  @@index([provider, refundId])
+  @@map("payment_refunds")
 }
 
 model Promotion {
@@ -266,6 +440,7 @@ model Promotion {
 
   merchant           Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
+  @@index([merchantId, expirationDate])
   @@map("promotions")
 }
 
@@ -302,6 +477,65 @@ model SystemAdmin {
   @@map("system_admins")
 }
 
+model DeliveryAssignment {
+  id          String                   @id @default(uuid()) @db.Uuid
+  orderId     String                   @map("order_id") @db.Uuid
+  delivererId String                   @map("deliverer_id") @db.Uuid
+  status      DeliveryAssignmentStatus @default(PENDING)
+  attempt     Int                      @default(1)
+  sentAt      DateTime?                @map("sent_at")
+  respondedAt DateTime?                @map("responded_at")
+  expiresAt   DateTime?                @map("expires_at")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+
+  order       Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliverer   Deliverer                @relation(fields: [delivererId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([delivererId])
+  @@index([orderId, status, createdAt])
+  @@index([delivererId, status, createdAt])
+  @@unique([orderId, delivererId, attempt])
+  @@map("delivery_assignments")
+}
+
+model AuditLog {
+  id          String         @id @default(uuid()) @db.Uuid
+  actorType   AuditActorType @map("actor_type")
+  actorId     String?        @map("actor_id") @db.Uuid
+  action      String
+  entityType  String         @map("entity_type")
+  entityId    String?        @map("entity_id") @db.Uuid
+  orderId     String?        @map("order_id") @db.Uuid
+  merchantId  String?        @map("merchant_id") @db.Uuid
+  metadata    Json?
+  ipAddress   String?        @map("ip_address")
+  userAgent   String?        @map("user_agent")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  merchant    Merchant?      @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([orderId])
+  @@index([merchantId])
+  @@index([actorType, actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model WhatsAppTemplate {
+  id          String               @id @default(uuid()) @db.Uuid
+  key         WhatsAppTemplateType @unique
+  locale      String               @default("pt-BR")
+  body        String
+  isActive    Boolean              @default(true) @map("is_active")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  @@map("whatsapp_templates")
+}
+
 model Review {
   id          String   @id @default(uuid()) @db.Uuid
   orderId     String   @unique @map("order_id") @db.Uuid
@@ -321,7 +555,7 @@ model Review {
 model Coupon {
   id                 String    @id @default(uuid()) @db.Uuid
   code               String    @unique
-  discountType       String    @default("PERCENTAGE")
+  discountType       CouponDiscountType @default(PERCENTAGE)
   discountValue      Float     @map("discount_value")
   minOrderValue      Float?    @map("min_order_value")
   expirationDate     DateTime  @map("expiration_date")
@@ -334,6 +568,7 @@ model Coupon {
   merchant           Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   orders             Order[]
 
+  @@index([merchantId, isActive, expirationDate])
   @@map("coupons")
 }
 

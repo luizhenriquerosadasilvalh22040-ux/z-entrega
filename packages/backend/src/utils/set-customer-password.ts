@@ -55,8 +55,7 @@ async function main() {
     data: { passwordHash }
   });
 
-  console.log(`\n✅ Senha atualizada com sucesso para o cliente "${customer.name}"!`);
-  console.log(`   Nova senha: ${newPassword}`);
+  console.log(`\n✅ Senha atualizada com sucesso para o cliente "${customer.name}".`);
 }
 
 main()

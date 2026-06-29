@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { CustomerService } from '../services/CustomerService';
+import { canAccessCustomerProfile } from '../domain/accessControl';
 
 export class CustomerController {
   public static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -23,8 +24,7 @@ export class CustomerController {
     try {
       const { id } = req.params;
       
-      // Permitido apenas ao próprio cliente ou lojistas
-      if (req.user?.role === 'customer' && req.user.userId !== id) {
+      if (!req.user || !canAccessCustomerProfile(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -44,8 +44,7 @@ export class CustomerController {
     try {
       const { id } = req.params;
       
-      // Apenas o próprio cliente pode editar seu perfil
-      if (req.user?.userId !== id) {
+      if (!req.user || req.user.role !== 'customer' || !canAccessCustomerProfile(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -65,8 +64,7 @@ export class CustomerController {
     try {
       const { id } = req.params;
       
-      // Apenas o próprio cliente pode editar seu endereço
-      if (req.user?.userId !== id) {
+      if (!req.user || req.user.role !== 'customer' || !canAccessCustomerProfile(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -86,7 +84,7 @@ export class CustomerController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || req.user.role !== 'customer' || !canAccessCustomerProfile(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }
@@ -106,7 +104,7 @@ export class CustomerController {
     try {
       const { id } = req.params;
       
-      if (req.user?.userId !== id) {
+      if (!req.user || req.user.role !== 'customer' || !canAccessCustomerProfile(req.user, id)) {
         res.status(403).json({ status: 'fail', message: 'Forbidden access' });
         return;
       }

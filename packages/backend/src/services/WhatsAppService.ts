@@ -1,4 +1,5 @@
 import logger from '../config/logger';
+import { isProduction } from '../config/runtime';
 
 export class WhatsAppService {
   /**
@@ -49,6 +50,9 @@ export class WhatsAppService {
         throw err;
       }
     } else {
+      if (isProduction()) {
+        throw new Error('Credenciais do WhatsApp ausentes em produção.');
+      }
       logger.info(`📱 [WhatsApp Meta Mock] (Credenciais Meta ausentes no .env) Enviando para ${cleanPhone}: "${message}"`);
       
       // Simula tempo de resposta da API

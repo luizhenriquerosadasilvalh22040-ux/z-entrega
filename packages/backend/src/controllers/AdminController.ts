@@ -1,10 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import prisma from '../config/prisma';
 import { formatMerchant } from '../services/MerchantService';
 import { formatOrder } from '../services/OrderService';
 import { formatDeliverer } from '../services/DelivererService';
 import { businessConfig } from '../config/business';
+import { NotificationService } from '../services/NotificationService';
+import { AdminOperationalService } from '../services/AdminOperationalService';
+import { PaymentReconciliationService } from '../services/PaymentReconciliationService';
+import { AuditLogService } from '../services/AuditLogService';
+import { WhatsAppTemplateService } from '../services/WhatsAppTemplateService';
+import { WhatsAppTemplateType } from '@prisma/client';
+
+const requireAdminId = (req: Request, res: Response): string | null => {
+  const adminId = req.user?.userId;
+  if (!adminId || req.user?.role !== 'admin') {
+    res.status(401).json({ status: 'fail', message: 'Admin não autenticado.' });
+    return null;
+  }
+  return adminId;
+};
 
 export class AdminController {
   /**
@@ -72,6 +88,47 @@ export class AdminController {
     }
   }
 
+  public static async requeueFailedNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      await prisma.$transaction(async (tx) => {
+        const notification = await tx.notification.findUnique({
+          where: { id },
+          select: { id: true, userType: true, type: true, status: true, attempts: true }
+        });
+        if (!notification) {
+          throw new Error('Notificação não encontrada.');
+        }
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'ADMIN_NOTIFICATION_REQUEUE_REQUESTED',
+          entityType: 'Notification',
+          entityId: id,
+          metadata: {
+            previousStatus: notification.status,
+            attemptsCount: notification.attempts,
+            notificationUserType: notification.userType,
+            notificationType: notification.type
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+      });
+
+      await NotificationService.requeueFailedNotification(id);
+      res.status(200).json({
+        status: 'success',
+        message: 'Notificação reenfileirada com sucesso.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * Obtém as configurações do sistema
    */
@@ -92,28 +149,177 @@ export class AdminController {
     }
   }
 
+  public static async getOperationalIssues(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { issues, counts, summary, recentEvents } = await AdminOperationalService.getOperationalIssues();
+      res.status(200).json({
+        status: 'success',
+        data: {
+          issues,
+          counts,
+          summary,
+          recentEvents
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async retryFailedRefund(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      await AdminOperationalService.retryFailedRefund(id, adminId, AuditLogService.getRequestContext(req));
+      res.status(200).json({
+        status: 'success',
+        message: 'Refund reenviado para processamento.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async dispatchReadyOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      const result = await AdminOperationalService.dispatchReadyOrder(id, adminId, AuditLogService.getRequestContext(req));
+      res.status(200).json({
+        status: 'success',
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async runOperationalReconciliation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      const result = await PaymentReconciliationService.runOperationalReconciliation({
+        actorType: 'admin',
+        actorId: adminId,
+        context: AuditLogService.getRequestContext(req)
+      }, {
+        io: req.app.get('io')
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async listWhatsAppTemplates(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const templates = await WhatsAppTemplateService.listTemplates();
+      res.status(200).json({
+        status: 'success',
+        data: { templates }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async updateWhatsAppTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { key } = req.params;
+      const { body, isActive, locale } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      if (!Object.values(WhatsAppTemplateType).includes(key as WhatsAppTemplateType)) {
+        res.status(400).json({ status: 'fail', message: 'Template WhatsApp inválido.' });
+        return;
+      }
+
+      const previous = await prisma.whatsAppTemplate.findUnique({
+        where: { key: key as WhatsAppTemplateType }
+      });
+      const template = await WhatsAppTemplateService.upsertTemplate({
+        key: key as WhatsAppTemplateType,
+        body,
+        isActive,
+        locale
+      });
+
+      await prisma.$transaction(async (tx) => {
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'WHATSAPP_TEMPLATE_UPDATED',
+          entityType: 'WhatsAppTemplate',
+          entityId: template.id,
+          metadata: {
+            templateKey: key,
+            previousStatus: previous?.isActive ? 'active' : 'inactive',
+            nextStatus: template.isActive ? 'active' : 'inactive',
+            locale: template.locale
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: { template }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * Atualiza as configurações do sistema (preço de assinatura)
    */
   public static async updateSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { defaultSubscriptionPrice } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
       if (typeof defaultSubscriptionPrice !== 'number' || defaultSubscriptionPrice < 0) {
         res.status(400).json({ status: 'fail', message: 'Preço de assinatura inválido' });
         return;
       }
 
-      let config = await prisma.systemConfig.findFirst();
-      if (!config) {
-        config = await prisma.systemConfig.create({
-          data: { defaultSubscriptionPrice }
+      const config = await prisma.$transaction(async (tx) => {
+        const previous = await tx.systemConfig.findFirst();
+        const saved = previous
+          ? await tx.systemConfig.update({
+            where: { id: previous.id },
+            data: { defaultSubscriptionPrice }
+          })
+          : await tx.systemConfig.create({
+            data: { defaultSubscriptionPrice }
+          });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'SYSTEM_SETTINGS_UPDATED',
+          entityType: 'SystemConfig',
+          entityId: saved.id,
+          metadata: {
+            previousSubscriptionPrice: previous ? Number(previous.defaultSubscriptionPrice) : null,
+            nextSubscriptionPrice: Number(defaultSubscriptionPrice)
+          },
+          context: AuditLogService.getRequestContext(req)
         });
-      } else {
-        config = await prisma.systemConfig.update({
-          where: { id: config.id },
-          data: { defaultSubscriptionPrice }
-        });
-      }
+
+        return saved;
+      });
 
       res.status(200).json({
         status: 'success',
@@ -147,7 +353,9 @@ export class AdminController {
    */
   public static async createDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { name, email, phone, vehicle, plate, isActiveToday } = req.body;
+      const { name, email, phone, vehicle, plate, isActiveToday, initialPassword } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
 
       if (!name || !email || !phone || !vehicle) {
         res.status(400).json({ status: 'fail', message: 'Campos obrigatórios: nome, email, telefone, veículo' });
@@ -162,28 +370,54 @@ export class AdminController {
         return;
       }
 
-      const passwordHash = await bcrypt.hash('password123', 10); // Senha padrão para entregadores criados pelo admin
+      if (initialPassword !== undefined && (typeof initialPassword !== 'string' || initialPassword.length < 12)) {
+        res.status(400).json({ status: 'fail', message: 'A senha inicial do entregador deve ter pelo menos 12 caracteres.' });
+        return;
+      }
 
-      const dbDeliverer = await prisma.deliverer.create({
-        data: {
-          name,
-          email,
-          phone,
-          vehicleType: vehicle,
-          licensePlate: plate || null,
-          passwordHash,
-          isActive: true,
-          isAvailable: true,
-          isActiveToday: !!isActiveToday,
-          deliveryStatus: 'AVAILABLE'
-        }
+      const temporaryPassword = initialPassword || crypto.randomBytes(18).toString('base64url');
+      const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+      const dbDeliverer = await prisma.$transaction(async (tx) => {
+        const created = await tx.deliverer.create({
+          data: {
+            name,
+            email,
+            phone,
+            vehicleType: vehicle,
+            licensePlate: plate || null,
+            passwordHash,
+            isActive: true,
+            isAvailable: true,
+            isActiveToday: !!isActiveToday,
+            deliveryStatus: 'AVAILABLE'
+          }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'DELIVERER_CREATED',
+          entityType: 'Deliverer',
+          entityId: created.id,
+          metadata: {
+            vehicleType: vehicle,
+            isActiveToday: !!isActiveToday
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return created;
       });
 
       const deliverer = formatDeliverer(dbDeliverer);
 
       res.status(201).json({
         status: 'success',
-        data: { deliverer }
+        data: {
+          deliverer,
+          temporaryPassword: initialPassword ? undefined : temporaryPassword
+        }
       });
     } catch (error) {
       next(error);
@@ -197,6 +431,8 @@ export class AdminController {
     try {
       const { id } = req.params;
       const { name, email, phone, vehicle, plate, isActive } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
 
       const existing = await prisma.deliverer.findUnique({
         where: { id }
@@ -214,9 +450,27 @@ export class AdminController {
       if (plate !== undefined) data.licensePlate = plate;
       if (isActive !== undefined) data.isActive = isActive;
 
-      const updated = await prisma.deliverer.update({
-        where: { id },
-        data
+      const updated = await prisma.$transaction(async (tx) => {
+        const saved = await tx.deliverer.update({
+          where: { id },
+          data
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'DELIVERER_UPDATED',
+          entityType: 'Deliverer',
+          entityId: id,
+          metadata: {
+            previousStatus: existing.isActive ? 'active' : 'inactive',
+            nextStatus: saved.isActive ? 'active' : 'inactive',
+            vehicleType: saved.vehicleType
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return saved;
       });
 
       const deliverer = formatDeliverer(updated);
@@ -237,6 +491,8 @@ export class AdminController {
     try {
       const { id } = req.params;
       const { isActiveToday } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
 
       if (typeof isActiveToday !== 'boolean') {
         res.status(400).json({ status: 'fail', message: 'Status isActiveToday deve ser booleano' });
@@ -251,9 +507,26 @@ export class AdminController {
         return;
       }
 
-      const updated = await prisma.deliverer.update({
-        where: { id },
-        data: { isActiveToday }
+      const updated = await prisma.$transaction(async (tx) => {
+        const saved = await tx.deliverer.update({
+          where: { id },
+          data: { isActiveToday }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'DELIVERER_DAILY_SCALE_UPDATED',
+          entityType: 'Deliverer',
+          entityId: id,
+          metadata: {
+            previousStatus: existing.isActiveToday ? 'scaled' : 'not_scaled',
+            nextStatus: saved.isActiveToday ? 'scaled' : 'not_scaled'
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return saved;
       });
 
       const deliverer = formatDeliverer(updated);
@@ -273,6 +546,9 @@ export class AdminController {
   public static async deleteDeliverer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
       const existing = await prisma.deliverer.findUnique({
         where: { id }
       });
@@ -281,8 +557,23 @@ export class AdminController {
         return;
       }
 
-      await prisma.deliverer.delete({
-        where: { id }
+      await prisma.$transaction(async (tx) => {
+        await tx.deliverer.delete({
+          where: { id }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'DELIVERER_DELETED',
+          entityType: 'Deliverer',
+          entityId: id,
+          metadata: {
+            previousStatus: existing.isActive ? 'active' : 'inactive',
+            vehicleType: existing.vehicleType
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
       });
 
       res.status(200).json({
@@ -319,15 +610,42 @@ export class AdminController {
     try {
       const { id } = req.params;
       const { isVerified } = req.body;
+      const adminId = req.user?.userId;
 
       if (typeof isVerified !== 'boolean') {
         res.status(400).json({ status: 'fail', message: 'Status isVerified deve ser booleano' });
         return;
       }
 
-      const updated = await prisma.merchant.update({
-        where: { id },
-        data: { isVerified }
+      if (!adminId) {
+        res.status(401).json({ status: 'fail', message: 'Admin não autenticado.' });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const previous = await tx.merchant.findUnique({ where: { id } });
+        if (!previous) return null;
+
+        const merchant = await tx.merchant.update({
+          where: { id },
+          data: { isVerified }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'MERCHANT_VERIFICATION_UPDATED',
+          entityType: 'Merchant',
+          entityId: id,
+          merchantId: id,
+          metadata: {
+            previousIsVerified: previous.isVerified,
+            nextIsVerified: isVerified
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return merchant;
       });
 
       if (!updated) {
@@ -354,15 +672,43 @@ export class AdminController {
     try {
       const { id } = req.params;
       const { subscriptionPrice } = req.body;
+      const adminId = req.user?.userId;
 
       if (subscriptionPrice !== undefined && subscriptionPrice !== null && (typeof subscriptionPrice !== 'number' || subscriptionPrice < 0)) {
         res.status(400).json({ status: 'fail', message: 'Preço de assinatura inválido' });
         return;
       }
 
-      const updated = await prisma.merchant.update({
-        where: { id },
-        data: { subscriptionPrice: subscriptionPrice !== undefined ? subscriptionPrice : null }
+      if (!adminId) {
+        res.status(401).json({ status: 'fail', message: 'Admin não autenticado.' });
+        return;
+      }
+
+      const nextSubscriptionPrice = subscriptionPrice !== undefined ? subscriptionPrice : null;
+      const updated = await prisma.$transaction(async (tx) => {
+        const previous = await tx.merchant.findUnique({ where: { id } });
+        if (!previous) return null;
+
+        const merchant = await tx.merchant.update({
+          where: { id },
+          data: { subscriptionPrice: nextSubscriptionPrice }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'MERCHANT_SUBSCRIPTION_PRICE_UPDATED',
+          entityType: 'Merchant',
+          entityId: id,
+          merchantId: id,
+          metadata: {
+            previousSubscriptionPrice: previous.subscriptionPrice !== null ? Number(previous.subscriptionPrice) : null,
+            nextSubscriptionPrice
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return merchant;
       });
 
       if (!updated) {
@@ -515,6 +861,8 @@ export class AdminController {
   public static async createCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { code, discountType, discountValue, minOrderValue, expirationDate, merchantId, maxUses } = req.body;
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
 
       if (!code || !discountType || discountValue === undefined || !expirationDate) {
         res.status(400).json({ status: 'fail', message: 'Campos obrigatórios: código, tipo de desconto, valor de desconto, data de expiração' });
@@ -530,17 +878,36 @@ export class AdminController {
         return;
       }
 
-      const coupon = await prisma.coupon.create({
-        data: {
-          code: code.toUpperCase(),
-          discountType,
-          discountValue: Number(discountValue),
-          minOrderValue: minOrderValue ? Number(minOrderValue) : null,
-          expirationDate: new Date(expirationDate),
-          merchantId: merchantId || null,
-          maxUses: maxUses ? Number(maxUses) : null,
-          isActive: true
-        }
+      const coupon = await prisma.$transaction(async (tx) => {
+        const created = await tx.coupon.create({
+          data: {
+            code: code.toUpperCase(),
+            discountType,
+            discountValue: Number(discountValue),
+            minOrderValue: minOrderValue !== undefined && minOrderValue !== null ? Number(minOrderValue) : null,
+            expirationDate: new Date(expirationDate),
+            merchantId: merchantId || null,
+            maxUses: maxUses !== undefined && maxUses !== null ? Number(maxUses) : null,
+            isActive: true
+          }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'COUPON_CREATED',
+          entityType: 'Coupon',
+          entityId: created.id,
+          merchantId: created.merchantId,
+          metadata: {
+            discountType,
+            amount: Number(discountValue),
+            maxUses: created.maxUses
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
+
+        return created;
       });
 
       res.status(201).json({
@@ -558,8 +925,34 @@ export class AdminController {
   public static async deleteCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      await prisma.coupon.delete({
-        where: { id }
+      const adminId = requireAdminId(req, res);
+      if (!adminId) return;
+
+      const existing = await prisma.coupon.findUnique({ where: { id } });
+      if (!existing) {
+        res.status(404).json({ status: 'fail', message: 'Cupom não encontrado' });
+        return;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.coupon.delete({
+          where: { id }
+        });
+
+        await AuditLogService.record(tx, {
+          actorType: 'admin',
+          actorId: adminId,
+          action: 'COUPON_DELETED',
+          entityType: 'Coupon',
+          entityId: id,
+          merchantId: existing.merchantId,
+          metadata: {
+            previousStatus: existing.isActive ? 'active' : 'inactive',
+            discountType: existing.discountType,
+            amount: Number(existing.discountValue)
+          },
+          context: AuditLogService.getRequestContext(req)
+        });
       });
       res.status(200).json({
         status: 'success',

@@ -3,7 +3,11 @@ import prisma from '../config/prisma';
 import { getRedisConnectionOptions, isRedisConnected } from '../config/redis';
 import { WhatsAppService } from './WhatsAppService';
 import logger from '../config/logger';
-
+import {
+  NOTIFICATION_QUEUE_ATTEMPTS,
+  NOTIFICATION_RETRY_BACKOFF_MS,
+  maskNotificationTarget
+} from '../domain/notificationPolicy';
 
 const REDIS_OPTIONS = getRedisConnectionOptions();
 const SHOULD_PROCESS_QUEUES = process.env.PROCESS_QUEUES !== 'false';
@@ -50,10 +54,10 @@ export class NotificationService {
             'sendNotification',
             { notificationId: notification.id },
             {
-              attempts: 5,
+              attempts: NOTIFICATION_QUEUE_ATTEMPTS,
               backoff: {
                 type: 'exponential',
-                delay: 1000
+                delay: NOTIFICATION_RETRY_BACKOFF_MS
               }
             }
           );
@@ -86,14 +90,14 @@ export class NotificationService {
         await notificationQueue.add(
           'sendNotification',
           { notificationId },
-          {
-            attempts: 5,
-            backoff: {
-              type: 'exponential',
-              delay: 1000
+            {
+              attempts: NOTIFICATION_QUEUE_ATTEMPTS,
+              backoff: {
+                type: 'exponential',
+                delay: NOTIFICATION_RETRY_BACKOFF_MS
+              }
             }
-          }
-        );
+          );
         enqueued = true;
       } catch (err: any) {
         logger.error(`⚠️ [Redis Add Job Error] Falha ao adicionar job de notificação pós-commit para o ID ${notificationId}: ${err.message}`);
@@ -123,19 +127,7 @@ export class NotificationService {
         throw new Error(`Notification not found: ${notificationId}`);
       }
 
-      if (notification.type === 'WhatsApp') {
-        await WhatsAppService.sendMessage(notification.target, notification.content);
-      } else {
-        logger.warn(`Unsupported notification type: ${notification.type}`);
-      }
-
-      await prisma.notification.update({
-        where: { id: notificationId },
-        data: {
-          status: 'SENT',
-          sentAt: new Date()
-        }
-      });
+      await this.processNotification(notification, 1, true);
       logger.info(`🔔 [Notification Fallback] Notificação ${notificationId} enviada com sucesso.`);
     } catch (error: any) {
       logger.error(`❌ [Notification Fallback Error] Falha ao processar notificação ${notificationId}: ${error.message}`);
@@ -149,6 +141,77 @@ export class NotificationService {
       });
     }
   }
+
+  public static async requeueFailedNotification(notificationId: string): Promise<void> {
+    const notification = await prisma.notification.findUnique({
+      where: { id: notificationId }
+    });
+
+    if (!notification) {
+      throw new Error(`Notification not found: ${notificationId}`);
+    }
+    if (notification.status !== 'FAILED') {
+      throw new Error('Apenas notificações com falha podem ser reenfileiradas.');
+    }
+
+    await prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status: 'QUEUED',
+        errorMessage: null
+      }
+    });
+
+    await this.addJobToQueue(notificationId);
+  }
+
+  public static async processNotification(
+    notification: any,
+    attemptNumber: number,
+    isFinalAttempt: boolean
+  ): Promise<void> {
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: {
+        attempts: { increment: 1 },
+        lastAttemptAt: new Date(),
+        errorMessage: null
+      }
+    });
+
+    try {
+      let providerMessageId: string | undefined;
+      if (notification.type === 'WhatsApp') {
+        providerMessageId = await WhatsAppService.sendMessage(notification.target, notification.content);
+      } else {
+        throw new Error(`Unsupported notification type: ${notification.type}`);
+      }
+
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: {
+          status: 'SENT',
+          sentAt: new Date(),
+          providerMessageId,
+          errorMessage: null
+        }
+      });
+    } catch (error: any) {
+      logger.error(
+        `Error processing notification ${notification.id} attempt ${attemptNumber} to ${maskNotificationTarget(notification.target)}: ${error.message}`
+      );
+
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: {
+          status: isFinalAttempt ? 'FAILED' : 'QUEUED',
+          errorMessage: error.message
+        }
+      });
+
+      throw error;
+    }
+  }
 }
 
 if (SHOULD_PROCESS_QUEUES) {
@@ -157,39 +220,14 @@ if (SHOULD_PROCESS_QUEUES) {
     const notification = await prisma.notification.findUnique({
       where: { id: notificationId }
     });
-    
+
     if (!notification) {
       throw new Error(`Notification not found: ${notificationId}`);
     }
 
-    try {
-      if (notification.type === 'WhatsApp') {
-        await WhatsAppService.sendMessage(notification.target, notification.content);
-      } else {
-        logger.warn(`Unsupported notification type: ${notification.type}`);
-      }
-
-      await prisma.notification.update({
-        where: { id: notificationId },
-        data: {
-          status: 'SENT',
-          sentAt: new Date()
-        }
-      });
-    } catch (error: any) {
-      logger.error(`Error processing job for notification ${notificationId}: %s`, error.message);
-      
-      const isLastAttempt = job.attemptsMade === job.opts.attempts;
-      await prisma.notification.update({
-        where: { id: notificationId },
-        data: {
-          status: isLastAttempt ? 'FAILED' : 'QUEUED',
-          errorMessage: error.message
-        }
-      });
-      
-      throw error;
-    }
+    const nextAttempt = job.attemptsMade + 1;
+    const maxAttempts = Number(job.opts.attempts || NOTIFICATION_QUEUE_ATTEMPTS);
+    await NotificationService.processNotification(notification, nextAttempt, nextAttempt >= maxAttempts);
   }, {
     connection: REDIS_OPTIONS as any
   });

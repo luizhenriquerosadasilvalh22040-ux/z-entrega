@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { authConfig } from '../config/auth';
+import type { UserRole } from '../domain/accessControl';
 
 export interface IDecodedUser {
   userId: string;
-  role: 'customer' | 'merchant' | 'admin';
+  role: UserRole;
 }
 
 // Extende a interface Request do Express globalmente
@@ -56,7 +57,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
   }
 };
 
-export const authorize = (allowedRoles: ('customer' | 'merchant' | 'admin')[]) => {
+export const authorize = (allowedRoles: UserRole[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ status: 'fail', message: 'Not authenticated' });

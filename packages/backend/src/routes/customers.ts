@@ -13,11 +13,11 @@ const router = Router();
 router.use(authenticate);
 
 // Estatísticas e buscas específicas (admin/internal)
-router.get('/stats/count', authorize(['merchant']), CustomerController.count);
-router.get('/search/city', authorize(['merchant']), CustomerController.searchByCity);
+router.get('/stats/count', authorize(['admin']), CustomerController.count);
+router.get('/search/city', authorize(['admin']), CustomerController.searchByCity);
 
-// Listar todos os clientes (somente lojistas podem ver todos os clientes)
-router.get('/', authorize(['merchant']), CustomerController.list);
+// Listar todos os clientes (somente admin)
+router.get('/', authorize(['admin']), CustomerController.list);
 
 // Pegar por ID, atualizar e desativar
 router.get('/:id', CustomerController.getById);

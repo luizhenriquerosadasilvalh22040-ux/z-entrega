@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { canManageMerchantResource } from '../domain/accessControl';
 import { PromotionService } from '../services/PromotionService';
 
 export class PromotionController {
@@ -38,6 +39,11 @@ export class PromotionController {
   public static async listByMerchant(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
+      if (!req.user || !canManageMerchantResource(req.user, merchantId)) {
+        res.status(403).json({ status: 'fail', message: 'Forbidden access' });
+        return;
+      }
+
       const promotions = await PromotionService.listMerchantPromotions(merchantId);
       res.status(200).json({ status: 'success', data: { promotions } });
     } catch (error) {

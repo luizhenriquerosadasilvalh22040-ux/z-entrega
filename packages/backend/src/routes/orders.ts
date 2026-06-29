@@ -3,6 +3,7 @@ import { OrderController } from '../controllers/OrderController';
 import { authenticate } from '../middlewares/auth';
 import { validate } from '../middlewares/validation';
 import { createOrderSchema, updateOrderStatusSchema } from '../validators/order';
+import { createReviewSchema } from '../validators/review';
 
 const router = Router();
 
@@ -24,6 +25,6 @@ router.get('/:id', OrderController.getById);
 router.post('/:id/status', validate(updateOrderStatusSchema), OrderController.updateStatus);
 
 // Avaliar pedido
-router.post('/:id/review', OrderController.createReview);
+router.post('/:id/review', validate(createReviewSchema), OrderController.createReview);
 
 export default router;

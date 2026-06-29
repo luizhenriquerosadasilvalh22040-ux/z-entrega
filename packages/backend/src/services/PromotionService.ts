@@ -41,8 +41,13 @@ export class PromotionService {
     if (data.discountPercentage !== undefined) updateData.discountPercentage = data.discountPercentage;
     if (data.endDate !== undefined) updateData.expirationDate = new Date(data.endDate);
 
+    const existing = await prisma.promotion.findFirst({
+      where: { id, merchantId }
+    });
+    if (!existing) return null;
+
     const promotion = await prisma.promotion.update({
-      where: { id, merchantId },
+      where: { id },
       data: updateData
     });
 

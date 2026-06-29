@@ -39,9 +39,7 @@ export class AuthController {
     try {
       const customer = await AuthService.registerCustomer(req.body);
       
-      // Remove a senha do objeto de retorno
       const response = customer.toObject ? customer.toObject() : customer;
-      delete response.passwordHash;
 
       res.status(201).json({
         status: 'success',
@@ -63,7 +61,6 @@ export class AuthController {
       const { customer, accessToken, refreshToken } = await AuthService.loginCustomer(identifier, password);
 
       const customerObj = customer.toObject ? customer.toObject() : customer;
-      delete customerObj.passwordHash;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
 
@@ -85,7 +82,6 @@ export class AuthController {
       const merchant = await AuthService.registerMerchant(req.body);
 
       const response = merchant.toObject ? merchant.toObject() : merchant;
-      delete response.passwordHash;
 
       res.status(201).json({
         status: 'success',
@@ -102,7 +98,6 @@ export class AuthController {
       const { merchant, accessToken, refreshToken } = await AuthService.loginMerchant(email, password);
 
       const merchantObj = merchant.toObject ? merchant.toObject() : merchant;
-      delete merchantObj.passwordHash;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
 
@@ -226,9 +221,6 @@ export class AuthController {
         if (dbCustomer) {
           const customer = formatCustomer(dbCustomer);
           userObj = customer ? (customer.toObject ? customer.toObject() : customer) : null;
-          if (userObj) {
-            delete userObj.passwordHash;
-          }
         }
       } else if (role === 'merchant') {
         const dbMerchant = await prisma.merchant.findUnique({
@@ -237,9 +229,6 @@ export class AuthController {
         if (dbMerchant) {
           const merchant = formatMerchant(dbMerchant);
           userObj = merchant ? (merchant.toObject ? merchant.toObject() : merchant) : null;
-          if (userObj) {
-            delete userObj.passwordHash;
-          }
         }
       } else if (role === 'admin') {
         userObj = { name: 'Administrador Geral', email: 'admin@trazpraca.com' };
@@ -264,8 +253,12 @@ export class AuthController {
 
   public static async requestCustomerOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { phone, name, address } = req.body;
-      const { isNewUser } = await AuthService.requestCustomerOtp(phone, name, address);
+      const { phone, name, address, termsAccepted, privacyAccepted, marketingConsent } = req.body;
+      const { isNewUser } = await AuthService.requestCustomerOtp(phone, name, address, {
+        termsAccepted,
+        privacyAccepted,
+        marketingConsent
+      });
       
       const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
       res.status(200).json({
@@ -284,9 +277,6 @@ export class AuthController {
       const { customer, accessToken, refreshToken } = await AuthService.verifyCustomerOtp(phone, code);
 
       const customerObj = customer.toObject ? customer.toObject() : customer;
-      delete customerObj.passwordHash;
-      delete customerObj.verificationCode;
-      delete customerObj.verificationCodeExpires;
 
       AuthController.setAuthCookies(res, accessToken, refreshToken);
 

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ProductController } from '../controllers/ProductController';
 import { authenticate } from '../middlewares/auth';
 import { validate } from '../middlewares/validation';
-import { createProductSchema, updateProductSchema } from '../validators/product';
+import { createProductSchema, updateProductSchema, updateProductStockSchema } from '../validators/product';
 
 const router = Router();
 
@@ -14,7 +14,7 @@ router.get('/merchant/:merchantId', ProductController.listByMerchant);
 router.use(authenticate);
 router.post('/', validate(createProductSchema), ProductController.create);
 router.put('/:id', validate(updateProductSchema), ProductController.update);
-router.put('/:id/stock', ProductController.updateStock);
+router.put('/:id/stock', validate(updateProductStockSchema), ProductController.updateStock);
 router.delete('/:id', ProductController.delete);
 
 export default router;

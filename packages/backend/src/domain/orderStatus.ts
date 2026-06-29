@@ -1,0 +1,49 @@
+export const ORDER_STATUS = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  ACCEPTED: 'ACCEPTED',
+  PREPARING: 'PREPARING',
+  READY: 'READY',
+  DISPATCHED: 'DISPATCHED',
+  IN_TRANSIT: 'IN_TRANSIT',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED'
+} as const;
+
+export type OrderStatus = typeof ORDER_STATUS[keyof typeof ORDER_STATUS];
+
+export const PAYMENT_STATUS = {
+  PENDING: 'PENDING',
+  RECEIVED: 'RECEIVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+  OVERDUE: 'OVERDUE',
+  REFUND_PENDING: 'REFUND_PENDING',
+  REFUNDED: 'REFUNDED',
+  REFUND_FAILED: 'REFUND_FAILED'
+} as const;
+
+export type PaymentStatus = typeof PAYMENT_STATUS[keyof typeof PAYMENT_STATUS];
+
+export const DELIVERER_RESPONSE_STATUS = {
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED'
+} as const;
+
+export type DelivererResponseStatus = typeof DELIVERER_RESPONSE_STATUS[keyof typeof DELIVERER_RESPONSE_STATUS];
+
+export const DELIVERER_WORK_STATUS = {
+  AVAILABLE: 'AVAILABLE',
+  COLLECTING: 'COLLECTING',
+  DELIVERING: 'DELIVERING'
+} as const;
+
+export type DelivererWorkStatus = typeof DELIVERER_WORK_STATUS[keyof typeof DELIVERER_WORK_STATUS];
+
+export const ONLINE_PAYMENT_METHODS = new Set(['PIX', 'Cartão']);
+
+export const FINAL_ORDER_STATUSES = new Set<OrderStatus>([
+  ORDER_STATUS.CANCELLED,
+  ORDER_STATUS.DELIVERED
+]);

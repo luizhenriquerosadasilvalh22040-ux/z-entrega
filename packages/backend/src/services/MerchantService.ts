@@ -1,5 +1,6 @@
 import prisma from '../config/prisma';
-import { IAddress, IOperatingHours } from '../types';
+import { IOperatingHours } from '../types';
+import { MERCHANT_SUBSCRIPTION_STATUS, getMerchantPublicationBlockReason, isMerchantPubliclyVisible } from '../domain/subscriptionStatus';
 
 export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; count: number }) => {
   if (!merchant) return null;
@@ -8,8 +9,7 @@ export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; coun
     id: merchant.id,
     name: merchant.name,
     email: merchant.email,
-    passwordHash: merchant.passwordHash,
-    cnpj: merchant.cnpj,
+    hasCnpj: !!merchant.cnpj,
     phone: merchant.phone,
     category: merchant.category,
     paymentMethods: merchant.paymentMethods,
@@ -22,6 +22,11 @@ export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; coun
     mpUserId: merchant.mpUserId || undefined,
     mpSubscriptionId: merchant.mpSubscriptionId || undefined,
     subscriptionStatus: merchant.subscriptionStatus || undefined,
+    isPubliclyVisible: isMerchantPubliclyVisible(merchant),
+    publicationBlockReason: getMerchantPublicationBlockReason(merchant) || undefined,
+    termsAcceptedAt: merchant.termsAcceptedAt || undefined,
+    privacyAcceptedAt: merchant.privacyAcceptedAt || undefined,
+    marketingConsent: !!merchant.marketingConsent,
     createdAt: merchant.createdAt,
     updatedAt: merchant.updatedAt,
     averageRating: reviewsStats?.avg ? Number((reviewsStats.avg).toFixed(1)) : 0,
@@ -84,7 +89,11 @@ export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; coun
 
 export class MerchantService {
   public static async listMerchants(filters: { category?: string; city?: string } = {}): Promise<any[]> {
-    const where: any = { isActive: true };
+    const where: any = {
+      isActive: true,
+      isVerified: true,
+      subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
+    };
     if (filters.category) {
       where.category = filters.category;
     }
@@ -111,7 +120,14 @@ export class MerchantService {
   }
 
   public static async getMerchantById(id: string): Promise<any | null> {
-    const merchant = await prisma.merchant.findUnique({ where: { id } });
+    const merchant = await prisma.merchant.findFirst({
+      where: {
+        id,
+        isActive: true,
+        isVerified: true,
+        subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
+      }
+    });
     if (!merchant) return null;
 
     const agg = await prisma.review.aggregate({
@@ -181,13 +197,21 @@ export class MerchantService {
 
   public static async countMerchants(): Promise<number> {
     return await prisma.merchant.count({
-      where: { isActive: true }
+      where: {
+        isActive: true,
+        isVerified: true,
+        subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
+      }
     });
   }
 
   public static async countVerifiedMerchants(): Promise<number> {
     return await prisma.merchant.count({
-      where: { isActive: true, isVerified: true }
+      where: {
+        isActive: true,
+        isVerified: true,
+        subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
+      }
     });
   }
 }

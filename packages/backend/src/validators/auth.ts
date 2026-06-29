@@ -25,16 +25,22 @@ const OperatingHoursSchema = Joi.object({
 export const customerRegisterSchema = Joi.object({
   name: Joi.string().min(3).max(100).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
+  password: Joi.string().min(8).max(128).required(),
   cpf: Joi.string().regex(/^\d{11}$/).required(), // CPF apenas números (11 digitos)
   phone: Joi.string().required(),
-  address: AddressSchema.required()
+  address: AddressSchema.required(),
+  termsAccepted: Joi.boolean().valid(true).required(),
+  privacyAccepted: Joi.boolean().valid(true).required(),
+  marketingConsent: Joi.boolean().optional()
 });
 
 export const customerRequestOtpSchema = Joi.object({
   phone: Joi.string().required(),
   name: Joi.string().min(3).max(100).optional(),
-  address: AddressSchema.optional()
+  address: AddressSchema.optional(),
+  termsAccepted: Joi.boolean().optional(),
+  privacyAccepted: Joi.boolean().optional(),
+  marketingConsent: Joi.boolean().optional()
 });
 
 export const customerVerifyOtpSchema = Joi.object({
@@ -45,13 +51,16 @@ export const customerVerifyOtpSchema = Joi.object({
 export const merchantRegisterSchema = Joi.object({
   name: Joi.string().min(3).max(100).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
+  password: Joi.string().min(8).max(128).required(),
   cnpj: Joi.string().regex(/^\d{14}$/).required(), // CNPJ apenas números (14 digitos)
   phone: Joi.string().required(),
   category: Joi.string().valid('Comida', 'Farmácia', 'Construção', 'Geral').required(),
   operatingHours: OperatingHoursSchema.required(),
   paymentMethods: Joi.array().items(Joi.string()).min(1).required(),
-  address: AddressSchema.required()
+  address: AddressSchema.required(),
+  termsAccepted: Joi.boolean().valid(true).required(),
+  privacyAccepted: Joi.boolean().valid(true).required(),
+  marketingConsent: Joi.boolean().optional()
 });
 
 export const loginSchema = Joi.object({
@@ -76,7 +85,6 @@ export const forgotPasswordSchema = Joi.object({
 
 export const resetPasswordSchema = Joi.object({
   token: Joi.string().required(),
-  newPassword: Joi.string().min(6).required(),
+  newPassword: Joi.string().min(8).max(128).required(),
   role: Joi.string().valid('merchant', 'admin').required()
 });
-

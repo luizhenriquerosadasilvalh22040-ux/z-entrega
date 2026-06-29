@@ -1,6 +1,7 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { getRedisConnectionOptions } from '../config/redis';
 import logger from '../config/logger';
+import { DELIVERY_RESPONSE_TIMEOUT_MS } from '../domain/deliveryDispatchPolicy';
 
 const REDIS_OPTIONS = getRedisConnectionOptions();
 const SHOULD_PROCESS_QUEUES = process.env.PROCESS_QUEUES !== 'false';
@@ -9,6 +10,25 @@ const SHOULD_PROCESS_QUEUES = process.env.PROCESS_QUEUES !== 'false';
 export const deliveryTimeoutQueue = new Queue('deliveryTimeoutQueue', {
   connection: REDIS_OPTIONS as any
 });
+
+export const scheduleDeliveryTimeout = async (
+  orderId: string,
+  delivererId: string,
+  delay = DELIVERY_RESPONSE_TIMEOUT_MS
+): Promise<void> => {
+  const jobId = `delivery-timeout:${orderId}:${delivererId}`;
+  await deliveryTimeoutQueue.add(
+    'deliveryTimeout',
+    { orderId, delivererId },
+    {
+      delay,
+      jobId,
+      removeOnComplete: true,
+      removeOnFail: 100
+    }
+  );
+  logger.info(`⏰ [Timeout Scheduled] Timeout de entrega agendado para o pedido ${orderId} (Entregador: ${delivererId})`);
+};
 
 if (SHOULD_PROCESS_QUEUES) {
   // Processador da fila de timeout de entregadores

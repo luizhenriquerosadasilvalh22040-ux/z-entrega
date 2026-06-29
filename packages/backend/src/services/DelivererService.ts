@@ -7,7 +7,6 @@ export const formatDeliverer = (d: any) => {
     id: d.id,
     name: d.name,
     email: d.email,
-    passwordHash: d.passwordHash,
     phone: d.phone,
     vehicle: d.vehicleType,
     plate: d.licensePlate,
