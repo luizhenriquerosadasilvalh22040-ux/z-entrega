@@ -131,9 +131,14 @@ export class PaymentController {
    */
   public static async webhook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      assertMercadoPagoWebhookAuthorized((name) => req.header(name), process.env.MERCADO_PAGO_WEBHOOK_SECRET);
-
       const { type, action, data } = req.body;
+      const queryDataId = req.query['data.id'] || req.query.data_id;
+      const signatureDataId = String(Array.isArray(queryDataId) ? queryDataId[0] : queryDataId || data?.id || '');
+      assertMercadoPagoWebhookAuthorized(
+        (name) => req.header(name),
+        process.env.MERCADO_PAGO_WEBHOOK_SECRET,
+        signatureDataId
+      );
 
       if (!data || !data.id) {
         logger.warn('⚠️ [Mercado Pago Webhook] Webhook recebido com corpo inválido.');

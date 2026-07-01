@@ -6,6 +6,7 @@ const {
   assertMercadoPagoWebhookAuthorized,
   maskWebhookPhone,
   sanitizeMercadoPagoWebhookPayload,
+  verifyMercadoPagoWebhookSignature,
   verifyMetaSha256Signature
 } = require('../dist/domain/webhookSecurity');
 
@@ -24,6 +25,25 @@ test('Mercado Pago webhook authorization rejects missing or wrong secret', () =>
     () => assertMercadoPagoWebhookAuthorized(() => 'wrong-secret', 'secret-123'),
     /Webhook não autorizado/
   );
+});
+
+test('Mercado Pago official webhook signature validates x-signature headers', () => {
+  const secret = 'mp-secret-123';
+  const dataId = '999999999';
+  const requestId = 'request-abc';
+  const ts = '1704908010';
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const signature = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+  const getHeader = (name) => {
+    if (name === 'x-signature') return `ts=${ts},v1=${signature}`;
+    if (name === 'x-request-id') return requestId;
+    return undefined;
+  };
+
+  assert.equal(verifyMercadoPagoWebhookSignature(getHeader, dataId, secret), true);
+  assert.doesNotThrow(() => assertMercadoPagoWebhookAuthorized(getHeader, secret, dataId));
+  assert.equal(verifyMercadoPagoWebhookSignature(getHeader, 'wrong-id', secret), false);
 });
 
 test('Meta webhook signature validates raw body with app secret', () => {
