@@ -222,6 +222,42 @@ export class DeliveryDispatchService {
     return accepted.count;
   }
 
+  public static async markActivePendingAssignmentAccepted(
+    tx: any,
+    orderId: string,
+    delivererId: string,
+    now = new Date()
+  ): Promise<number> {
+    const accepted = await tx.deliveryAssignment.updateMany({
+      where: {
+        orderId,
+        delivererId,
+        status: DELIVERY_ASSIGNMENT_STATUS.PENDING,
+        expiresAt: { gte: now }
+      },
+      data: {
+        status: DELIVERY_ASSIGNMENT_STATUS.ACCEPTED,
+        respondedAt: now
+      }
+    });
+
+    if (accepted.count > 0) {
+      await tx.deliveryAssignment.updateMany({
+        where: {
+          orderId,
+          delivererId: { not: delivererId },
+          status: DELIVERY_ASSIGNMENT_STATUS.PENDING
+        },
+        data: {
+          status: DELIVERY_ASSIGNMENT_STATUS.CANCELLED,
+          respondedAt: now
+        }
+      });
+    }
+
+    return accepted.count;
+  }
+
   public static async markAssignmentRejected(
     tx: any,
     orderId: string,
@@ -236,6 +272,28 @@ export class DeliveryDispatchService {
       data: {
         status: DELIVERY_ASSIGNMENT_STATUS.REJECTED,
         respondedAt: new Date()
+      }
+    });
+
+    return rejected.count;
+  }
+
+  public static async markActivePendingAssignmentRejected(
+    tx: any,
+    orderId: string,
+    delivererId: string,
+    now = new Date()
+  ): Promise<number> {
+    const rejected = await tx.deliveryAssignment.updateMany({
+      where: {
+        orderId,
+        delivererId,
+        status: DELIVERY_ASSIGNMENT_STATUS.PENDING,
+        expiresAt: { gte: now }
+      },
+      data: {
+        status: DELIVERY_ASSIGNMENT_STATUS.REJECTED,
+        respondedAt: now
       }
     });
 

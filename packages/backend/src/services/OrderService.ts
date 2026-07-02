@@ -539,6 +539,11 @@ export class OrderService {
       }
 
       if (action === 'accept') {
+        const acceptedAssignmentCount = await DeliveryDispatchService.markActivePendingAssignmentAccepted(tx, orderId, delivererId);
+        if (acceptedAssignmentCount === 0) {
+          return { success: false, message: 'Esta solicitação de entrega expirou. Aguarde uma nova atribuição.' };
+        }
+
         // Atualiza status de resposta da entrega e do motoboy
         const accepted = await tx.order.updateMany({
           where: {
@@ -551,10 +556,8 @@ export class OrderService {
         });
 
         if (accepted.count === 0) {
-          return { success: false, message: 'Esta entrega já foi respondida ou atribuída a outro motoboy.' };
+          throw new Error('Esta entrega já foi respondida ou atribuída a outro motoboy.');
         }
-
-        await DeliveryDispatchService.ensureAssignmentAccepted(tx, orderId, delivererId);
 
         await tx.deliverer.update({
           where: { id: delivererId },
@@ -593,6 +596,11 @@ export class OrderService {
 
         return { success: true, message: 'Você aceitou a entrega com sucesso! Dirija-se ao estabelecimento para a coleta.' };
       } else {
+        const rejectedAssignmentCount = await DeliveryDispatchService.markActivePendingAssignmentRejected(tx, orderId, delivererId);
+        if (rejectedAssignmentCount === 0) {
+          return { success: false, message: 'Esta solicitação de entrega expirou. Aguarde uma nova atribuição.' };
+        }
+
         // Rejeitar: marca o status da entrega como REJECTED
         const rejected = await tx.order.updateMany({
           where: {
@@ -607,10 +615,8 @@ export class OrderService {
         });
 
         if (rejected.count === 0) {
-          return { success: false, message: 'Esta entrega já foi respondida ou atribuída a outro motoboy.' };
+          throw new Error('Esta entrega já foi respondida ou atribuída a outro motoboy.');
         }
-
-        await DeliveryDispatchService.ensureAssignmentRejected(tx, orderId, delivererId);
 
         await tx.deliverer.update({
           where: { id: delivererId },

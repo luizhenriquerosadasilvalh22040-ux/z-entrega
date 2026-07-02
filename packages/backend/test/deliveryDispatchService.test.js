@@ -26,8 +26,10 @@ const createTx = (assignments = []) => ({
           (typeof where.delivererId === 'string'
             ? assignment.delivererId === where.delivererId
             : assignment.delivererId !== where.delivererId.not);
+        const sameExpiration = !where.expiresAt?.gte ||
+          (assignment.expiresAt instanceof Date && assignment.expiresAt >= where.expiresAt.gte);
 
-        if (sameOrder && sameStatus && sameDeliverer) {
+        if (sameOrder && sameStatus && sameDeliverer && sameExpiration) {
           Object.assign(assignment, data);
           count += 1;
         }
@@ -96,6 +98,46 @@ test('ensureAssignmentAccepted records a final response when pending assignment 
   assert.ok(assignments[1].respondedAt instanceof Date);
 });
 
+test('accepting an active pending assignment records the response', async () => {
+  const now = new Date('2026-01-01T10:00:00Z');
+  const assignments = [
+    {
+      orderId: 'order-1',
+      delivererId: 'driver-1',
+      status: 'PENDING',
+      attempt: 1,
+      expiresAt: new Date('2026-01-01T10:05:00Z')
+    }
+  ];
+
+  const tx = createTx(assignments);
+  const acceptedCount = await DeliveryDispatchService.markActivePendingAssignmentAccepted(tx, 'order-1', 'driver-1', now);
+
+  assert.equal(acceptedCount, 1);
+  assert.equal(assignments[0].status, 'ACCEPTED');
+  assert.equal(assignments[0].respondedAt, now);
+});
+
+test('accepting an expired pending assignment does not mutate delivery state', async () => {
+  const now = new Date('2026-01-01T10:06:00Z');
+  const assignments = [
+    {
+      orderId: 'order-1',
+      delivererId: 'driver-1',
+      status: 'PENDING',
+      attempt: 1,
+      expiresAt: new Date('2026-01-01T10:05:00Z')
+    }
+  ];
+
+  const tx = createTx(assignments);
+  const acceptedCount = await DeliveryDispatchService.markActivePendingAssignmentAccepted(tx, 'order-1', 'driver-1', now);
+
+  assert.equal(acceptedCount, 0);
+  assert.equal(assignments[0].status, 'PENDING');
+  assert.equal(assignments[0].respondedAt, undefined);
+});
+
 test('ensureAssignmentRejected records a final response when pending assignment is missing', async () => {
   const assignments = [
     { orderId: 'order-1', delivererId: 'driver-1', status: 'TIMED_OUT', attempt: 1 }
@@ -110,6 +152,26 @@ test('ensureAssignmentRejected records a final response when pending assignment 
   assert.equal(assignments[1].attempt, 2);
   assert.equal(assignments[1].delivererId, 'driver-2');
   assert.ok(assignments[1].respondedAt instanceof Date);
+});
+
+test('rejecting an expired pending assignment does not mutate delivery state', async () => {
+  const now = new Date('2026-01-01T10:06:00Z');
+  const assignments = [
+    {
+      orderId: 'order-1',
+      delivererId: 'driver-1',
+      status: 'PENDING',
+      attempt: 1,
+      expiresAt: new Date('2026-01-01T10:05:00Z')
+    }
+  ];
+
+  const tx = createTx(assignments);
+  const rejectedCount = await DeliveryDispatchService.markActivePendingAssignmentRejected(tx, 'order-1', 'driver-1', now);
+
+  assert.equal(rejectedCount, 0);
+  assert.equal(assignments[0].status, 'PENDING');
+  assert.equal(assignments[0].respondedAt, undefined);
 });
 
 test('attempted deliverers are collected to avoid retrying the same driver loop', async () => {
