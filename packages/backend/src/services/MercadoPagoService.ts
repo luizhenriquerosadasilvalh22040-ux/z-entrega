@@ -25,15 +25,18 @@ export const buildMercadoPagoPixPayer = (
   };
 };
 
+export const buildMercadoPagoWebhookUrl = (apiPublicUrl: string | undefined): string => {
+  const baseUrl = (apiPublicUrl || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  return `${baseUrl}/api/payments/webhook/mercadopago`;
+};
+
 export class MercadoPagoService {
   private static getApiPublicUrl(): string {
     return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
   }
 
   private static getWebhookUrl(): string {
-    const baseUrl = `${this.getApiPublicUrl()}/api/payments/webhook/mercadopago`;
-    const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
-    return secret ? `${baseUrl}?secret=${encodeURIComponent(secret)}` : baseUrl;
+    return buildMercadoPagoWebhookUrl(this.getApiPublicUrl());
   }
 
   private static getAccessToken(): string {
