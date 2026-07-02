@@ -313,6 +313,7 @@ export class OrderCreationService {
         order,
         merchant,
         customerData: formatCustomer(customer)!,
+        paymentCustomer: customer,
         customerEmail: customer.email || 'comprador@trazpraca.com',
         total,
         applicationFee: deliveryFee + commission
@@ -328,7 +329,7 @@ export class OrderCreationService {
 
     try {
       if (input.paymentMethod === 'PIX') {
-        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(savedOrder.customerData as any);
+        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(savedOrder.paymentCustomer);
         const pixPayment = await MercadoPagoService.createPixPayment(
           createdOrder.id,
           savedOrder.total,
@@ -350,7 +351,7 @@ export class OrderCreationService {
           throw new Error('Dados do cartão de crédito não fornecidos para pagamento.');
         }
 
-        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(savedOrder.customerData as any);
+        const mpCustomerId = await MercadoPagoService.getOrCreateCustomer(savedOrder.paymentCustomer);
         const cardPaymentResult = await MercadoPagoService.createCardPayment(
           createdOrder.id,
           savedOrder.total,
