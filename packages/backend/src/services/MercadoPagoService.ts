@@ -31,6 +31,25 @@ export const buildMercadoPagoWebhookUrl = (apiPublicUrl: string | undefined): st
   return `${baseUrl}/api/payments/webhook/mercadopago`;
 };
 
+const summarizePixPaymentRequest = (body: {
+  transaction_amount: number;
+  payment_method_id: string;
+  payer: { id?: string; email?: string; first_name?: string; last_name?: string };
+  application_fee: number;
+  external_reference: string;
+  notification_url: string;
+}) => ({
+  transactionAmount: body.transaction_amount,
+  paymentMethodId: body.payment_method_id,
+  applicationFee: body.application_fee,
+  externalReference: body.external_reference,
+  notificationProtocol: new URL(body.notification_url).protocol,
+  notificationHost: new URL(body.notification_url).host,
+  hasPayerId: Boolean(body.payer.id),
+  hasPayerEmail: Boolean(body.payer.email),
+  payerEmailDomain: body.payer.email?.split('@')[1]
+});
+
 export class MercadoPagoService {
   private static getApiPublicUrl(): string {
     const configuredUrl = process.env.API_PUBLIC_URL || process.env.BACKEND_URL;
@@ -292,6 +311,10 @@ export class MercadoPagoService {
 
       if (!response.ok) {
         const errorText = await response.text();
+        logger.error('[Mercado Pago] Pix request rejected by provider', {
+          providerStatus: response.status,
+          request: summarizePixPaymentRequest(body)
+        });
         throw new Error(`Erro Mercado Pago (Pix): ${response.status} - ${errorText}`);
       }
 
