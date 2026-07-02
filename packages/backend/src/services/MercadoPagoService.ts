@@ -33,11 +33,21 @@ export const buildMercadoPagoWebhookUrl = (apiPublicUrl: string | undefined): st
 
 export class MercadoPagoService {
   private static getApiPublicUrl(): string {
-    return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const configuredUrl = process.env.API_PUBLIC_URL || process.env.BACKEND_URL;
+    if (isProduction() && !configuredUrl) {
+      throw new Error('API_PUBLIC_URL precisa estar configurada em produção para gerar webhooks do Mercado Pago.');
+    }
+
+    return (configuredUrl || 'http://localhost:3000').replace(/\/$/, '');
   }
 
   private static getWebhookUrl(): string {
-    return buildMercadoPagoWebhookUrl(this.getApiPublicUrl());
+    const webhookUrl = buildMercadoPagoWebhookUrl(this.getApiPublicUrl());
+    if (isProduction() && new URL(webhookUrl).protocol !== 'https:') {
+      throw new Error('API_PUBLIC_URL precisa usar HTTPS em produção para webhooks do Mercado Pago.');
+    }
+
+    return webhookUrl;
   }
 
   private static getAccessToken(): string {
