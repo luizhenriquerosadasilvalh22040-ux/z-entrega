@@ -33,7 +33,7 @@ test('Pix payer falls back to customer email and name when customer id is missin
 test('Mercado Pago webhook URL does not expose secrets in query string', () => {
   process.env.MERCADO_PAGO_WEBHOOK_SECRET = 'secret-that-must-not-be-in-url';
 
-  const url = buildMercadoPagoWebhookUrl('https://api.trazpraca.test/');
+  const url = buildMercadoPagoWebhookUrl('https://api.trazpraca.test/old/path?secret=legacy');
 
   assert.equal(url, 'https://api.trazpraca.test/api/payments/webhook/mercadopago');
   assert.equal(url.includes('secret'), false);

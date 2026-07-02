@@ -26,7 +26,8 @@ export const buildMercadoPagoPixPayer = (
 };
 
 export const buildMercadoPagoWebhookUrl = (apiPublicUrl: string | undefined): string => {
-  const baseUrl = (apiPublicUrl || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const rawUrl = (apiPublicUrl || process.env.BACKEND_URL || 'http://localhost:3000').trim();
+  const baseUrl = new URL(rawUrl).origin;
   return `${baseUrl}/api/payments/webhook/mercadopago`;
 };
 
