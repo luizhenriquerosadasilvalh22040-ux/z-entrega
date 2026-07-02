@@ -1,6 +1,7 @@
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { businessConfig, isSupportedServiceArea } from '../config/business';
+import { orderCreationTransactionOptions } from '../config/transactions';
 import { ORDER_STATUS, PAYMENT_STATUS, type PaymentStatus } from '../domain/orderStatus';
 import { getMerchantPublicationBlockReason } from '../domain/subscriptionStatus';
 import { IAddress } from '../types';
@@ -316,7 +317,7 @@ export class OrderCreationService {
         total,
         applicationFee: deliveryFee + commission
       };
-    });
+    }, orderCreationTransactionOptions);
 
     if (!savedOrder.order) {
       throw new Error('Order not found after initial creation');
@@ -407,7 +408,7 @@ export class OrderCreationService {
               }
             });
           }
-        });
+        }, orderCreationTransactionOptions);
       }
     } catch (err) {
       await OrderCreationService.cancelFailedCreation(createdOrder.id);
@@ -432,7 +433,7 @@ export class OrderCreationService {
       });
 
       return { order, notificationIds };
-    });
+    }, orderCreationTransactionOptions);
 
     try {
       for (const notificationId of finalizedOrder.notificationIds) {
@@ -479,6 +480,6 @@ export class OrderCreationService {
           }
         });
       }
-    });
+    }, orderCreationTransactionOptions);
   }
 }

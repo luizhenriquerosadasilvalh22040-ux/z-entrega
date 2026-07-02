@@ -1,5 +1,6 @@
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+import { paymentSyncTransactionOptions } from '../config/transactions';
 import { ORDER_STATUS, PAYMENT_STATUS } from '../domain/orderStatus';
 import { InventoryService } from './InventoryService';
 import { MercadoPagoService } from './MercadoPagoService';
@@ -60,7 +61,7 @@ export class OrderPaymentSyncService {
         where: { id: order.id },
         include: ORDER_INCLUDE
       });
-    });
+    }, paymentSyncTransactionOptions);
 
     for (const notificationId of notificationsToQueue) {
       try {
