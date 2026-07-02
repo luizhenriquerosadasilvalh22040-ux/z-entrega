@@ -14,6 +14,7 @@ import { WhatsAppTemplateType } from '@prisma/client';
 import { scheduleDeliveryTimeout } from '../queues/deliveryQueue';
 import { createDeliveryResponseToken } from '../utils/deliveryResponseToken';
 import { canTryAnotherDeliverer } from '../domain/deliveryDispatchPolicy';
+import { orderStatusTransactionOptions } from '../config/transactions';
 import {
   DELIVERER_RESPONSE_STATUS,
   DELIVERER_WORK_STATUS,
@@ -315,7 +316,7 @@ export class OrderService {
       );
 
       return updatedOrder;
-    });
+    }, orderStatusTransactionOptions);
 
     for (const nId of notificationsToQueue) {
       try {

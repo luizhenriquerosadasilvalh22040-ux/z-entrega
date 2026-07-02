@@ -17,3 +17,7 @@ export const paymentSyncTransactionOptions = {
   timeout: parsePositiveInteger(process.env.PRISMA_PAYMENT_TX_TIMEOUT_MS, 15000)
 };
 
+export const orderStatusTransactionOptions = {
+  maxWait: parsePositiveInteger(process.env.PRISMA_ORDER_STATUS_TX_MAX_WAIT_MS, 10000),
+  timeout: parsePositiveInteger(process.env.PRISMA_ORDER_STATUS_TX_TIMEOUT_MS, 20000)
+};

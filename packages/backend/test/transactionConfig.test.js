@@ -12,10 +12,13 @@ test('critical transaction config uses production-safe defaults', () => {
   delete process.env.PRISMA_ORDER_TX_TIMEOUT_MS;
   delete process.env.PRISMA_PAYMENT_TX_MAX_WAIT_MS;
   delete process.env.PRISMA_PAYMENT_TX_TIMEOUT_MS;
+  delete process.env.PRISMA_ORDER_STATUS_TX_MAX_WAIT_MS;
+  delete process.env.PRISMA_ORDER_STATUS_TX_TIMEOUT_MS;
 
   const {
     orderCreationTransactionOptions,
-    paymentSyncTransactionOptions
+    paymentSyncTransactionOptions,
+    orderStatusTransactionOptions
   } = loadConfig();
 
   assert.deepEqual(orderCreationTransactionOptions, {
@@ -26,6 +29,10 @@ test('critical transaction config uses production-safe defaults', () => {
     maxWait: 10000,
     timeout: 15000
   });
+  assert.deepEqual(orderStatusTransactionOptions, {
+    maxWait: 10000,
+    timeout: 20000
+  });
 });
 
 test('critical transaction config accepts positive integer env overrides', () => {
@@ -33,10 +40,13 @@ test('critical transaction config accepts positive integer env overrides', () =>
   process.env.PRISMA_ORDER_TX_TIMEOUT_MS = '25000';
   process.env.PRISMA_PAYMENT_TX_MAX_WAIT_MS = '11000';
   process.env.PRISMA_PAYMENT_TX_TIMEOUT_MS = '18000';
+  process.env.PRISMA_ORDER_STATUS_TX_MAX_WAIT_MS = '13000';
+  process.env.PRISMA_ORDER_STATUS_TX_TIMEOUT_MS = '26000';
 
   const {
     orderCreationTransactionOptions,
-    paymentSyncTransactionOptions
+    paymentSyncTransactionOptions,
+    orderStatusTransactionOptions
   } = loadConfig();
 
   assert.deepEqual(orderCreationTransactionOptions, {
@@ -47,5 +57,8 @@ test('critical transaction config accepts positive integer env overrides', () =>
     maxWait: 11000,
     timeout: 18000
   });
+  assert.deepEqual(orderStatusTransactionOptions, {
+    maxWait: 13000,
+    timeout: 26000
+  });
 });
-
