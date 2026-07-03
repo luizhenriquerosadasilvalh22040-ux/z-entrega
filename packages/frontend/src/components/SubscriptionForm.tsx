@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Button } from './ui';
+import { API_URL, MERCADO_PAGO_PUBLIC_KEY, isMercadoPagoConfigured } from '../config/publicEnv';
 
 export const SubscriptionForm = ({ user }: { user: any }) => {
   const [loading, setLoading] = useState(false);
@@ -8,6 +9,10 @@ export const SubscriptionForm = ({ user }: { user: any }) => {
 
   useEffect(() => {
     if (user?.subscriptionStatus === 'ACTIVE' || success) return;
+    if (!isMercadoPagoConfigured()) {
+      setError('Mercado Pago ainda não está configurado para assinatura online.');
+      return;
+    }
     
     // Initialize MercadoPago CardForm
     const script = document.createElement('script');
@@ -16,7 +21,7 @@ export const SubscriptionForm = ({ user }: { user: any }) => {
     document.body.appendChild(script);
 
     script.onload = () => {
-      const mp = new (window as any).MercadoPago(import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY);
+      const mp = new (window as any).MercadoPago(MERCADO_PAGO_PUBLIC_KEY);
       const cardForm = mp.cardForm({
         amount: '125.00',
         iframe: true,
@@ -73,11 +78,11 @@ export const SubscriptionForm = ({ user }: { user: any }) => {
               cardholderEmail,
             } = cardForm.getCardFormData();
 
-            fetch(`${import.meta.env.VITE_API_URL}/payments/subscription`, {
+            fetch(`${API_URL}/payments/subscription`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
               },
               body: JSON.stringify({
                 cardToken: token,

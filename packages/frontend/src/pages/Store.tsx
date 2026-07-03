@@ -6,8 +6,7 @@ import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
 import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2, MessageSquare, Store as StoreIcon, Truck } from 'lucide-react';
 import { CheckoutCardForm } from '../components/CheckoutCardForm';
-
-const DELIVERY_FEE = Number(import.meta.env.VITE_DELIVERY_FEE || '5');
+import { DELIVERY_FEE } from '../config/publicEnv';
 
 interface IMerchant {
   _id: string;

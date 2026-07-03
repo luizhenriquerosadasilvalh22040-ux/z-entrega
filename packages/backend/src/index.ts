@@ -41,13 +41,19 @@ import uploadRoutes from './routes/upload';
 import paymentRoutes from './routes/payments';
 import whatsappRoutes from './routes/whatsapp';
 
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+const socketCorsOrigin = process.env.NODE_ENV === 'production' && allowedOrigins.length > 0
+  ? allowedOrigins
+  : '*';
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' && process.env.FRONTEND_URL
-      ? process.env.FRONTEND_URL
-      : '*',
+    origin: socketCorsOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
@@ -70,10 +76,6 @@ const PORT = process.env.PORT || 3000;
 // Middlewares Globais
 app.set('trust proxy', 1);
 app.use(helmet());
-
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map((o) => o.trim())
-  : [];
 
 app.use(cors({
   origin: (origin, callback) => {

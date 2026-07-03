@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from './ui';
 import { Loader2 } from 'lucide-react';
+import { MERCADO_PAGO_PUBLIC_KEY, isMercadoPagoConfigured } from '../config/publicEnv';
 
 interface CheckoutCardFormProps {
   amount: number;
@@ -34,8 +35,12 @@ export const CheckoutCardForm: React.FC<CheckoutCardFormProps> = ({ amount, emai
 
   useEffect(() => {
     if (!isSdkLoaded) return;
+    if (!isMercadoPagoConfigured()) {
+      onError('Mercado Pago ainda não está configurado para pagamentos online.');
+      return;
+    }
 
-    const mp = new (window as any).MercadoPago(import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY);
+    const mp = new (window as any).MercadoPago(MERCADO_PAGO_PUBLIC_KEY);
     
     // Clear previous elements if re-rendering
     const formElement = document.getElementById('form-checkout');

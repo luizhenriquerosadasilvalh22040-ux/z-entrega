@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, ArrowRight, Star } from 'lucide-react';
 import io from 'socket.io-client';
 import { getOrderStatusUi, getPaymentStatusUi } from '../utils/orderStatusUi';
+import { SOCKET_URL } from '../config/publicEnv';
 
 interface IOrder {
   _id: string;
@@ -85,9 +86,7 @@ export const MyOrders: React.FC = () => {
     );
     if (activeOrders.length === 0) return;
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    const socketUrl = API_URL.replace('/api', '');
-    const socket = io(socketUrl, {
+    const socket = io(SOCKET_URL, {
       auth: { token: localStorage.getItem('accessToken') || undefined },
       withCredentials: true
     });

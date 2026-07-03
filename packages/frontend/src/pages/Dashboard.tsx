@@ -12,6 +12,7 @@ import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { SubscriptionForm } from '../components/SubscriptionForm';
 import { getPaymentStatusUi } from '../utils/orderStatusUi';
+import { API_URL, SOCKET_URL } from '../config/publicEnv';
 
 interface IOrder {
   _id: string;
@@ -113,9 +114,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!user?._id) return;
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    const socketUrl = API_URL.replace('/api', '');
-    const socket = io(socketUrl, {
+    const socket = io(SOCKET_URL, {
       auth: { token: localStorage.getItem('accessToken') || undefined },
       withCredentials: true
     });
@@ -1404,7 +1403,7 @@ export const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <a
-                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?._id}`}
+                    href={`${API_URL}/payments/oauth/connect?merchantId=${user?._id}`}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all"
                   >
                     Reconectar Conta
@@ -1422,7 +1421,7 @@ export const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <a
-                    href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/payments/oauth/connect?merchantId=${user?._id}`}
+                    href={`${API_URL}/payments/oauth/connect?merchantId=${user?._id}`}
                     className="px-4 py-2.5 bg-energy hover:bg-energy-dark text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
                   >
                     <Sparkles size={14} /> Conectar Mercado Pago

@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import { MapPin, ShieldAlert, CheckCircle2, Clock, Truck, ChefHat, Check } from 'lucide-react';
 import { getOrderStatusUi, getPaymentStatusUi } from '../utils/orderStatusUi';
+import { SOCKET_URL } from '../config/publicEnv';
 
 interface IOrder {
   _id: string;
@@ -55,9 +56,7 @@ export const Tracking: React.FC = () => {
     if (orderId) {
       fetchOrder(orderId);
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-      const socketUrl = API_URL.replace('/api', '');
-      const socket = io(socketUrl, {
+      const socket = io(SOCKET_URL, {
         auth: { token: localStorage.getItem('accessToken') || undefined },
         withCredentials: true
       });
