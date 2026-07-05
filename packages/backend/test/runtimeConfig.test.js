@@ -17,9 +17,7 @@ const productionApiEnv = {
   FRONTEND_URL: 'https://app.example.com',
   UPLOADS_PUBLIC_URL: 'https://api.example.com/uploads',
   MERCADO_PAGO_ACCESS_TOKEN: 'mp-access-token',
-  MERCADO_PAGO_WEBHOOK_SECRET: 'mp-webhook-secret',
-  WHATSAPP_WEBHOOK_VERIFY_TOKEN: 'wa-verify-token',
-  WHATSAPP_APP_SECRET: 'wa-app-secret'
+  MERCADO_PAGO_WEBHOOK_SECRET: 'mp-webhook-secret'
 };
 
 test('production API runtime config requires critical deployment secrets', () => {
@@ -37,9 +35,7 @@ test('production API runtime config requires critical deployment secrets', () =>
     'MERCADO_PAGO_WEBHOOK_SECRET',
     'ENCRYPTION_KEY or ENCRYPTION_SECRET',
     'FRONTEND_URL',
-    'UPLOADS_PUBLIC_URL',
-    'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
-    'WHATSAPP_APP_SECRET'
+    'UPLOADS_PUBLIC_URL'
   ]);
   assert.throws(
     () => assertProductionRuntimeConfig({ NODE_ENV: 'production' }),
@@ -61,7 +57,7 @@ test('production runtime config accepts either encryption key or encryption secr
   }), []);
 });
 
-test('production worker runtime config requires WhatsApp sender credentials', () => {
+test('production worker runtime config can start while WhatsApp credentials are pending', () => {
   const missing = getMissingProductionRuntimeConfig({
     NODE_ENV: 'production',
     PROCESS_QUEUES: 'true',
@@ -75,10 +71,7 @@ test('production worker runtime config requires WhatsApp sender credentials', ()
     MERCADO_PAGO_WEBHOOK_SECRET: 'mp-webhook-secret'
   });
 
-  assert.deepEqual(missing, [
-    'WHATSAPP_PHONE_NUMBER_ID',
-    'WHATSAPP_ACCESS_TOKEN'
-  ]);
+  assert.deepEqual(missing, []);
 });
 
 test('non-production runtime config does not require production secrets', () => {

@@ -27,20 +27,10 @@ export const getMissingProductionRuntimeConfig = (env: NodeJS.ProcessEnv = proce
   if (!env.ENCRYPTION_KEY && !env.ENCRYPTION_SECRET) missing.push('ENCRYPTION_KEY or ENCRYPTION_SECRET');
 
   const isWorker = env.PROCESS_QUEUES === 'true';
-  if (isWorker) {
-    const workerRequired = [
-      'WHATSAPP_PHONE_NUMBER_ID',
-      'WHATSAPP_ACCESS_TOKEN'
-    ];
-    for (const key of workerRequired) {
-      if (!env[key]) missing.push(key);
-    }
-  } else {
+  if (!isWorker) {
     const apiRequired = [
       'FRONTEND_URL',
-      'UPLOADS_PUBLIC_URL',
-      'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
-      'WHATSAPP_APP_SECRET'
+      'UPLOADS_PUBLIC_URL'
     ];
     for (const key of apiRequired) {
       if (!env[key]) missing.push(key);
