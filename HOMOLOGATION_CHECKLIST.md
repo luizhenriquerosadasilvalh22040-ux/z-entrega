@@ -68,8 +68,11 @@ https://api-homologacao.seudominio.com/api/payments/oauth/callback
 - Configurar webhook:
 
 ```text
-https://api-homologacao.seudominio.com/api/payments/webhook/mercadopago?secret=VALOR_DE_MERCADO_PAGO_WEBHOOK_SECRET
+https://api-homologacao.seudominio.com/api/payments/webhook/mercadopago
 ```
+
+- Configurar assinatura oficial do webhook no Mercado Pago com o valor de
+  `MERCADO_PAGO_WEBHOOK_SECRET`.
 
 - Preencher no backend:
   - `MERCADO_PAGO_ACCESS_TOKEN`

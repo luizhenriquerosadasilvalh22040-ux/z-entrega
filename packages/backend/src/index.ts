@@ -45,6 +45,17 @@ const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()).filter(Boolean)
   : [];
 
+const isAllowedCorsOrigin = (origin: string): boolean => {
+  const isAllowedCustomDomain = allowedOrigins.includes(origin);
+  if (process.env.NODE_ENV === 'production') {
+    return isAllowedCustomDomain;
+  }
+
+  const isLocalhost = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
+  const isVercelPreview = origin.endsWith('.vercel.app');
+  return isLocalhost || isVercelPreview || isAllowedCustomDomain;
+};
+
 const socketCorsOrigin = process.env.NODE_ENV === 'production' && allowedOrigins.length > 0
   ? allowedOrigins
   : '*';
@@ -80,12 +91,8 @@ app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    
-    const isLocalhost = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
-    const isVercelDomain = origin.endsWith('.vercel.app');
-    const isAllowedCustomDomain = allowedOrigins.includes(origin);
 
-    if (isLocalhost || isVercelDomain || isAllowedCustomDomain) {
+    if (isAllowedCorsOrigin(origin)) {
       return callback(null, true);
     }
     

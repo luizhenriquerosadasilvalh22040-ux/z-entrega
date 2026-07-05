@@ -10,8 +10,43 @@ export const getMissingProductionRuntimeConfig = (env: NodeJS.ProcessEnv = proce
   if (env.NODE_ENV !== 'production') return [];
 
   const missing: string[] = [];
-  if (!env.JWT_SECRET) missing.push('JWT_SECRET');
+  const required = [
+    'DATABASE_URL',
+    'REDIS_URL',
+    'JWT_SECRET',
+    'DELIVERY_RESPONSE_SECRET',
+    'API_PUBLIC_URL',
+    'MERCADO_PAGO_ACCESS_TOKEN',
+    'MERCADO_PAGO_WEBHOOK_SECRET'
+  ];
+
+  for (const key of required) {
+    if (!env[key]) missing.push(key);
+  }
+
   if (!env.ENCRYPTION_KEY && !env.ENCRYPTION_SECRET) missing.push('ENCRYPTION_KEY or ENCRYPTION_SECRET');
+
+  const isWorker = env.PROCESS_QUEUES === 'true';
+  if (isWorker) {
+    const workerRequired = [
+      'WHATSAPP_PHONE_NUMBER_ID',
+      'WHATSAPP_ACCESS_TOKEN'
+    ];
+    for (const key of workerRequired) {
+      if (!env[key]) missing.push(key);
+    }
+  } else {
+    const apiRequired = [
+      'FRONTEND_URL',
+      'UPLOADS_PUBLIC_URL',
+      'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
+      'WHATSAPP_APP_SECRET'
+    ];
+    for (const key of apiRequired) {
+      if (!env[key]) missing.push(key);
+    }
+  }
+
   return missing;
 };
 

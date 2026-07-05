@@ -49,6 +49,7 @@ Variáveis obrigatórias:
 - `PLATFORM_COMMISSION_RATE=0`
 - `DELIVERER_PAY_PER_DELIVERY=0`
 - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+- `WHATSAPP_APP_SECRET`
 
 ### Worker
 
@@ -96,8 +97,13 @@ VITE_MERCADO_PAGO_PUBLIC_KEY=APP_USR...
 Configure o Mercado Pago com:
 
 ```text
-https://api.seudominio.com/api/payments/webhook/mercadopago?secret=VALOR_DE_MERCADO_PAGO_WEBHOOK_SECRET
+https://api.seudominio.com/api/payments/webhook/mercadopago
 ```
+
+Configure a assinatura oficial do webhook no painel do Mercado Pago usando o
+mesmo valor de `MERCADO_PAGO_WEBHOOK_SECRET`. O backend valida `x-signature` e
+`x-request-id`; para testes controlados tambem aceita o segredo em
+`x-webhook-secret` ou `x-mercadopago-webhook-secret`.
 
 Configure o OAuth do Mercado Pago com:
 

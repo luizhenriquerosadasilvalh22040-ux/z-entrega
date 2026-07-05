@@ -21,6 +21,7 @@ Preencher na hospedagem do backend:
 - `WHATSAPP_PHONE_NUMBER_ID`: ID do número no WhatsApp Cloud API.
 - `WHATSAPP_ACCESS_TOKEN`: token da Meta.
 - `WHATSAPP_WEBHOOK_VERIFY_TOKEN`: texto secreto para validar webhook do WhatsApp.
+- `WHATSAPP_APP_SECRET`: segredo do app Meta para validar assinatura do webhook.
 - `UPLOADS_PUBLIC_URL`: URL pública dos uploads, por exemplo `https://api.seudominio.com/uploads`.
 
 Valores já definidos para o MVP:
@@ -75,7 +76,8 @@ Mercado Pago:
 
 - Criar app OAuth.
 - Configurar redirect URI: `https://api.seudominio.com/api/payments/oauth/callback`.
-- Configurar webhook: `https://api.seudominio.com/api/payments/webhook/mercadopago?secret=VALOR_DE_MERCADO_PAGO_WEBHOOK_SECRET`.
+- Configurar webhook: `https://api.seudominio.com/api/payments/webhook/mercadopago`.
+- Configurar assinatura oficial do webhook com o valor de `MERCADO_PAGO_WEBHOOK_SECRET`.
 - Cada lojista precisa conectar a própria conta Mercado Pago pelo painel para o split automático funcionar.
 
 WhatsApp Cloud API:
