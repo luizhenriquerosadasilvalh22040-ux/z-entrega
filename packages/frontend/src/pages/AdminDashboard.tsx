@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Input, Toast, Modal } from '../components/ui';
 import { 
-  DollarSign, Users, Store, Bike, Plus, Trash2, Check, X, 
+  DollarSign, Store, Bike, Plus, Trash2, Check, X,
   Settings, UserPlus, ShieldCheck, TrendingUp, AlertCircle, ClipboardList,
   RefreshCw, Eye, MessageSquare, Image, AlertTriangle, Clock, Send
 } from 'lucide-react';
@@ -134,7 +134,7 @@ interface IOperationalIssues {
 }
 
 export const AdminDashboard: React.FC = () => {
-  const { user, role, isAuthenticated } = useAuthStore();
+  const { role, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
 
   const [stats, setStats] = useState<IStats | null>(null);

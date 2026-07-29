@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
-import { Button, Card, Badge, Toast } from '../components/ui';
-import { Search, ShoppingCart, MapPin, Store, Clock, Award, Star, Pizza, Pill, ShoppingBag, Moon, IceCream, Utensils } from 'lucide-react';
+import { Button, Card, Toast } from '../components/ui';
+import { Search, MapPin, Store, Star, Pizza, Pill, ShoppingBag, Moon, IceCream, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { HeroCarousel, type HeroBanner } from '../components/HeroCarousel';
 
@@ -22,7 +21,6 @@ interface IMerchant {
 
 
 export const Home: React.FC = () => {
-  const { isAuthenticated, role } = useAuthStore();
   const navigate = useNavigate();
   
   const [merchants, setMerchants] = useState<IMerchant[]>([]);
@@ -49,7 +47,7 @@ export const Home: React.FC = () => {
         if (bannersRes?.data?.status === 'success') {
           setBanners(bannersRes.data.data.banners);
         }
-      } catch (err) {
+      } catch {
         setToast({ message: 'Erro ao carregar dados da Home', type: 'error' });
       } finally {
         setLoading(false);
@@ -76,17 +74,14 @@ export const Home: React.FC = () => {
     const [closeH, closeM] = closeTime.split(':').map(Number);
 
     const openMinutes = openH * 60 + openM;
-    let closeMinutes = closeH * 60 + closeM;
+    const closeMinutes = closeH * 60 + closeM;
 
     // Se passa da meia-noite
     if (closeMinutes < openMinutes) {
       if (currentMinutes >= openMinutes || currentMinutes < closeMinutes) {
-        let diff = 0;
-        if (currentMinutes >= openMinutes) {
-          diff = (24 * 60 - currentMinutes) + closeMinutes;
-        } else {
-          diff = closeMinutes - currentMinutes;
-        }
+        const diff = currentMinutes >= openMinutes
+          ? (24 * 60 - currentMinutes) + closeMinutes
+          : closeMinutes - currentMinutes;
         if (diff <= 30) {
           return { label: 'Fechando em breve', color: 'amber' };
         }
@@ -110,18 +105,15 @@ export const Home: React.FC = () => {
     const matchesSearch = merchant.name.toLowerCase().includes(search.toLowerCase()) || 
                           merchant.address.city.toLowerCase().includes(search.toLowerCase());
     
-    let matchesCategory = false;
-    if (!selectedCategory) {
-      matchesCategory = true;
-    } else if (selectedCategory === 'Madrugada') {
-      matchesCategory = isMadrugadaStore(merchant.operatingHours.open, merchant.operatingHours.close);
-    } else if (selectedCategory === 'Hambúrguer' || selectedCategory === 'Pizza') {
-      matchesCategory = merchant.category === 'Comida';
-    } else if (selectedCategory === 'Sorvete') {
-      matchesCategory = merchant.category === 'Comida' || merchant.category === 'Geral';
-    } else {
-      matchesCategory = merchant.category === selectedCategory;
-    }
+    const matchesCategory = !selectedCategory
+      || (selectedCategory === 'Madrugada'
+        && isMadrugadaStore(merchant.operatingHours.open, merchant.operatingHours.close))
+      || ((selectedCategory === 'Hambúrguer' || selectedCategory === 'Pizza')
+        && merchant.category === 'Comida')
+      || (selectedCategory === 'Sorvete'
+        && (merchant.category === 'Comida' || merchant.category === 'Geral'))
+      || (!['Madrugada', 'Hambúrguer', 'Pizza', 'Sorvete'].includes(selectedCategory)
+        && merchant.category === selectedCategory);
 
     return matchesSearch && matchesCategory;
   });

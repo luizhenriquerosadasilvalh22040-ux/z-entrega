@@ -12,24 +12,19 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, role, isAuthenticated, logout } = useAuthStore();
   const { cart, merchantId } = useCartStore();
   const navigate = useNavigate();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    return savedTheme === 'dark'
+      || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
-  // Inicializa tema
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
-      document.body.classList.add('dark');
-      setIsDarkMode(true);
-    } else {
-      document.body.classList.remove('dark');
-      setIsDarkMode(false);
-    }
-  }, []);
+    document.body.classList.toggle('dark', isDarkMode);
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   // Monitora status da rede
   useEffect(() => {
@@ -46,15 +41,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, []);
 
   const toggleDarkMode = () => {
-    if (isDarkMode) {
-      document.body.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDarkMode(false);
-    } else {
-      document.body.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDarkMode(true);
-    }
+    setIsDarkMode((current) => !current);
   };
 
   const handleLogout = async () => {
@@ -65,7 +52,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-night transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-night-dark transition-colors duration-300">
       {/* Offline banner */}
       {isOffline && (
         <div className="bg-red-600 dark:bg-red-950 text-white text-xs md:text-sm py-2.5 px-4 text-center flex items-center justify-center gap-3 transition-all duration-300 relative z-50 flex-wrap border-b border-red-700/50 dark:border-red-900/50 flex-shrink-0">
@@ -137,7 +124,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <button 
               onClick={toggleDarkMode}
               className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-              aria-label="Toggle theme"
+              aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
             >
               {isDarkMode ? <Sun size={20} className="text-yellow-500" /> : <Moon size={20} />}
             </button>
@@ -227,6 +214,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <button 
               onClick={toggleDarkMode}
               className="p-2 rounded-xl text-slate-500 dark:text-slate-400"
+              aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
             >
               {isDarkMode ? <Sun size={18} className="text-yellow-500" /> : <Moon size={18} />}
             </button>

@@ -8,5 +8,3 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
-// Trigger Vercel Build
-// Force Vercel Build Tue Jun 23 17:14:25 -03 2026

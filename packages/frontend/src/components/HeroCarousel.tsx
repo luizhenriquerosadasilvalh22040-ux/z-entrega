@@ -81,7 +81,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
     if (isPaused || slides.length < 2) return;
     const timer = window.setInterval(() => {
       setActiveIndex((current) => (current + 1) % slides.length);
-    }, 5500);
+    }, 4000);
 
     return () => window.clearInterval(timer);
   }, [isPaused, slides.length]);

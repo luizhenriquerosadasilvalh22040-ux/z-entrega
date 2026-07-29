@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useId } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 
 // ==========================================
@@ -64,7 +64,7 @@ export const Input: React.FC<InputProps> = ({
       <input
         className={`w-full px-4 py-3 bg-white dark:bg-slate-900 border ${
           error ? 'border-red-500 focus:ring-red-500/20' : 'border-slate-200 dark:border-slate-800 focus:ring-orange-500/20'
-        } rounded-xl shadow-sm text-sm focus:border-energy focus:ring-4 transition-all duration-200 outline-none dark:text-white`}
+        } rounded-xl shadow-sm text-sm focus:border-energy focus:ring-4 transition-all duration-200 outline-none dark:text-white ${className}`}
         {...props}
       />
       {error && <span className="block text-xs text-red-500 mt-1">{error}</span>}
@@ -140,7 +140,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children
 }) => {
-  const modalStateKey = useRef(`modal-${Math.random().toString(36).substring(2, 9)}`);
+  const modalStateKey = useId();
 
   useEffect(() => {
     if (isOpen) {
@@ -156,10 +156,10 @@ export const Modal: React.FC<ModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    window.history.pushState({ modalKey: modalStateKey.current }, '');
+    window.history.pushState({ modalKey: modalStateKey }, '');
 
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state?.modalKey !== modalStateKey.current) {
+      if (event.state?.modalKey !== modalStateKey) {
         onClose();
       }
     };
@@ -168,11 +168,11 @@ export const Modal: React.FC<ModalProps> = ({
 
     return () => {
       window.removeEventListener('popstate', handlePopState);
-      if (window.history.state?.modalKey === modalStateKey.current) {
+      if (window.history.state?.modalKey === modalStateKey) {
         window.history.back();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, modalStateKey, onClose]);
 
   if (!isOpen) return null;
 

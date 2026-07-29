@@ -8,7 +8,8 @@
   }
 
   body.dark {
-    @apply bg-night text-slate-100;
+    @apply bg-night-dark text-slate-100;
+    color-scheme: dark;
   }
 }
 

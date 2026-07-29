@@ -124,14 +124,6 @@ export const Store: React.FC = () => {
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
-  // States for Credit Card
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
-  const [cardCpf, setCardCpf] = useState('');
-  const [cardInstallments, setCardInstallments] = useState(1);
-
   // Timer PIX Effect
   useEffect(() => {
     if (!isPixModalOpen || pixTimeLeft <= 0) return;
@@ -295,25 +287,6 @@ export const Store: React.FC = () => {
       setAddressNickname('');
     }
   }, [selectedAddressId, user]);
-
-  const isSameOptions = (
-    opt1?: { groupName: string; optionName: string; price: number }[],
-    opt2?: { groupName: string; optionName: string; price: number }[]
-  ): boolean => {
-    const list1 = opt1 || [];
-    const list2 = opt2 || [];
-    if (list1.length !== list2.length) return false;
-    
-    const sorted1 = [...list1].sort((a, b) => a.optionName.localeCompare(b.optionName));
-    const sorted2 = [...list2].sort((a, b) => a.optionName.localeCompare(b.optionName));
-    
-    for (let i = 0; i < sorted1.length; i++) {
-      if (sorted1[i].groupName !== sorted2[i].groupName || sorted1[i].optionName !== sorted2[i].optionName) {
-        return false;
-      }
-    }
-    return true;
-  };
 
   const handleSelectOption = (group: IOptionGroup, option: IOption) => {
     setSelectedOptions((prev) => {
