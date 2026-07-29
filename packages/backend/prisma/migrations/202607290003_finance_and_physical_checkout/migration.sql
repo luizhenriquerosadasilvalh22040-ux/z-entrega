@@ -1,0 +1,4 @@
+ALTER TABLE "orders"
+  ADD COLUMN IF NOT EXISTS "cash_change_for" DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS "requires_card_machine" BOOLEAN NOT NULL DEFAULT false;
+

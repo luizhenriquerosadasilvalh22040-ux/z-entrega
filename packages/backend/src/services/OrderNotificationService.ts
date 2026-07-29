@@ -4,6 +4,7 @@ import { WhatsAppTemplateService } from './WhatsAppTemplateService';
 import { WhatsAppTemplateType } from '@prisma/client';
 import { buildMerchantOrderMessage } from '../domain/merchantOrderMessage';
 import { shouldNotifyCustomerForOrderStatus } from '../domain/notificationPolicy';
+import { buildCourierPaymentInstruction } from '../domain/physicalPayment';
 
 type QueueContext = {
   tx: any;
@@ -50,7 +51,7 @@ export class OrderNotificationService {
     }, tx);
     notificationIds.push(customerNotificationId);
 
-    if (order.paymentMethod === 'Dinheiro' || params.paymentConfirmedNow) {
+    if (['Dinheiro', 'Cartão na entrega'].includes(order.paymentMethod) || params.paymentConfirmedNow) {
       const merchantNotificationId = await NotificationService.queueNotification({
         userId: order.merchant.id,
         userType: 'Merchant',
@@ -152,10 +153,11 @@ export class OrderNotificationService {
               pickupAddress: pickupAddr,
               deliveryAddress: delivAddr,
               deliveryFee: Number(order.deliveryFee).toFixed(2),
+              paymentInstruction: buildCourierPaymentInstruction(order),
               acceptUrl: params.buildDeliveryResponseUrl(order.id, deliverer.id, 'accept'),
               rejectUrl: params.buildDeliveryResponseUrl(order.id, deliverer.id, 'reject')
             },
-            'Olá, *{{delivererName}}*! Novo pedido pronto para coleta no estabelecimento *{{merchantName}}* (Endereço: {{pickupAddress}}). Destino: {{deliveryAddress}}. Taxa de entrega: R$ {{deliveryFee}}.\n\nResponda a esta entrega:\nAceitar: {{acceptUrl}}\nRecusar: {{rejectUrl}}',
+            'Olá, *{{delivererName}}*! Novo pedido pronto para coleta no estabelecimento *{{merchantName}}* (Endereço: {{pickupAddress}}). Destino: {{deliveryAddress}}. Taxa de entrega: R$ {{deliveryFee}}.\n\n*Pagamento:* {{paymentInstruction}}\n\nResponda a esta entrega:\nAceitar: {{acceptUrl}}\nRecusar: {{rejectUrl}}',
             tx
           )
         }, tx);

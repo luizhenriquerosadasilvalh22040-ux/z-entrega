@@ -36,36 +36,60 @@ export class AdminController {
         });
       }
 
-      // 2. Contagens básicas
-      const totalOrders = await prisma.order.count();
-      const totalMerchants = await prisma.merchant.count();
-      const verifiedMerchants = await prisma.merchant.count({ where: { isVerified: true } });
-      const totalDeliverers = await prisma.deliverer.count();
-      const activeDeliverersToday = await prisma.deliverer.count({ where: { isActiveToday: true } });
-
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
-      const dailyOrdersVolume = await prisma.order.count({
-        where: {
-          createdAt: {
-            gte: startOfToday,
-            lte: endOfToday
+
+      const [
+        totalOrders,
+        totalMerchants,
+        verifiedMerchants,
+        activeMerchants,
+        onlineConnectedMerchants,
+        totalDeliverers,
+        activeDeliverersToday,
+        dailyOrdersVolume,
+        activeOrdersCount,
+        completedOrders,
+        deliveredTotals,
+        todayDeliveredTotals
+      ] = await Promise.all([
+        prisma.order.count(),
+        prisma.merchant.count(),
+        prisma.merchant.count({ where: { isVerified: true } }),
+        prisma.merchant.count({
+          where: { isActive: true, isVerified: true, subscriptionStatus: 'ACTIVE' }
+        }),
+        prisma.merchant.count({ where: { mpUserId: { not: null } } }),
+        prisma.deliverer.count(),
+        prisma.deliverer.count({ where: { isActiveToday: true } }),
+        prisma.order.count({ where: { createdAt: { gte: startOfToday, lte: endOfToday } } }),
+        prisma.order.count({
+          where: {
+            status: {
+              in: ['PENDING', 'PAID', 'ACCEPTED', 'PREPARING', 'READY', 'DISPATCHED', 'IN_TRANSIT']
+            }
           }
-        }
-      });
+        }),
+        prisma.order.count({ where: { status: 'DELIVERED' } }),
+        prisma.order.aggregate({
+          where: { status: 'DELIVERED' },
+          _sum: { total: true, commission: true, deliveryFee: true }
+        }),
+        prisma.order.aggregate({
+          where: {
+            status: 'DELIVERED',
+            createdAt: { gte: startOfToday, lte: endOfToday }
+          },
+          _sum: { total: true }
+        })
+      ]);
 
-      // 3. Receita total e do dia
-      const orders = await prisma.order.findMany({
-        where: {
-          status: 'DELIVERED'
-        }
-      });
-      const totalSales = orders.reduce((sum, order) => sum + Number(order.total), 0);
-
-      // Pedidos entregues
-      const completedOrders = await prisma.order.count({ where: { status: 'DELIVERED' } });
+      const totalSales = Number(deliveredTotals._sum.total || 0);
+      const platformRevenue =
+        Number(deliveredTotals._sum.commission || 0) + Number(deliveredTotals._sum.deliveryFee || 0);
+      const todaySales = Number(todayDeliveredTotals._sum.total || 0);
 
       res.status(200).json({
         status: 'success',
@@ -75,9 +99,14 @@ export class AdminController {
             completedOrders,
             totalMerchants,
             verifiedMerchants,
+            activeMerchants,
+            onlineConnectedMerchants,
             totalDeliverers,
             activeDeliverersToday,
             totalSales,
+            platformRevenue,
+            todaySales,
+            activeOrdersCount,
             dailyOrdersVolume,
             defaultSubscriptionPrice: Number(config.defaultSubscriptionPrice)
           }

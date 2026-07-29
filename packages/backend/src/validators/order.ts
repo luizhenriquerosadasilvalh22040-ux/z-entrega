@@ -19,7 +19,8 @@ export const createOrderSchema = Joi.object({
       notes: Joi.string().trim().max(300).allow('').optional()
     })
   ).min(1).max(50).required(),
-  paymentMethod: Joi.string().valid('PIX', 'Cartão', 'Dinheiro').required(),
+  paymentMethod: Joi.string().valid('PIX', 'Cartão', 'Dinheiro', 'Cartão na entrega').required(),
+  cashChangeFor: Joi.number().precision(2).min(0).max(99999).optional(),
   addressDetails: Joi.object({
     complement: Joi.string().trim().max(120).allow('').optional(),
     referencePoint: Joi.string().trim().max(160).allow('').optional()

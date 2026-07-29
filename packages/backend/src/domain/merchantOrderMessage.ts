@@ -28,6 +28,8 @@ export type MerchantOrderMessageInput = {
   deliveryReference?: string | null;
   paymentMethod: string;
   paymentStatus?: string | null;
+  cashChangeFor?: number | null;
+  requiresCardMachine?: boolean | null;
   subtotal: number;
   deliveryFee: number;
   total: number;
@@ -55,6 +57,11 @@ export const buildMerchantOrderMessage = (order: MerchantOrderMessageInput): str
     order.deliveryComplement?.trim() ? `Compl.: ${order.deliveryComplement.trim()}` : '',
     order.deliveryReference?.trim() ? `Ref.: ${order.deliveryReference.trim()}` : ''
   ].filter(Boolean).join(' • ');
+  const physicalPaymentNote = order.requiresCardMachine
+    ? 'Separar a maquininha para o motoboy.'
+    : order.paymentMethod === 'Dinheiro' && order.cashChangeFor
+      ? `Separar troco para R$ ${money(order.cashChangeFor)}.`
+      : null;
 
   const messageLines: Array<string | null> = [
     `🛎️ *NOVO PEDIDO #${shortOrderId(order.id)}*`,
@@ -70,6 +77,7 @@ export const buildMerchantOrderMessage = (order: MerchantOrderMessageInput): str
     '',
     '*PAGAMENTO*',
     `${order.paymentMethod}${order.paymentStatus === 'RECEIVED' ? ' • Confirmado' : ' • Na entrega'}`,
+    physicalPaymentNote,
     `Subtotal: R$ ${money(order.subtotal)}`,
     `Entrega: R$ ${money(order.deliveryFee)}`,
     `*Total: R$ ${money(order.total)}*`,

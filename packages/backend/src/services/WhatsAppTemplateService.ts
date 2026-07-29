@@ -65,8 +65,8 @@ export const WHATSAPP_TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
     key: WhatsAppTemplateType.DELIVERY_REQUEST,
     label: 'Solicitação para motoboy',
     description: 'Mensagem enviada ao motoboy com coleta, entrega e links de resposta.',
-    variables: ['delivererName', 'orderId', 'merchantName', 'pickupAddress', 'deliveryAddress', 'deliveryFee', 'acceptUrl', 'rejectUrl'],
-    defaultBody: 'Olá, *{{delivererName}}*! Pedido nº *{{orderId}}* pronto para coleta em *{{merchantName}}*.\n\nColeta: {{pickupAddress}}\nEntrega: {{deliveryAddress}}\nTaxa: R$ {{deliveryFee}}\n\nAceitar: {{acceptUrl}}\nRecusar: {{rejectUrl}}'
+    variables: ['delivererName', 'orderId', 'merchantName', 'pickupAddress', 'deliveryAddress', 'deliveryFee', 'paymentInstruction', 'acceptUrl', 'rejectUrl'],
+    defaultBody: 'Olá, *{{delivererName}}*! Pedido nº *{{orderId}}* pronto para coleta em *{{merchantName}}*.\n\nColeta: {{pickupAddress}}\nEntrega: {{deliveryAddress}}\nTaxa: R$ {{deliveryFee}}\n\n*Pagamento:* {{paymentInstruction}}\n\nAceitar: {{acceptUrl}}\nRecusar: {{rejectUrl}}'
   },
   {
     key: WhatsAppTemplateType.DELIVERY_ACCEPTED,

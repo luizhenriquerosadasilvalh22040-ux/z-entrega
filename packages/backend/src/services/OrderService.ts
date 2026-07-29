@@ -28,6 +28,7 @@ import {
   assertCanTransitionOrder,
   type OrderActorRole
 } from '../domain/orderStateMachine';
+import { buildCourierPaymentInstruction } from '../domain/physicalPayment';
 
 const getApiPublicUrl = (): string => {
   return (process.env.API_PUBLIC_URL || process.env.BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -95,6 +96,10 @@ export const formatOrder = (order: any) => {
       changedAt: h.changedAt
     })) || [],
     paymentMethod: order.paymentMethod,
+    cashChangeFor: order.cashChangeFor === null || order.cashChangeFor === undefined
+      ? undefined
+      : Number(order.cashChangeFor),
+    requiresCardMachine: Boolean(order.requiresCardMachine),
     deliveryAddress: {
       street: order.deliveryStreet,
       number: order.deliveryNumber,
@@ -165,7 +170,8 @@ export class OrderService {
     couponCode?: string,
     cardToken?: string,
     paymentMethodId?: string,
-    installments?: number
+    installments?: number,
+    cashChangeFor?: number
   ): Promise<any> {
     const order = await OrderCreationService.createOrder({
       customerId,
@@ -176,7 +182,8 @@ export class OrderService {
       couponCode,
       cardToken,
       paymentMethodId,
-      installments
+      installments,
+      cashChangeFor
     });
 
     return formatOrder(order);
@@ -484,8 +491,8 @@ export class OrderService {
         pixRevenue = amount;
       } else if (group.paymentMethod === 'Dinheiro') {
         cashRevenue = amount;
-      } else if (group.paymentMethod === 'Cartão') {
-        cardRevenue = amount;
+      } else if (['Cartão', 'Cartão na entrega'].includes(group.paymentMethod)) {
+        cardRevenue += amount;
       }
     });
 
@@ -787,6 +794,7 @@ export class OrderService {
               pickupAddress: pickupAddr,
               deliveryAddress: delivAddr,
               deliveryFee: Number(updatedOrder.deliveryFee).toFixed(2),
+              paymentInstruction: buildCourierPaymentInstruction(updatedOrder),
               acceptUrl: buildDeliveryResponseUrl(orderId, newDriver.id, 'accept'),
               rejectUrl: buildDeliveryResponseUrl(orderId, newDriver.id, 'reject')
             },

@@ -8,8 +8,23 @@ import { SubscriptionService } from '../services/SubscriptionService';
 import { AuditLogService } from '../services/AuditLogService';
 import { canManageMerchantResource } from '../domain/accessControl';
 import { assertMercadoPagoWebhookAuthorized } from '../domain/webhookSecurity';
+import { verifyMercadoPagoOAuthState } from '../domain/mercadoPagoOAuthState';
+import { MerchantWalletService } from '../services/MerchantWalletService';
 
 export class PaymentController {
+  public static async wallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user || req.user.role !== 'merchant') {
+        res.status(403).json({ status: 'fail', message: 'Apenas lojistas podem acessar a carteira.' });
+        return;
+      }
+      const wallet = await MerchantWalletService.getSnapshot(req.user.userId);
+      res.status(200).json({ status: 'success', data: { wallet } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * Redireciona o lojista para a página de autorização do Mercado Pago
    */
@@ -38,7 +53,7 @@ export class PaymentController {
    */
   public static async oauthCallback(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { code, state: merchantId, error } = req.query;
+      const { code, state, error } = req.query;
 
       if (error) {
         logger.error(`❌ [Mercado Pago OAuth] Erro no consentimento do lojista: ${error}`);
@@ -53,12 +68,13 @@ export class PaymentController {
         return;
       }
 
-      if (!code || !merchantId) {
+      if (!code || !state) {
         res.status(400).send('Parâmetros obrigatórios ausentes.');
         return;
       }
 
-      await MercadoPagoService.handleOAuthCallback(code as string, merchantId as string);
+      const { merchantId } = verifyMercadoPagoOAuthState(String(state));
+      await MercadoPagoService.handleOAuthCallback(String(code), merchantId);
 
       res.status(200).send(`
         <html>

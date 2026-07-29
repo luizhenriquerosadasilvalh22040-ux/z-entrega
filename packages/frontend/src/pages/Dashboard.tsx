@@ -16,6 +16,7 @@ import { API_URL, SOCKET_URL } from '../config/publicEnv';
 import { ProductsPanel } from '../features/merchant/components/ProductsPanel';
 import { WhatsAppWorkspace } from '../features/merchant/components/WhatsAppWorkspace';
 import { uploadMerchantImage } from '../features/merchant/services/imageUploadService';
+import { MerchantWallet } from '../features/merchant/components/MerchantWallet';
 
 interface IOrder {
   _id: string;
@@ -1185,7 +1186,7 @@ export const Dashboard: React.FC = () => {
                     Formas de Pagamento Aceitas
                   </label>
                   <div className="flex flex-wrap gap-4 pt-1">
-                    {['PIX', 'Dinheiro', 'Cartão'].map((method) => {
+                    {['PIX', 'Dinheiro', 'Cartão', 'Cartão na entrega'].map((method) => {
                       const isChecked = settingsForm.paymentMethods.includes(method);
                       return (
                         <label key={method} className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">
@@ -1262,6 +1263,7 @@ export const Dashboard: React.FC = () => {
           {/* TAB: FINANCE */}
           {activeTab === 'finance' && (
             <div className="space-y-6">
+              <MerchantWallet merchantId={user?._id} />
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white">

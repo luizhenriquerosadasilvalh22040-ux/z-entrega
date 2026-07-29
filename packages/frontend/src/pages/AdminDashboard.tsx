@@ -14,9 +14,14 @@ interface IStats {
   completedOrders: number;
   totalMerchants: number;
   verifiedMerchants: number;
+  activeMerchants: number;
+  onlineConnectedMerchants: number;
   totalDeliverers: number;
   activeDeliverersToday: number;
   totalSales: number;
+  platformRevenue: number;
+  todaySales: number;
+  activeOrdersCount: number;
   dailyOrdersVolume: number;
   defaultSubscriptionPrice: number;
 }
@@ -724,10 +729,10 @@ export const AdminDashboard: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-          Painel de <span className="text-energy">Administração Geral</span>
+          <span className="text-energy">Torre de Controle</span> da Plataforma
         </h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Acompanhe o volume de entregas, configure mensalidades e escale a equipe de entrega do Traz Pra Cá.
+          Visão macro de vendas, receita, lojas ativas e operação em tempo real.
         </p>
       </div>
 
@@ -738,7 +743,7 @@ export const AdminDashboard: React.FC = () => {
             <TrendingUp size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Volume de Vendas</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">GMV Entregue</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
               R$ {stats?.totalSales.toFixed(2)}
             </p>
@@ -750,9 +755,9 @@ export const AdminDashboard: React.FC = () => {
             <ClipboardList size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Pedidos de Hoje</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Receita Plataforma</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
-              {stats?.dailyOrdersVolume} <span className="text-xs font-normal text-slate-400">pedidos</span>
+              R$ {(stats?.platformRevenue || 0).toFixed(2)}
             </p>
           </div>
         </Card>
@@ -762,9 +767,9 @@ export const AdminDashboard: React.FC = () => {
             <Bike size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Entregadores Escalados</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Pedidos Hoje</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
-              {stats?.activeDeliverersToday} <span className="text-xs font-normal text-slate-400">/ {stats?.totalDeliverers}</span>
+              {stats?.dailyOrdersVolume} <span className="text-xs font-normal text-slate-400">· R$ {(stats?.todaySales || 0).toFixed(2)}</span>
             </p>
           </div>
         </Card>
@@ -776,7 +781,7 @@ export const AdminDashboard: React.FC = () => {
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Lojistas Ativos</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
-              {stats?.verifiedMerchants} <span className="text-xs font-normal text-slate-400">/ {stats?.totalMerchants}</span>
+              {stats?.activeMerchants} <span className="text-xs font-normal text-slate-400">· {stats?.onlineConnectedMerchants} online</span>
             </p>
           </div>
         </Card>
@@ -786,9 +791,9 @@ export const AdminDashboard: React.FC = () => {
             <DollarSign size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Mensalidade Padrão</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold uppercase">Operação Ativa</p>
             <p className="text-2xl font-black text-slate-800 dark:text-white mt-0.5">
-              R$ {stats?.defaultSubscriptionPrice.toFixed(2)}
+              {stats?.activeOrdersCount} <span className="text-xs font-normal text-slate-400">pedidos · {stats?.activeDeliverersToday} motoboys</span>
             </p>
           </div>
         </Card>

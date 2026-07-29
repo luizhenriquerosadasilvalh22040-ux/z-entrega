@@ -11,6 +11,7 @@ import { MercadoPagoService } from './MercadoPagoService';
 import { NotificationService } from './NotificationService';
 import { OrderNotificationService } from './OrderNotificationService';
 import { AuditLogService } from './AuditLogService';
+import { PHYSICAL_CARD_PAYMENT_METHOD } from '../domain/physicalPayment';
 
 type CreateOrderItemInput = {
   productId: string;
@@ -29,6 +30,7 @@ export type CreateOrderInput = {
   cardToken?: string;
   paymentMethodId?: string;
   installments?: number;
+  cashChangeFor?: number;
 };
 
 const ORDER_INCLUDE = {
@@ -235,6 +237,13 @@ export class OrderCreationService {
       const commission = Number((subtotalWithDiscount * businessConfig.platformCommissionRate).toFixed(2));
       const deliveryFee = businessConfig.platformDeliveryFee;
       const total = subtotalWithDiscount + deliveryFee;
+      if (
+        input.paymentMethod === 'Dinheiro'
+        && input.cashChangeFor !== undefined
+        && input.cashChangeFor < total
+      ) {
+        throw new Error('O valor informado para troco deve ser maior ou igual ao total do pedido.');
+      }
 
       const createdOrder = await tx.order.create({
         data: {
@@ -246,6 +255,8 @@ export class OrderCreationService {
           total,
           status: ORDER_STATUS.PENDING,
           paymentMethod: input.paymentMethod,
+          cashChangeFor: input.paymentMethod === 'Dinheiro' ? input.cashChangeFor : null,
+          requiresCardMachine: input.paymentMethod === PHYSICAL_CARD_PAYMENT_METHOD,
           deliveryStreet: finalAddress.street,
           deliveryNumber: finalAddress.number,
           deliveryNeighborhood: finalAddress.neighborhood,

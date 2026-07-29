@@ -21,6 +21,7 @@ import { DeliveryDispatchService } from './DeliveryDispatchService';
 import { NotificationService } from './NotificationService';
 import { PaymentRefundService } from './PaymentRefundService';
 import { WhatsAppTemplateService } from './WhatsAppTemplateService';
+import { buildCourierPaymentInstruction } from '../domain/physicalPayment';
 
 type OperationalSeverity = 'critical' | 'high' | 'medium';
 
@@ -381,6 +382,7 @@ export class AdminOperationalService {
             pickupAddress,
             deliveryAddress,
             deliveryFee: Number(order.deliveryFee).toFixed(2),
+            paymentInstruction: buildCourierPaymentInstruction(order),
             acceptUrl: buildDeliveryResponseUrl(orderId, deliverer.id, 'accept'),
             rejectUrl: buildDeliveryResponseUrl(orderId, deliverer.id, 'reject')
           },

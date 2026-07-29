@@ -9,6 +9,7 @@ const router = Router();
 // Rotas de OAuth do Mercado Pago para lojistas
 router.get('/oauth/connect', authenticate, PaymentController.oauthConnect);
 router.get('/oauth/callback', PaymentController.oauthCallback);
+router.get('/wallet', authenticate, PaymentController.wallet);
 
 // Rotas de Assinatura do Lojista
 router.post('/subscription', authenticate, validate(subscribeSchema), PaymentController.subscribe);

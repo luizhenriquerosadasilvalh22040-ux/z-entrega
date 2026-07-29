@@ -2,6 +2,8 @@ import logger from '../config/logger';
 import { decrypt, encrypt } from '../config/encryption';
 import prisma from '../config/prisma';
 import { assertNonProduction, isProduction } from '../config/runtime';
+import { createMercadoPagoOAuthState } from '../domain/mercadoPagoOAuthState';
+import { assertValidMarketplaceSplit } from '../domain/marketplaceSplit';
 
 export interface IMercadoPagoPixResponse {
   mpPaymentId: string;
@@ -105,7 +107,8 @@ export class MercadoPagoService {
   public static getOAuthUrl(merchantId: string): string {
     const clientId = process.env.MERCADO_PAGO_CLIENT_ID || 'mock_client_id';
     const redirectUri = process.env.MERCADO_PAGO_REDIRECT_URI || 'http://localhost:3000/api/payments/oauth/callback';
-    return `https://auth.mercadopago.com.br/authorization?client_id=${clientId}&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}&state=${merchantId}`;
+    const state = createMercadoPagoOAuthState(merchantId);
+    return `https://auth.mercadopago.com.br/authorization?client_id=${clientId}&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
   }
 
   /**
@@ -247,6 +250,7 @@ export class MercadoPagoService {
     merchantId: string,
     applicationFee: number // Taxa fixa da plataforma retida no split.
   ): Promise<IMercadoPagoPixResponse> {
+    assertValidMarketplaceSplit(value, applicationFee);
     logger.info(`💳 [Mercado Pago] Iniciando checkout Pix para o pedido #${orderId}. Valor: R$ ${value}, Split Plataforma: R$ ${applicationFee}`);
 
     // Busca as credenciais do lojista
@@ -351,6 +355,7 @@ export class MercadoPagoService {
     merchantId: string,
     applicationFee: number
   ): Promise<any> {
+    assertValidMarketplaceSplit(value, applicationFee);
     logger.info(`💳 [Mercado Pago] Iniciando checkout Cartão para o pedido #${orderId}. Valor: R$ ${value}, Split: R$ ${applicationFee}`);
 
     const merchant = await prisma.merchant.findUnique({

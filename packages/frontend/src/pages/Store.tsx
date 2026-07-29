@@ -13,6 +13,7 @@ interface IMerchant {
   name: string;
   category: 'Comida' | 'Farmácia' | 'Construção' | 'Geral';
   phone: string;
+  paymentMethods?: string[];
   operatingHours: { open: string; close: string };
   address: { street: string; number: string; neighborhood: string; city: string };
   logoImage?: string;
@@ -100,6 +101,7 @@ export const Store: React.FC = () => {
   
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('PIX');
+  const [cashChangeFor, setCashChangeFor] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -230,7 +232,13 @@ export const Store: React.FC = () => {
         // Busca dados do lojista
         const merchantRes = await apiClient.get(`/merchants/${id}`);
         if (merchantRes.data?.status === 'success') {
-          setMerchant(merchantRes.data.data.merchant);
+          const loadedMerchant = merchantRes.data.data.merchant as IMerchant;
+          setMerchant(loadedMerchant);
+          const availableMethods = ['PIX', 'Dinheiro', 'Cartão', 'Cartão na entrega']
+            .filter((method) => !loadedMerchant.paymentMethods?.length || loadedMerchant.paymentMethods.includes(method));
+          if (availableMethods.length > 0) {
+            setPaymentMethod(availableMethods[0]);
+          }
         }
 
         // Busca produtos daquele lojista
@@ -431,11 +439,18 @@ export const Store: React.FC = () => {
       badge: 'Na entrega'
     },
     Cartão: {
-      title: 'Cartão',
+      title: 'Cartão online',
       description: 'Pagamento online processado com Mercado Pago.',
       badge: 'Online'
+    },
+    'Cartão na entrega': {
+      title: 'Cartão na entrega',
+      description: 'O motoboy levará a maquininha para cobrar no endereço.',
+      badge: 'Maquininha'
     }
   };
+  const checkoutPaymentMethods = ['PIX', 'Dinheiro', 'Cartão', 'Cartão na entrega']
+    .filter((method) => !merchant?.paymentMethods?.length || merchant.paymentMethods.includes(method));
 
   const getCheckoutErrorMessage = (err: any): string => {
     const message = err.response?.data?.message || err.message || '';
@@ -517,7 +532,8 @@ export const Store: React.FC = () => {
         couponCode: appliedCoupon?.code || undefined,
         cardToken: paymentMethod === 'Cartão' ? mpToken : undefined,
         paymentMethodId: paymentMethod === 'Cartão' ? mpPaymentMethodId : undefined,
-        installments: paymentMethod === 'Cartão' ? Number(mpInstallments) : undefined
+        installments: paymentMethod === 'Cartão' ? Number(mpInstallments) : undefined,
+        cashChangeFor: paymentMethod === 'Dinheiro' && cashChangeFor ? Number(cashChangeFor) : undefined
       });
 
       if (res.data?.status === 'success') {
@@ -1104,7 +1120,7 @@ export const Store: React.FC = () => {
               <CreditCard size={14} className="text-energy" /> Forma de Pagamento
             </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {['PIX', 'Dinheiro', 'Cartão'].map((method) => (
+              {checkoutPaymentMethods.map((method) => (
                 <button
                   key={method}
                   type="button"
@@ -1139,11 +1155,31 @@ export const Store: React.FC = () => {
           )}
 
           {paymentMethod === 'Dinheiro' && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-850/40">
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-850/40">
               <div className="flex items-start gap-2">
                 <StoreIcon size={16} className="mt-0.5 text-energy" />
                 <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
                   A loja recebe o pedido pendente e decide aceitar ou rejeitar. Tenha o valor combinado disponível na entrega.
+                </p>
+              </div>
+              <Input
+                label="Precisa de troco? Troco para quanto?"
+                type="number"
+                min={grandTotal}
+                step="0.01"
+                placeholder={`Ex.: ${Math.ceil(grandTotal / 10) * 10}`}
+                value={cashChangeFor}
+                onChange={(event) => setCashChangeFor(event.target.value)}
+              />
+            </div>
+          )}
+
+          {paymentMethod === 'Cartão na entrega' && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-950/10">
+              <div className="flex items-start gap-2">
+                <CreditCard size={16} className="mt-0.5 text-blue-600" />
+                <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+                  A loja separará a maquininha e o motoboy receberá esse aviso junto aos dados da retirada.
                 </p>
               </div>
             </div>

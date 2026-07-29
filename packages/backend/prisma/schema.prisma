@@ -288,6 +288,8 @@ model Order {
   total              Float
   status             OrderStatus          @default(PENDING)
   paymentMethod      String               @map("payment_method")
+  cashChangeFor      Float?               @map("cash_change_for")
+  requiresCardMachine Boolean             @default(false) @map("requires_card_machine")
   deliveryStreet     String               @map("delivery_street")
   deliveryNumber     String               @map("delivery_number")
   deliveryNeighborhood String             @map("delivery_neighborhood")
