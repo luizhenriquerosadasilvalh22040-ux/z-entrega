@@ -4,6 +4,7 @@ import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Toast } from '../components/ui';
 import { Search, ShoppingCart, MapPin, Store, Clock, Award, Star, Pizza, Pill, ShoppingBag, Moon, IceCream, Utensils } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { HeroCarousel, type HeroBanner } from '../components/HeroCarousel';
 
 interface IMerchant {
   _id: string;
@@ -25,6 +26,7 @@ export const Home: React.FC = () => {
   const navigate = useNavigate();
   
   const [merchants, setMerchants] = useState<IMerchant[]>([]);
+  const [banners, setBanners] = useState<HeroBanner[]>([]);
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -37,12 +39,16 @@ export const Home: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const merchantsRes = await apiClient.get('/merchants');
+        const [merchantsRes, bannersRes] = await Promise.all([
+          apiClient.get('/merchants'),
+          apiClient.get('/banners').catch(() => null)
+        ]);
         if (merchantsRes.data?.status === 'success') {
           setMerchants(merchantsRes.data.data.merchants);
         }
-
-
+        if (bannersRes?.data?.status === 'success') {
+          setBanners(bannersRes.data.data.banners);
+        }
       } catch (err) {
         setToast({ message: 'Erro ao carregar dados da Home', type: 'error' });
       } finally {
@@ -123,24 +129,7 @@ export const Home: React.FC = () => {
   return (
     <div className="space-y-10">
       
-      {/* Banner Principal — Animado 4K */}
-      <div className="banner-home-container relative w-full rounded-3xl overflow-hidden shadow-xl border border-slate-100/60 dark:border-slate-800/60 banner-home-shimmer banner-home-vignette group">
-        {/* Container com aspect ratio responsivo */}
-        <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
-          <img
-            src="/banner_home_4k.jpg"
-            srcSet="/banner_home.jpg 1024w, /banner_home_4k.jpg 3840w"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 90vw, 1200px"
-            alt="Traz Pra Cá Delivery - O que você precisa, a gente traz"
-            className="banner-home-image absolute inset-0 w-full h-full object-cover object-center"
-            loading="eager"
-            decoding="async"
-            fetchPriority="high"
-          />
-          {/* Gradiente inferior para transição suave com o conteúdo */}
-          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-50 dark:from-night to-transparent z-[3] pointer-events-none" />
-        </div>
-      </div>
+      <HeroCarousel banners={banners} />
 
       {/* Search Input */}
       <div className="max-w-md mx-auto flex items-center relative">
@@ -183,7 +172,7 @@ export const Home: React.FC = () => {
       </div>
 
       {/* Stores Section */}
-      <div>
+      <div id="estabelecimentos" className="scroll-mt-24">
         <h2 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
           <Store size={22} className="text-energy animate-float" /> Estabelecimentos
         </h2>

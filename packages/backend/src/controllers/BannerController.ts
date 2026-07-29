@@ -8,6 +8,7 @@ const formatBanner = (b: any) => {
     id: b.id,
     imageUrl: b.imageUrl,
     title: b.title,
+    linkUrl: b.linkUrl,
     isActive: b.isActive,
     createdAt: b.createdAt
   };
@@ -43,7 +44,7 @@ export class BannerController {
         return;
       }
 
-      const { imageUrl, title } = req.body;
+      const { imageUrl, title, linkUrl } = req.body;
       if (!imageUrl) {
         res.status(400).json({ status: 'fail', message: 'URL da imagem do banner é obrigatória' });
         return;
@@ -53,6 +54,7 @@ export class BannerController {
         data: {
           imageUrl,
           title: title || null,
+          linkUrl: linkUrl || null,
           isActive: true
         }
       });

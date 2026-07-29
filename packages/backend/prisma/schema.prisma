@@ -448,6 +448,7 @@ model Banner {
   id        String   @id @default(uuid()) @db.Uuid
   imageUrl  String   @map("image_url")
   title     String?
+  linkUrl   String?  @map("link_url")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
 
