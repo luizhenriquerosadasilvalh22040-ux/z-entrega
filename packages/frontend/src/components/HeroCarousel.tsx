@@ -33,7 +33,7 @@ const fallbackSlides: Slide[] = [
   },
   {
     _id: 'open-now',
-    imageUrl: '',
+    imageUrl: '/banner-open-now-v1.png',
     title: 'Bateu a fome? Tem loja aberta agora',
     description: 'Encontre opções disponíveis sem perder tempo.',
     eyebrow: 'Escolha rápida',
