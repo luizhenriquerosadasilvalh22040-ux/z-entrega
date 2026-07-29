@@ -110,6 +110,12 @@ export class ProductService {
     }>
   ): Promise<any | null> {
     const product = await prisma.$transaction(async (tx) => {
+      const existingProduct = await tx.product.findFirst({
+        where: { id, merchantId },
+        select: { id: true }
+      });
+      if (!existingProduct) return null;
+
       const updateData: any = {};
       if (data.name !== undefined) updateData.name = data.name;
       if (data.description !== undefined) updateData.description = data.description;
@@ -150,7 +156,7 @@ export class ProductService {
       }
 
       return await tx.product.update({
-        where: { id, merchantId },
+        where: { id },
         data: updateData,
         include: {
           optionGroups: {
@@ -224,6 +230,12 @@ export class ProductService {
     merchantId: string,
     data: { stockQuantity?: number; isPaused?: boolean }
   ): Promise<any | null> {
+    const existingProduct = await prisma.product.findFirst({
+      where: { id, merchantId },
+      select: { id: true }
+    });
+    if (!existingProduct) return null;
+
     const updateData: any = {};
     if (data.stockQuantity !== undefined) {
       updateData.stockQuantity = data.stockQuantity;
@@ -233,7 +245,7 @@ export class ProductService {
     }
 
     const product = await prisma.product.update({
-      where: { id, merchantId },
+      where: { id },
       data: updateData,
       include: {
         optionGroups: {

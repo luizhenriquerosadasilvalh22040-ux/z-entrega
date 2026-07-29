@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
-import { Button, Card, Badge, Toast, Input, Modal } from '../components/ui';
+import { Button, Card, Badge, Toast, Input } from '../components/ui';
 import { 
   LayoutDashboard, ShoppingCart, DollarSign, BarChart3, Clock, 
-  AlertCircle, Menu as MenuIcon, Settings, Plus, Edit2, Trash2, Save,
+  AlertCircle, Menu as MenuIcon, Settings, Save,
   Volume2, VolumeX, Printer, Percent, CreditCard, TrendingUp, FileText, Bike, Sparkles,
   CheckCircle2, ChefHat, Search, Truck, XCircle, MessageSquare, Copy
 } from 'lucide-react';
@@ -13,6 +13,9 @@ import { useNavigate } from 'react-router-dom';
 import { SubscriptionForm } from '../components/SubscriptionForm';
 import { getPaymentStatusUi } from '../utils/orderStatusUi';
 import { API_URL, SOCKET_URL } from '../config/publicEnv';
+import { ProductsPanel } from '../features/merchant/components/ProductsPanel';
+import { WhatsAppWorkspace } from '../features/merchant/components/WhatsAppWorkspace';
+import { uploadMerchantImage } from '../features/merchant/services/imageUploadService';
 
 interface IOrder {
   _id: string;
@@ -48,24 +51,11 @@ interface IStats {
   totalCommission?: number;
 }
 
-interface IProduct {
-  _id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  isAvailable: boolean;
-  stockQuantity: number;
-  isPaused: boolean;
-  image?: string;
-  optionGroups?: any[];
-}
-
 export const Dashboard: React.FC = () => {
   const { isAuthenticated, role, user, checkAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'settings' | 'finance' | 'subscription'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'whatsapp' | 'settings' | 'finance' | 'subscription'>('orders');
   const [stats, setStats] = useState<IStats>({ 
     totalOrders: 0, 
     pendingOrders: 0, 
@@ -77,23 +67,8 @@ export const Dashboard: React.FC = () => {
     totalCommission: 0
   });
   const [orders, setOrders] = useState<IOrder[]>([]);
-  const [products, setProducts] = useState<IProduct[]>([]);
-  
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  // Estados dos Formulários de Produtos
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<IProduct | null>(null);
-  const [productForm, setProductForm] = useState({
-    name: '',
-    description: '',
-    price: '',
-    category: '',
-    image: '',
-    stockQuantity: 99,
-    optionGroups: [] as any[]
-  });
 
   // Estados das Configurações do Lojista
   const [settingsForm, setSettingsForm] = useState({
@@ -113,7 +88,6 @@ export const Dashboard: React.FC = () => {
     }
   });
 
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('alarmMuted') === 'true');
@@ -202,44 +176,15 @@ export const Dashboard: React.FC = () => {
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploadingImage(true);
-      const { compressImage } = await import('../utils/imageCompressor');
-      const compressedBase64 = await compressImage(file, 800, 800, 0.7);
-
-      const response = await apiClient.post('/upload', { image: compressedBase64 });
-      if (response.data?.status === 'success') {
-        const fileUrl = response.data.data.url;
-        setProductForm(prev => ({ ...prev, image: fileUrl }));
-        setToast({ message: 'Imagem carregada com sucesso!', type: 'success' });
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Erro ao fazer upload da imagem';
-      setToast({ message: msg, type: 'error' });
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       setUploadingLogo(true);
-      const { compressImage } = await import('../utils/imageCompressor');
-      const compressedBase64 = await compressImage(file, 800, 800, 0.7);
-
-      const response = await apiClient.post('/upload', { image: compressedBase64 });
-      if (response.data?.status === 'success') {
-        const fileUrl = response.data.data.url;
-        setSettingsForm(prev => ({ ...prev, logoImage: fileUrl }));
-        setToast({ message: 'Logo carregada com sucesso!', type: 'success' });
-      }
+      const fileUrl = await uploadMerchantImage(file, 'logo');
+      setSettingsForm(prev => ({ ...prev, logoImage: fileUrl }));
+      setToast({ message: 'Logo carregada com sucesso!', type: 'success' });
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erro ao fazer upload da logo';
       setToast({ message: msg, type: 'error' });
@@ -254,15 +199,9 @@ export const Dashboard: React.FC = () => {
 
     try {
       setUploadingCover(true);
-      const { compressImage } = await import('../utils/imageCompressor');
-      const compressedBase64 = await compressImage(file, 1200, 600, 0.7);
-
-      const response = await apiClient.post('/upload', { image: compressedBase64 });
-      if (response.data?.status === 'success') {
-        const fileUrl = response.data.data.url;
-        setSettingsForm(prev => ({ ...prev, coverImage: fileUrl }));
-        setToast({ message: 'Imagem de capa carregada com sucesso!', type: 'success' });
-      }
+      const fileUrl = await uploadMerchantImage(file, 'cover');
+      setSettingsForm(prev => ({ ...prev, coverImage: fileUrl }));
+      setToast({ message: 'Imagem de capa carregada com sucesso!', type: 'success' });
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erro ao fazer upload da capa';
       setToast({ message: msg, type: 'error' });
@@ -286,13 +225,6 @@ export const Dashboard: React.FC = () => {
         setOrders(ordersResponse.data.data.orders);
       }
 
-      // 3. Busca produtos do lojista
-      if (user?._id) {
-        const productsResponse = await apiClient.get(`/products/merchant/${user._id}`);
-        if (productsResponse.data?.status === 'success') {
-          setProducts(productsResponse.data.data.products);
-        }
-      }
     } catch (err) {
       setToast({ message: 'Erro ao buscar dados do painel', type: 'error' });
     } finally {
@@ -356,84 +288,6 @@ export const Dashboard: React.FC = () => {
       }
     } catch (err: any) {
       setToast({ message: getStatusUpdateErrorMessage(err, newStatus), type: 'error' });
-    }
-  };
-
-  // Cadastro/Edição de Produto
-  const handleProductSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!productForm.name || !productForm.price || !productForm.category) {
-      setToast({ message: 'Preencha todos os campos obrigatórios', type: 'error' });
-      return;
-    }
-
-    const payload = {
-      name: productForm.name,
-      description: productForm.description,
-      price: Number(productForm.price),
-      category: productForm.category,
-      image: productForm.image || undefined,
-      stockQuantity: Number(productForm.stockQuantity),
-      optionGroups: productForm.optionGroups || []
-    };
-
-    try {
-      if (editingProduct) {
-        // Atualiza produto
-        const res = await apiClient.put(`/products/${editingProduct._id}`, payload);
-        if (res.data?.status === 'success') {
-          // Atualiza também estoque e pausa
-          await apiClient.put(`/products/${editingProduct._id}/stock`, {
-            stockQuantity: Number(productForm.stockQuantity),
-            isPaused: editingProduct.isPaused
-          });
-
-          setToast({ message: 'Produto atualizado com sucesso!', type: 'success' });
-        }
-      } else {
-        // Cria produto
-        const res = await apiClient.post('/products', payload);
-        if (res.data?.status === 'success') {
-          setToast({ message: 'Produto cadastrado com sucesso!', type: 'success' });
-        }
-      }
-      setIsProductModalOpen(false);
-      setEditingProduct(null);
-      fetchDashboardData();
-    } catch (err) {
-      setToast({ message: 'Erro ao salvar o produto', type: 'error' });
-    }
-  };
-
-  // Pausar/Retomar venda de produto
-  const handleToggleProductPause = async (product: IProduct) => {
-    try {
-      const res = await apiClient.put(`/products/${product._id}/stock`, {
-        isPaused: !product.isPaused
-      });
-      if (res.data?.status === 'success') {
-        setProducts(prev => prev.map(p => p._id === product._id ? { ...p, isPaused: !product.isPaused } : p));
-        setToast({ 
-          message: !product.isPaused ? 'Venda de produto suspensa hoje!' : 'Venda do produto liberada!', 
-          type: 'success' 
-        });
-      }
-    } catch (err) {
-      setToast({ message: 'Erro ao alterar status de suspensão do produto', type: 'error' });
-    }
-  };
-
-  // Excluir Produto
-  const handleDeleteProduct = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este produto?')) return;
-    try {
-      const res = await apiClient.delete(`/products/${id}`);
-      if (res.data?.status === 'success') {
-        setToast({ message: 'Produto removido com sucesso!', type: 'success' });
-        fetchDashboardData();
-      }
-    } catch (err) {
-      setToast({ message: 'Erro ao excluir o produto', type: 'error' });
     }
   };
 
@@ -772,7 +626,7 @@ export const Dashboard: React.FC = () => {
             {user?.isForceClosed ? 'Loja Fechada (Clique para Abrir)' : 'Loja Aberta (Clique para Fechar)'}
           </button>
 
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/20">
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200/20 bg-slate-100 p-1 dark:bg-slate-800/80">
             <button
               onClick={() => setActiveTab('orders')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
@@ -792,6 +646,16 @@ export const Dashboard: React.FC = () => {
               }`}
             >
               <MenuIcon size={14} /> Cardápio
+            </button>
+            <button
+              onClick={() => setActiveTab('whatsapp')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'whatsapp'
+                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-455'
+              }`}
+            >
+              <MessageSquare size={14} /> WhatsApp
             </button>
             <button
               onClick={() => setActiveTab('finance')}
@@ -1148,102 +1012,12 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: CARDÁPIO (MENU) */}
-          {activeTab === 'menu' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">
-                  Gerenciamento de Produtos ({products.length})
-                </h3>
-                <Button size="sm" onClick={() => {
-                  setEditingProduct(null);
-                  setProductForm({ name: '', description: '', price: '', category: '', image: '', stockQuantity: 99, optionGroups: [] });
-                  setIsProductModalOpen(true);
-                }} className="flex items-center gap-1.5">
-                  <Plus size={16} /> Novo Produto
-                </Button>
-              </div>
+          {activeTab === 'menu' && user?._id && (
+            <ProductsPanel merchantId={user._id} onToast={setToast} />
+          )}
 
-              {products.length === 0 ? (
-                <Card className="py-12 text-center text-slate-400">
-                  Nenhum produto cadastrado no seu cardápio ainda. Comece criando um!
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {products.map((product) => (
-                    <Card key={product._id} className={`flex flex-col justify-between relative ${product.isPaused || product.stockQuantity <= 0 ? 'border-red-500/20 dark:border-red-500/10' : ''}`}>
-                      <div className="space-y-4">
-                        <div className="flex gap-4">
-                          {product.image && (
-                            <img 
-                              src={product.image} 
-                              alt={product.name} 
-                              className="w-16 h-16 rounded-xl object-cover border bg-slate-50"
-                            />
-                          )}
-                          <div className="space-y-1 flex-1">
-                            <div className="flex items-start justify-between">
-                              <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">{product.name}</h4>
-                              <Badge variant={product.isPaused || product.stockQuantity <= 0 ? 'red' : 'gray'}>
-                                {product.isPaused ? 'Pausado' : product.stockQuantity <= 0 ? 'Sem Estoque' : 'Ativo'}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-slate-400 line-clamp-2">{product.description}</p>
-                            <p className="text-sm font-black text-energy">R$ {product.price.toFixed(2)}</p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50 dark:bg-slate-850 p-2.5 rounded-xl text-xs space-y-1 text-slate-500">
-                          <div>Categoria: <span className="font-bold text-slate-700 dark:text-slate-350">{product.category}</span></div>
-                          <div>Qtd. Estoque: <span className="font-bold text-slate-700 dark:text-slate-350">{product.stockQuantity} unidades</span></div>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 border-t border-slate-100 dark:border-slate-800 pt-3 mt-4">
-                        <button
-                          onClick={() => handleToggleProductPause(product)}
-                          className={`flex-1 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                            product.isPaused
-                              ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-500 hover:bg-emerald-500/10'
-                              : 'border-red-500/20 bg-red-500/5 text-red-500 hover:bg-red-500/10'
-                          }`}
-                        >
-                          {product.isPaused ? 'Liberar Venda' : 'Pausar Venda'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingProduct(product);
-                            setProductForm({
-                              name: product.name,
-                              description: product.description,
-                              price: product.price.toString(),
-                              category: product.category,
-                              image: product.image || '',
-                              stockQuantity: product.stockQuantity,
-                              optionGroups: product.optionGroups || []
-                            });
-                            setIsProductModalOpen(true);
-                          }}
-                          className="p-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-350 transition-colors"
-                          title="Editar produto"
-                          aria-label="Editar produto"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProduct(product._id)}
-                          className="p-2 border border-red-500/20 hover:bg-red-500/5 rounded-xl text-red-500 transition-colors"
-                          title="Excluir produto"
-                          aria-label="Excluir produto"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
+          {activeTab === 'whatsapp' && (
+            <WhatsAppWorkspace orders={orders} />
           )}
 
           {/* TAB: SETTINGS */}
@@ -1676,262 +1450,6 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* Modal: Add/Edit Product */}
-      <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} title={editingProduct ? 'Editar Produto' : 'Adicionar Novo Produto'}>
-        <form onSubmit={handleProductSubmit} className="space-y-4">
-          <Input
-            label="Nome do Produto *"
-            placeholder="Ex: Coca-cola 2L"
-            value={productForm.name}
-            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-            required
-          />
-
-          <Input
-            label="Descrição *"
-            placeholder="Ex: Refrigerante gelado sabor original"
-            value={productForm.description}
-            onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-            required
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Preço (R$) *"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={productForm.price}
-              onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-              required
-            />
-
-            <Input
-              label="Categoria *"
-              placeholder="Ex: Bebidas, Lanches, Sobremesas"
-              value={productForm.category}
-              onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Qtd. Inicial de Estoque"
-              type="number"
-              value={productForm.stockQuantity}
-              onChange={(e) => setProductForm({ ...productForm, stockQuantity: Number(e.target.value) })}
-              required
-            />
-
-            <div className="flex flex-col mb-4 w-full">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                Foto do Produto
-              </label>
-              <div className="flex gap-4 items-center">
-                {productForm.image ? (
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 flex-shrink-0">
-                    <img src={productForm.image} alt="Preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setProductForm({ ...productForm, image: '' })}
-                      className="absolute inset-0 bg-black/55 text-white flex items-center justify-center text-xs opacity-0 hover:opacity-100 transition-opacity"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 text-[10px] text-center flex-shrink-0">
-                    Sem Foto
-                  </div>
-                )}
-                
-                <label className={`cursor-pointer px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all whitespace-nowrap ${
-                  uploadingImage
-                    ? 'opacity-50 pointer-events-none'
-                    : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                }`}>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    disabled={uploadingImage}
-                  />
-                  {uploadingImage ? 'Carregando...' : 'Enviar Imagem'}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Grupos de Opcionais Builder */}
-          <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
-            <div className="flex justify-between items-center">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Grupos de Opcionais
-              </h4>
-              <button
-                type="button"
-                onClick={() => {
-                  const groups = [...(productForm.optionGroups || [])];
-                  groups.push({ name: '', required: false, minSelect: 0, maxSelect: 1, options: [] });
-                  setProductForm({ ...productForm, optionGroups: groups });
-                }}
-                className="px-3 py-1 bg-energy/10 text-energy text-xs font-bold rounded-lg hover:bg-energy/20 transition-colors"
-              >
-                + Adicionar Grupo
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {productForm.optionGroups?.map((group, gIdx) => (
-                <div key={gIdx} className="p-4 bg-slate-50 dark:bg-slate-850/40 rounded-2xl border border-slate-150 dark:border-slate-800 space-y-3 relative">
-                  {/* Botão Remover Grupo */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const groups = productForm.optionGroups.filter((_, idx) => idx !== gIdx);
-                      setProductForm({ ...productForm, optionGroups: groups });
-                    }}
-                    className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xs font-bold"
-                  >
-                    Excluir Grupo
-                  </button>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Input
-                      label="Nome do Grupo *"
-                      placeholder="Ex: Escolha o ponto da carne"
-                      value={group.name}
-                      onChange={(e) => {
-                        const groups = [...productForm.optionGroups];
-                        groups[gIdx].name = e.target.value;
-                        setProductForm({ ...productForm, optionGroups: groups });
-                      }}
-                      required
-                    />
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col justify-end pb-2">
-                        <label className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={group.required}
-                            onChange={(e) => {
-                              const groups = [...productForm.optionGroups];
-                              groups[gIdx].required = e.target.checked;
-                              setProductForm({ ...productForm, optionGroups: groups });
-                            }}
-                            className="rounded text-energy focus:ring-energy border-slate-300 dark:border-slate-850"
-                          />
-                          Obrigatório
-                        </label>
-                      </div>
-                      <Input
-                        label="Min"
-                        type="number"
-                        min="0"
-                        value={group.minSelect}
-                        onChange={(e) => {
-                          const groups = [...productForm.optionGroups];
-                          groups[gIdx].minSelect = Number(e.target.value);
-                          setProductForm({ ...productForm, optionGroups: groups });
-                        }}
-                        required
-                      />
-                      <Input
-                        label="Max"
-                        type="number"
-                        min="1"
-                        value={group.maxSelect}
-                        onChange={(e) => {
-                          const groups = [...productForm.optionGroups];
-                          groups[gIdx].maxSelect = Number(e.target.value);
-                          setProductForm({ ...productForm, optionGroups: groups });
-                        }}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Options List */}
-                  <div className="space-y-2 pl-4 border-l border-slate-200 dark:border-slate-800">
-                    <div className="flex justify-between items-center">
-                      <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Opções deste Grupo
-                      </h5>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const groups = [...productForm.optionGroups];
-                          groups[gIdx].options.push({ name: '', price: 0 });
-                          setProductForm({ ...productForm, optionGroups: groups });
-                        }}
-                        className="text-[10px] text-energy font-black hover:underline"
-                      >
-                        + Adicionar Opção
-                      </button>
-                    </div>
-
-                    {group.options.map((opt: any, oIdx: number) => (
-                      <div key={oIdx} className="flex gap-2 items-end">
-                        <div className="flex-1">
-                          <input
-                            type="text"
-                            placeholder="Ex: Bem passado"
-                            value={opt.name}
-                            onChange={(e) => {
-                              const groups = [...productForm.optionGroups];
-                              groups[gIdx].options[oIdx].name = e.target.value;
-                              setProductForm({ ...productForm, optionGroups: groups });
-                            }}
-                            required
-                            className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-energy focus:ring-1 focus:ring-energy text-slate-800 dark:text-white"
-                          />
-                        </div>
-                        <div className="w-24">
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="R$ 0.00"
-                            value={opt.price === 0 ? '' : opt.price}
-                            onChange={(e) => {
-                              const groups = [...productForm.optionGroups];
-                              groups[gIdx].options[oIdx].price = Number(e.target.value);
-                              setProductForm({ ...productForm, optionGroups: groups });
-                            }}
-                            className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-energy focus:ring-1 focus:ring-energy text-slate-800 dark:text-white"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const groups = [...productForm.optionGroups];
-                            groups[gIdx].options = groups[gIdx].options.filter((_: any, idx: number) => idx !== oIdx);
-                            setProductForm({ ...productForm, optionGroups: groups });
-                          }}
-                          className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-4 flex gap-3">
-            <Button type="button" variant="outline" fullWidth onClick={() => setIsProductModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" fullWidth>
-              {editingProduct ? 'Salvar Alterações' : 'Cadastrar Produto'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Toast Alert */}
       {toast && (
