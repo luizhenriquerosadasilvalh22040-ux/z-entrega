@@ -1,6 +1,7 @@
 import prisma from '../config/prisma';
 import { IOperatingHours } from '../types';
 import { MERCHANT_SUBSCRIPTION_STATUS, getMerchantPublicationBlockReason, isMerchantPubliclyVisible } from '../domain/subscriptionStatus';
+import { encryptDeterministic } from '../config/encryption';
 
 export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; count: number }) => {
   if (!merchant) return null;
@@ -16,6 +17,7 @@ export const formatMerchant = (merchant: any, reviewsStats?: { avg: number; coun
     logoImage: merchant.logoImage || undefined,
     coverImage: merchant.coverImage || undefined,
     isVerified: merchant.isVerified,
+    isEmailVerified: merchant.isEmailVerified,
     isActive: merchant.isActive,
     isForceClosed: merchant.isForceClosed,
     subscriptionPrice: merchant.subscriptionPrice !== null ? Number(merchant.subscriptionPrice) : undefined,
@@ -92,6 +94,9 @@ export class MerchantService {
     const where: any = {
       isActive: true,
       isVerified: true,
+      isEmailVerified: true,
+      cnpj: { not: null },
+      city: { not: null },
       subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
     };
     if (filters.category) {
@@ -125,6 +130,9 @@ export class MerchantService {
         id,
         isActive: true,
         isVerified: true,
+        isEmailVerified: true,
+        cnpj: { not: null },
+        city: { not: null },
         subscriptionStatus: MERCHANT_SUBSCRIPTION_STATUS.ACTIVE
       }
     });
@@ -175,6 +183,42 @@ export class MerchantService {
     const merchant = await prisma.merchant.update({
       where: { id },
       data: { paymentMethods }
+    });
+    return formatMerchant(merchant);
+  }
+
+  public static async completeBusinessProfile(
+    id: string,
+    data: {
+      cnpj: string;
+      address: {
+        street: string;
+        number: string;
+        neighborhood: string;
+        city: string;
+        state: string;
+        zipCode: string;
+      };
+    }
+  ): Promise<any> {
+    const cnpj = encryptDeterministic(data.cnpj);
+    const duplicate = await prisma.merchant.findFirst({
+      where: { cnpj, NOT: { id } },
+      select: { id: true }
+    });
+    if (duplicate) throw new Error('CNPJ já cadastrado.');
+
+    const merchant = await prisma.merchant.update({
+      where: { id },
+      data: {
+        cnpj,
+        street: data.address.street,
+        number: data.address.number,
+        neighborhood: data.address.neighborhood,
+        city: data.address.city,
+        state: data.address.state,
+        zipCode: data.address.zipCode
+      }
     });
     return formatMerchant(merchant);
   }

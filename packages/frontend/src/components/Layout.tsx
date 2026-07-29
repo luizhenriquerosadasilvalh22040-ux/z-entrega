@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart, ShoppingCart } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart, ShoppingCart, ChevronDown } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 
@@ -14,6 +14,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // Inicializa tema
@@ -142,17 +143,60 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </button>
 
             {isAuthenticated ? (
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileMenuOpen((open) => !open)}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  aria-expanded={isProfileMenuOpen}
+                  aria-haspopup="menu"
+                >
                   <User size={16} className="text-energy" />
                   <span className="font-semibold max-w-[120px] truncate">{user?.name}</span>
-                </div>
-                <button 
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/5 rounded-xl transition-all"
-                >
-                  <LogOut size={14} /> Sair
+                  <ChevronDown size={14} className={`transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
+                {isProfileMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-[calc(100%+0.6rem)] w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                      <p className="truncate text-sm font-extrabold text-slate-900 dark:text-white">{user?.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">{user?.phone || user?.email || 'Conta autenticada'}</p>
+                    </div>
+                    {role === 'customer' && (
+                      <Link
+                        to="/orders"
+                        role="menuitem"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        <ShoppingBag size={17} className="text-energy" /> Histórico de pedidos
+                      </Link>
+                    )}
+                    {role === 'merchant' && (
+                      <Link
+                        to="/dashboard"
+                        role="menuitem"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        <LayoutDashboard size={17} className="text-energy" /> Painel da loja
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm font-semibold text-red-500 hover:bg-red-50 dark:border-slate-800 dark:hover:bg-red-950/20"
+                    >
+                      <LogOut size={16} /> Sair
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-3">

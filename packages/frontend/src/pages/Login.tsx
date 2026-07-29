@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock, MapPin, MessageSquare, ShieldCheck, ShoppingBag, User } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { requestOtp, verifyOtp, login, error, isAuthenticated, role } = useAuthStore();
+  const { requestOtp, verifyOtp, isAuthenticated, role } = useAuthStore();
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -18,8 +18,6 @@ export const Login: React.FC = () => {
 
 
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp');
   const [step, setStep] = useState<'phone' | 'register' | 'otp'>('phone');
   const [code, setCode] = useState('');
   const [rememberPhone, setRememberPhone] = useState(false);
@@ -150,29 +148,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  // Realiza o login usando telefone e senha
-  const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phone || !password) {
-      setToast({ message: 'Preencha o telefone e a senha', type: 'error' });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await login(phone, password, 'customer');
-      if (rememberPhone) localStorage.setItem('rememberedPhone', phone);
-      else localStorage.removeItem('rememberedPhone');
-      setToast({ message: 'Login realizado com sucesso!', type: 'success' });
-      setTimeout(() => navigate('/'), 1000);
-    } catch (err: any) {
-      const message = err.response?.data?.message || 'Telefone ou senha inválidos';
-      setToast({ message: message, type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 py-8 lg:grid-cols-[1fr_440px] lg:items-center">
       <section className="hidden lg:block">
@@ -228,36 +203,8 @@ export const Login: React.FC = () => {
 
         <div className="p-6">
 
-        {/* Toggle Switch para método de login (apenas no passo inicial) */}
-        {step === 'phone' && (
-          <div className="mb-6 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80">
-            <button
-              type="button"
-              onClick={() => setLoginMethod('otp')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                loginMethod === 'otp'
-                  ? 'bg-white dark:bg-slate-700 text-energy shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              Código WhatsApp
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginMethod('password')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                loginMethod === 'password'
-                  ? 'bg-white dark:bg-slate-700 text-energy shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              Entrar com Senha
-            </button>
-          </div>
-        )}
-
         {/* STEP 1: Phone input (OTP) */}
-        {step === 'phone' && loginMethod === 'otp' && (
+        {step === 'phone' && (
           <form onSubmit={handleRequestOtp} className="space-y-5">
             <div className="space-y-2">
               <Input
@@ -284,46 +231,6 @@ export const Login: React.FC = () => {
             </div>
             <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
               {loading ? 'Enviando...' : 'Receber código'} <ArrowRight size={16} />
-            </Button>
-          </form>
-        )}
-
-        {/* STEP 1: Phone & Password Input */}
-        {step === 'phone' && loginMethod === 'password' && (
-          <form onSubmit={handlePasswordLogin} className="space-y-5">
-            <div className="space-y-2">
-              <Input
-                label="WhatsApp (com DDD)"
-                type="tel"
-                placeholder="Ex: (44) 99999-8888"
-                value={phone}
-                onChange={(e) => setPhone(formatPhone(e.target.value))}
-                required
-                maxLength={15}
-              />
-              <div className="flex items-center gap-2 px-1">
-                <input 
-                  type="checkbox" 
-                  id="rememberPhonePwd" 
-                  checked={rememberPhone} 
-                  onChange={(e) => setRememberPhone(e.target.checked)}
-                  className="w-4 h-4 text-energy bg-white border-slate-300 rounded focus:ring-energy dark:bg-slate-800 dark:border-slate-600 cursor-pointer"
-                />
-                <label htmlFor="rememberPhonePwd" className="text-sm font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
-                  Lembrar telefone
-                </label>
-              </div>
-            </div>
-            <Input
-              label="Senha"
-              type="password"
-              placeholder="Digite sua senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <Button type="submit" fullWidth size="lg" disabled={loading} className="flex items-center justify-center gap-1.5">
-              {loading ? 'Entrando...' : 'Entrar'} <ArrowRight size={16} />
             </Button>
           </form>
         )}
@@ -406,7 +313,7 @@ export const Login: React.FC = () => {
             <div className="space-y-2">
               <Input
                 label="Código de Verificação"
-                placeholder="Digite o código (Ex: 1234)"
+                placeholder="Digite o código de 6 dígitos"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 required
@@ -414,7 +321,7 @@ export const Login: React.FC = () => {
               />
               {isMockOtp && (
                 <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                  ⚠️ <strong>Modo de testes ativado:</strong> Utilize o código de verificação <strong>1234</strong> para prosseguir.
+                  <strong>Modo de testes:</strong> utilize o código <strong>123456</strong>.
                 </div>
               )}
             </div>

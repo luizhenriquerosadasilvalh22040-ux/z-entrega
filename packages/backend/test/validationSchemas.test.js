@@ -2,7 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createCouponSchema } = require('../dist/validators/admin');
-const { customerRegisterSchema } = require('../dist/validators/auth');
+const {
+  customerVerifyOtpSchema,
+  merchantRegisterSchema,
+  merchantVerifyEmailSchema
+} = require('../dist/validators/auth');
 const { createBannerSchema } = require('../dist/validators/banner');
 const { createOrderSchema } = require('../dist/validators/order');
 const { updateProductStockSchema } = require('../dist/validators/product');
@@ -54,26 +58,23 @@ test('upload validation accepts only image data URLs under configured shape', ()
   assert.equal(uploadImageSchema.validate({ image: 'data:image/png;base64,iVBORw0KGgo=' }).error, undefined);
 });
 
-test('customer registration validation rejects weak passwords', () => {
-  const { error } = customerRegisterSchema.validate({
-    name: 'Cliente Teste',
-    email: 'cliente@example.com',
-    password: '123456',
-    cpf: '12345678901',
+test('OTP validation accepts only six numeric digits', () => {
+  assert.ok(customerVerifyOtpSchema.validate({ phone: '5544999999999', code: '1234' }).error);
+  assert.equal(customerVerifyOtpSchema.validate({ phone: '5544999999999', code: '123456' }).error, undefined);
+  assert.ok(merchantVerifyEmailSchema.validate({ email: 'loja@example.com', code: 'abcdef' }).error);
+});
+
+test('merchant quick registration accepts only essential fields', () => {
+  const { error } = merchantRegisterSchema.validate({
+    name: 'Loja Teste',
+    email: 'loja@example.com',
+    password: 'senha-segura',
     phone: '5544999999999',
-    address: {
-      street: 'Rua A',
-      number: '1',
-      neighborhood: 'Centro',
-      city: 'Rondon',
-      state: 'PR',
-      zipCode: '87800000'
-    },
+    category: 'Comida',
     termsAccepted: true,
     privacyAccepted: true
   });
-
-  assert.ok(error);
+  assert.equal(error, undefined);
 });
 
 test('banner validation rejects non-url image sources', () => {

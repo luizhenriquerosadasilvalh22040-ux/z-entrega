@@ -7,11 +7,14 @@ import { formatMerchant } from './MerchantService';
 import { redisClient } from '../config/redis';
 import { authConfig } from '../config/auth';
 import { encryptDeterministic } from '../config/encryption';
-import { IAddress, IOperatingHours } from '../types';
+import { IAddress } from '../types';
 import { NotificationService } from './NotificationService';
 import { normalizePhone } from '../utils/phone';
 import logger from '../config/logger';
 import { isProduction } from '../config/runtime';
+import { WhatsAppService } from './WhatsAppService';
+import { EmailService } from './EmailService';
+import { createNumericOtp, hashOtp, OTP_TTL_SECONDS, verifyOtpHash } from '../domain/otpChallenge';
 
 
 export interface ITokenResponse {
@@ -26,8 +29,21 @@ export interface IUserPayload {
   name: string;
 }
 
+type PendingCustomerRegistration = {
+  name: string;
+  address: IAddress;
+  marketingConsent: boolean;
+};
+
+type CustomerOtpChallenge = {
+  codeHash: string;
+  expiresAt: number;
+  pendingRegistration?: PendingCustomerRegistration;
+};
+
 export class AuthService {
   private static memoryTokens = new Map<string, { payload: IUserPayload; expiresAt: number }>();
+  private static memoryOtpChallenges = new Map<string, CustomerOtpChallenge>();
 
   /**
 
@@ -144,12 +160,8 @@ export class AuthService {
     name: string;
     email: string;
     password: string;
-    cnpj: string;
     phone: string;
     category: 'Comida' | 'Farmácia' | 'Construção' | 'Geral';
-    operatingHours: IOperatingHours;
-    paymentMethods: string[];
-    address: IAddress;
     termsAccepted: boolean;
     privacyAccepted: boolean;
     marketingConsent?: boolean;
@@ -162,47 +174,97 @@ export class AuthService {
       throw new Error('Termos de uso e política de privacidade precisam ser aceitos.');
     }
 
-    const emailExists = await prisma.merchant.findUnique({ where: { email: data.email } });
+    const email = data.email.trim().toLowerCase();
+    const emailExists = await prisma.merchant.findUnique({ where: { email } });
     if (emailExists) {
       throw new Error('Email already registered');
     }
 
-    const encryptedCnpj = encryptDeterministic(data.cnpj);
-    const cnpjExists = await prisma.merchant.findUnique({ where: { cnpj: encryptedCnpj } });
-    if (cnpjExists) {
-      throw new Error('CNPJ already registered');
-    }
-
+    EmailService.assertAvailable();
     const passwordHash = await bcrypt.hash(data.password, 10);
+    const verificationCode = EmailService.isMock()
+      ? (process.env.TESTING_EMAIL_OTP || '123456')
+      : createNumericOtp();
 
     const merchant = await prisma.merchant.create({
       data: {
-        name: data.name,
-        email: data.email,
+        name: data.name.trim(),
+        email,
         passwordHash,
-        cnpj: encryptedCnpj,
         phone: normalizePhone(data.phone),
         category: data.category,
-        openTime: data.operatingHours.open,
-        closeTime: data.operatingHours.close,
-        paymentMethods: data.paymentMethods,
-        street: data.address.street,
-        number: data.address.number,
-        neighborhood: data.address.neighborhood,
-        city: data.address.city,
-        state: data.address.state || 'PR',
-        zipCode: data.address.zipCode,
-        latitude: data.address.coordinates?.lat,
-        longitude: data.address.coordinates?.lng,
+        paymentMethods: [],
         termsAcceptedAt: new Date(),
         privacyAcceptedAt: new Date(),
         marketingConsent: !!data.marketingConsent,
         isVerified: false,
+        isEmailVerified: false,
+        emailVerificationCodeHash: hashOtp('merchant-email', email, verificationCode, authConfig.jwtSecret),
+        emailVerificationExpires: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
         isActive: true,
       }
     });
 
+    await EmailService.sendMerchantVerificationCode(email, merchant.name, verificationCode);
     return formatMerchant(merchant);
+  }
+
+  public static async verifyMerchantEmail(
+    emailInput: string,
+    code: string
+  ): Promise<{ merchant: any } & ITokenResponse> {
+    const email = emailInput.trim().toLowerCase();
+    const merchant = await prisma.merchant.findUnique({ where: { email } });
+    if (
+      !merchant ||
+      !merchant.emailVerificationCodeHash ||
+      !merchant.emailVerificationExpires ||
+      merchant.emailVerificationExpires.getTime() < Date.now() ||
+      !verifyOtpHash(
+        merchant.emailVerificationCodeHash,
+        'merchant-email',
+        email,
+        code,
+        authConfig.jwtSecret
+      )
+    ) {
+      throw new Error('Código de verificação inválido ou expirado.');
+    }
+
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        isEmailVerified: true,
+        emailVerificationCodeHash: null,
+        emailVerificationExpires: null
+      }
+    });
+    const tokens = await this.generateTokens({
+      userId: updated.id,
+      role: 'merchant',
+      email: updated.email,
+      name: updated.name
+    });
+    return { merchant: formatMerchant(updated), ...tokens };
+  }
+
+  public static async resendMerchantEmailVerification(emailInput: string): Promise<void> {
+    EmailService.assertAvailable();
+    const email = emailInput.trim().toLowerCase();
+    const merchant = await prisma.merchant.findUnique({ where: { email } });
+    if (!merchant || merchant.isEmailVerified) return;
+
+    const code = EmailService.isMock()
+      ? (process.env.TESTING_EMAIL_OTP || '123456')
+      : createNumericOtp();
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        emailVerificationCodeHash: hashOtp('merchant-email', email, code, authConfig.jwtSecret),
+        emailVerificationExpires: new Date(Date.now() + OTP_TTL_SECONDS * 1000)
+      }
+    });
+    await EmailService.sendMerchantVerificationCode(email, merchant.name, code);
   }
 
   public static async loginCustomer(identifier: string, password: string): Promise<{ customer: any } & ITokenResponse> {
@@ -264,6 +326,11 @@ export class AuthService {
 
     if (!merchant.isActive) {
       const err: any = new Error('Conta desativada');
+      err.statusCode = 403;
+      throw err;
+    }
+    if (!merchant.isEmailVerified) {
+      const err: any = new Error('Confirme o e-mail da loja antes de entrar.');
       err.statusCode = 403;
       throw err;
     }
@@ -380,91 +447,57 @@ export class AuthService {
     privacy?: { termsAccepted?: boolean; privacyAccepted?: boolean; marketingConsent?: boolean }
   ): Promise<{ isNewUser: boolean }> {
     const cleanPhone = normalizePhone(phone);
-    let customer = await prisma.customer.findUnique({
-      where: { phone: cleanPhone },
-      include: { addresses: true }
-    });
-    let isNewUser = false;
+    const customer = await prisma.customer.findUnique({ where: { phone: cleanPhone } });
+    const isNewUser = !customer;
 
     const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
     if (isMock && isProduction()) {
       throw new Error('WhatsApp não configurado. Não é possível enviar código de verificação em produção.');
     }
     const testingPhone = process.env.TESTING_PHONE;
-    const testingOtp = process.env.TESTING_OTP || '1234';
-    const code = (isMock || (testingPhone && cleanPhone === testingPhone)) ? testingOtp : Math.floor(1000 + Math.random() * 9000).toString(); 
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const code = (isMock || (testingPhone && cleanPhone === testingPhone))
+      ? (process.env.TESTING_OTP || '123456')
+      : createNumericOtp();
 
-    if (customer) {
-      const updated = await prisma.customer.update({
-        where: { id: customer.id },
-        data: { 
-          verificationCode: code,
-          verificationCodeExpires: expires
-        },
-        include: { addresses: true }
-      });
-      customer = updated;
-    } else {
+    let pendingRegistration: PendingCustomerRegistration | undefined;
+    if (!customer) {
       if (!name || !address) {
         throw new Error('Customer does not exist and registration details are missing');
       }
       if (!privacy?.termsAccepted || !privacy?.privacyAccepted) {
         throw new Error('Termos de uso e política de privacidade precisam ser aceitos.');
       }
-      isNewUser = true;
+      pendingRegistration = {
+        name: name.trim(),
+        address,
+        marketingConsent: !!privacy.marketingConsent
+      };
+    }
 
-      const created = await prisma.$transaction(async (tx) => {
-        const c = await tx.customer.create({
-          data: {
-            name,
-            phone: cleanPhone,
-            verificationCode: code,
-            verificationCodeExpires: expires,
-            termsAcceptedAt: new Date(),
-            privacyAcceptedAt: new Date(),
-            marketingConsent: !!privacy.marketingConsent,
-            isPhoneVerified: false,
-            isActive: true
-          }
-        });
-
-        await tx.customerAddress.create({
-          data: {
-            customerId: c.id,
-            nickname: 'Principal',
-            street: address.street,
-            number: address.number,
-            neighborhood: address.neighborhood,
-            city: address.city,
-            state: address.state || 'PR',
-            zipCode: address.zipCode,
-            complement: address.complement || '',
-            referencePoint: address.referencePoint || '',
-            latitude: address.coordinates?.lat,
-            longitude: address.coordinates?.lng,
-            isPrimary: true
-          }
-        });
-
-        return await tx.customer.findUnique({
-          where: { id: c.id },
-          include: { addresses: true }
-        });
-      });
-      customer = created;
+    const challenge: CustomerOtpChallenge = {
+      codeHash: hashOtp('customer-whatsapp', cleanPhone, code, authConfig.jwtSecret),
+      expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
+      pendingRegistration
+    };
+    const challengeKey = `customerOtp:${cleanPhone}`;
+    try {
+      await redisClient.set(challengeKey, JSON.stringify(challenge), 'EX', OTP_TTL_SECONDS);
+    } catch (err) {
+      if (isProduction()) {
+        throw new Error('Não foi possível criar uma verificação segura. Tente novamente.');
+      }
+      AuthService.memoryOtpChallenges.set(challengeKey, challenge);
     }
 
     try {
-      await NotificationService.queueNotification({
-        userId: customer!.id,
-        userType: 'Customer',
-        type: 'WhatsApp',
-        target: customer!.phone,
-        content: `Olá! Seu código de verificação Traz Pra Cá é: *${code}*.`
-      });
-    } catch (err) {
-      console.error('Erro ao enfileirar notificação de OTP:', err);
+      await WhatsAppService.sendMessage(
+        cleanPhone,
+        `Seu código de verificação Traz Pra Cá é: *${code}*. Ele expira em 10 minutos.`
+      );
+    } catch (error) {
+      await redisClient.del(challengeKey).catch(() => undefined);
+      AuthService.memoryOtpChallenges.delete(challengeKey);
+      throw error;
     }
 
     return { isNewUser };
@@ -475,45 +508,96 @@ export class AuthService {
    */
   public static async verifyCustomerOtp(phone: string, code: string): Promise<{ customer: any } & ITokenResponse> {
     const cleanPhone = normalizePhone(phone);
-    const customer = await prisma.customer.findUnique({
+    const challengeKey = `customerOtp:${cleanPhone}`;
+    let challenge: CustomerOtpChallenge | undefined;
+    try {
+      const serialized = await redisClient.get(challengeKey);
+      if (serialized) challenge = JSON.parse(serialized) as CustomerOtpChallenge;
+    } catch (err) {
+      if (isProduction()) throw new Error('Verificação temporariamente indisponível.');
+      challenge = AuthService.memoryOtpChallenges.get(challengeKey);
+    }
+
+    if (!challenge || challenge.expiresAt < Date.now()) {
+      throw new Error('Código de verificação expirado. Solicite um novo código.');
+    }
+    if (!verifyOtpHash(
+      challenge.codeHash,
+      'customer-whatsapp',
+      cleanPhone,
+      code,
+      authConfig.jwtSecret
+    )) {
+      throw new Error('Código de verificação inválido.');
+    }
+
+    let customer = await prisma.customer.findUnique({
       where: { phone: cleanPhone },
       include: { addresses: true }
     });
-    
+
     if (!customer) {
-      throw new Error('Cliente não encontrado');
+      if (!challenge.pendingRegistration) {
+        throw new Error('Dados de cadastro não encontrados. Reinicie o cadastro.');
+      }
+      const pending = challenge.pendingRegistration;
+      customer = await prisma.$transaction(async (tx) => {
+        const created = await tx.customer.create({
+          data: {
+            name: pending.name,
+            phone: cleanPhone,
+            termsAcceptedAt: new Date(),
+            privacyAcceptedAt: new Date(),
+            marketingConsent: pending.marketingConsent,
+            isPhoneVerified: true,
+            isActive: true
+          }
+        });
+        await tx.customerAddress.create({
+          data: {
+            customerId: created.id,
+            nickname: 'Principal',
+            street: pending.address.street,
+            number: pending.address.number,
+            neighborhood: pending.address.neighborhood,
+            city: pending.address.city,
+            state: pending.address.state || 'PR',
+            zipCode: pending.address.zipCode,
+            complement: pending.address.complement || '',
+            referencePoint: pending.address.referencePoint || '',
+            latitude: pending.address.coordinates?.lat,
+            longitude: pending.address.coordinates?.lng,
+            isPrimary: true
+          }
+        });
+        return tx.customer.findUniqueOrThrow({
+          where: { id: created.id },
+          include: { addresses: true }
+        });
+      });
+    } else {
+      customer = await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          isPhoneVerified: true,
+          verificationCode: null,
+          verificationCodeExpires: null
+        },
+        include: { addresses: true }
+      });
     }
 
-    const isMock = !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN;
-    const testingOtp = process.env.TESTING_OTP || '1234';
-    const isValidOtp = customer.verificationCode === code || (!isProduction() && isMock && code === testingOtp);
-
-    if (!customer.verificationCode || !isValidOtp) {
-      throw new Error('Código de verificação inválido');
-    }
-
-    if (customer.verificationCodeExpires && new Date() > new Date(customer.verificationCodeExpires)) {
-      throw new Error('Código de verificação expirou');
-    }
-
-    const updated = await prisma.customer.update({
-      where: { id: customer.id },
-      data: {
-        isPhoneVerified: true,
-        verificationCode: null,
-        verificationCodeExpires: null
-      },
-      include: { addresses: true }
-    });
+    await redisClient.del(challengeKey).catch(() => undefined);
+    AuthService.memoryOtpChallenges.delete(challengeKey);
 
     const tokens = await this.generateTokens({
-      userId: updated.id,
+      userId: customer.id,
       role: 'customer',
-      email: updated.email || '',
-      name: updated.name,
+      email: customer.email || '',
+      name: customer.name,
     });
 
-    return { customer: formatCustomer(updated), ...tokens };
+    return { customer: formatCustomer(customer), ...tokens };
   }
 
   /**

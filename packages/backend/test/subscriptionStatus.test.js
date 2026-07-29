@@ -18,17 +18,29 @@ test('only ACTIVE subscription status is considered active', () => {
 });
 
 test('merchant is public only when active and subscription is active', () => {
-  assert.equal(isMerchantPubliclyVisible({ isActive: true, isVerified: true, subscriptionStatus: 'ACTIVE' }), true);
-  assert.equal(isMerchantPubliclyVisible({ isActive: false, isVerified: true, subscriptionStatus: 'ACTIVE' }), false);
-  assert.equal(isMerchantPubliclyVisible({ isActive: true, isVerified: false, subscriptionStatus: 'ACTIVE' }), false);
-  assert.equal(isMerchantPubliclyVisible({ isActive: true, isVerified: true, subscriptionStatus: 'PENDING' }), false);
+  const complete = {
+    isActive: true, isVerified: true, isEmailVerified: true, subscriptionStatus: 'ACTIVE',
+    cnpj: 'encrypted', street: 'Rua A', number: '1', neighborhood: 'Centro', city: 'Rondon', zipCode: '87800000'
+  };
+  assert.equal(isMerchantPubliclyVisible(complete), true);
+  assert.equal(isMerchantPubliclyVisible({ ...complete, isActive: false }), false);
+  assert.equal(isMerchantPubliclyVisible({ ...complete, isVerified: false }), false);
+  assert.equal(isMerchantPubliclyVisible({ ...complete, isEmailVerified: false }), false);
+  assert.equal(isMerchantPubliclyVisible({ ...complete, city: null }), false);
+  assert.equal(isMerchantPubliclyVisible({ ...complete, subscriptionStatus: 'PENDING' }), false);
 });
 
 test('merchant publication block reason is explicit', () => {
-  assert.equal(getMerchantPublicationBlockReason({ isActive: false, isVerified: true, subscriptionStatus: 'ACTIVE' }), 'Loja inativa.');
-  assert.equal(getMerchantPublicationBlockReason({ isActive: true, isVerified: false, subscriptionStatus: 'ACTIVE' }), 'Loja ainda não aprovada pelo admin.');
-  assert.equal(getMerchantPublicationBlockReason({ isActive: true, isVerified: true, subscriptionStatus: 'FAILED' }), 'Assinatura do lojista não está ativa.');
-  assert.equal(getMerchantPublicationBlockReason({ isActive: true, isVerified: true, subscriptionStatus: 'ACTIVE' }), null);
+  const complete = {
+    isActive: true, isVerified: true, isEmailVerified: true, subscriptionStatus: 'ACTIVE',
+    cnpj: 'encrypted', street: 'Rua A', number: '1', neighborhood: 'Centro', city: 'Rondon', zipCode: '87800000'
+  };
+  assert.equal(getMerchantPublicationBlockReason({ ...complete, isActive: false }), 'Loja inativa.');
+  assert.equal(getMerchantPublicationBlockReason({ ...complete, isEmailVerified: false }), 'E-mail da loja ainda não confirmado.');
+  assert.equal(getMerchantPublicationBlockReason({ ...complete, city: null }), 'Complete os dados fiscais e o endereço da loja.');
+  assert.equal(getMerchantPublicationBlockReason({ ...complete, isVerified: false }), 'Loja ainda não aprovada pelo admin.');
+  assert.equal(getMerchantPublicationBlockReason({ ...complete, subscriptionStatus: 'FAILED' }), 'Assinatura do lojista não está ativa.');
+  assert.equal(getMerchantPublicationBlockReason(complete), null);
 });
 
 test('Mercado Pago subscription status maps to internal controlled status', () => {

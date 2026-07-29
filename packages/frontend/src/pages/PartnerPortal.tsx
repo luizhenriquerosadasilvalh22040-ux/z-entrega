@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Button, Input, Card, LegalConsent, Toast, Badge } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { Store, ShieldCheck, DollarSign, Clock, Users, ArrowRight, Lock, UserPlus, Sparkles, Pizza, ShoppingBag, Package, Rocket } from 'lucide-react';
+import { Store, ShieldCheck, DollarSign, Clock, Users, Lock, UserPlus, Sparkles, Pizza, ShoppingBag, Package, Rocket } from 'lucide-react';
 
 export const PartnerPortal: React.FC = () => {
-  const { login } = useAuthStore();
+  const { login, verifyMerchantEmail } = useAuthStore();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'merchant_login' | 'merchant_register' | 'admin_login'>('merchant_login');
@@ -18,15 +18,6 @@ export const PartnerPortal: React.FC = () => {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
   };
 
-  const formatCNPJ = (val: string) => {
-    const digits = val.replace(/\D/g, '');
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
-  };
-  
   // Merchant Login Form
   const [mEmail, setMEmail] = useState('');
   const [mPassword, setMPassword] = useState('');
@@ -40,20 +31,12 @@ export const PartnerPortal: React.FC = () => {
     name: '',
     email: '',
     password: '',
-    cnpj: '',
     phone: '',
-    category: 'Comida' as 'Comida' | 'Farmácia' | 'Construção' | 'Geral',
-    operatingHours: { open: '18:00', close: '23:30' },
-    paymentMethods: ['PIX', 'Dinheiro', 'Cartão'],
-    address: {
-      street: '',
-      number: '',
-      neighborhood: '',
-      city: 'Rondon',
-      state: 'PR',
-      zipCode: '87800-000'
-    }
+    category: 'Comida' as 'Comida' | 'Farmácia' | 'Construção' | 'Geral'
   });
+  const [merchantVerificationCode, setMerchantVerificationCode] = useState('');
+  const [merchantEmailPending, setMerchantEmailPending] = useState(false);
+  const [merchantEmailMock, setMerchantEmailMock] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
@@ -155,9 +138,9 @@ export const PartnerPortal: React.FC = () => {
   // Lojista Register
   const handleMerchantRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { name, email, password, cnpj, phone, address } = regForm;
-    if (!name || !email || !password || !cnpj || !phone || !address.street || !address.number || !address.neighborhood) {
-      setToast({ message: 'Preencha todos os dados obrigatórios da sua loja', type: 'error' });
+    const { name, email, password, phone } = regForm;
+    if (!name || !email || !password || !phone) {
+      setToast({ message: 'Preencha os dados essenciais da sua loja', type: 'error' });
       return;
     }
     if (!termsAccepted || !privacyAccepted) {
@@ -169,11 +152,9 @@ export const PartnerPortal: React.FC = () => {
     try {
       const { apiClient } = await import('../services/apiClient');
       const cleanPhone = phone.replace(/\D/g, '');
-      const cleanCnpj = cnpj.replace(/\D/g, '');
       const payload = {
         ...regForm,
         phone: cleanPhone,
-        cnpj: cleanCnpj,
         termsAccepted,
         privacyAccepted,
         marketingConsent
@@ -181,14 +162,43 @@ export const PartnerPortal: React.FC = () => {
       
       const registerRes = await apiClient.post('/auth/merchant/register', payload);
       if (registerRes.data?.status === 'success') {
-        // Realiza login automático
-        await login(email, password, 'merchant');
-        setToast({ message: 'Estabelecimento cadastrado com sucesso!', type: 'success' });
-        setTimeout(() => navigate('/dashboard'), 1000);
+        setMerchantEmailPending(true);
+        setMerchantEmailMock(Boolean(registerRes.data.data?.isMock));
+        setToast({ message: 'Código enviado ao e-mail da loja.', type: 'success' });
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Erro ao cadastrar loja. Verifique os dados.';
       setToast({ message: msg, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMerchantEmailVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await verifyMerchantEmail(regForm.email, merchantVerificationCode);
+      setToast({ message: 'E-mail confirmado. Loja criada com sucesso!', type: 'success' });
+      setTimeout(() => navigate('/dashboard'), 700);
+    } catch (err: any) {
+      setToast({
+        message: err.response?.data?.message || 'Código inválido ou expirado.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendMerchantEmail = async () => {
+    setLoading(true);
+    try {
+      const { apiClient } = await import('../services/apiClient');
+      await apiClient.post('/auth/merchant/resend-verification', { email: regForm.email });
+      setToast({ message: 'Novo código enviado.', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Não foi possível reenviar o código.', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -423,113 +433,82 @@ export const PartnerPortal: React.FC = () => {
             )}
 
             {forgotMode === 'none' && activeTab === 'merchant_register' && (
-              <form onSubmit={handleMerchantRegister} className="max-h-[min(560px,calc(100dvh-190px))] space-y-4 overflow-y-auto pr-2">
+              merchantEmailPending ? (
+              <form onSubmit={handleMerchantEmailVerification} className="space-y-4">
                 <div className="text-center pb-2">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center justify-center gap-1.5">
-                    <UserPlus size={18} className="text-energy" /> Cadastrar Meu Estabelecimento
+                    <ShieldCheck size={18} className="text-energy" /> Confirme seu e-mail
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1">Abra sua loja online no Traz Pra Cá hoje mesmo.</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enviamos um código de 6 dígitos para {regForm.email}.
+                  </p>
                 </div>
-                
                 <Input
-                  label="Nome da Loja *"
-                  placeholder="Ex: Pizzaria Rondon"
-                  value={regForm.name}
-                  onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
+                  label="Código de verificação"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  value={merchantVerificationCode}
+                  onChange={(e) => setMerchantVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   required
+                  maxLength={6}
                 />
-
-                <Input
-                  label="E-mail da Loja *"
-                  type="email"
-                  placeholder="contato@loja.com"
-                  value={regForm.email}
-                  onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
-                  required
-                />
-
-                <Input
-                  label="Senha *"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={regForm.password}
-                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
-                  required
-                />
-
-                <div className="grid grid-cols-2 gap-3">
+                {merchantEmailMock && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                    Modo de testes: utilize o código <strong>123456</strong>.
+                  </div>
+                )}
+                <Button type="submit" fullWidth disabled={loading || merchantVerificationCode.length !== 6}>
+                  {loading ? 'Confirmando...' : 'Confirmar e acessar painel'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleResendMerchantEmail}
+                  disabled={loading}
+                  className="w-full text-xs font-bold text-energy hover:underline disabled:opacity-50"
+                >
+                  Reenviar código
+                </button>
+              </form>
+              ) : (
+              <form onSubmit={handleMerchantRegister} className="max-h-[min(560px,calc(100dvh-190px))] space-y-4 overflow-y-auto pr-2">
+                <div className="text-center pb-2">
+                  <h3 className="flex items-center justify-center gap-1.5 text-lg font-extrabold text-slate-800 dark:text-white">
+                    <UserPlus size={18} className="text-energy" /> Abra sua loja
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-400">Dados operacionais podem ser preenchidos depois no painel.</p>
+                </div>
+                <Input label="Nome da loja *" placeholder="Ex: Pizzaria Rondon" value={regForm.name}
+                  onChange={(e) => setRegForm({ ...regForm, name: e.target.value })} required />
+                <Input label="E-mail da loja *" type="email" placeholder="contato@loja.com" value={regForm.email}
+                  onChange={(e) => setRegForm({ ...regForm, email: e.target.value })} required />
+                <Input label="Crie uma senha *" type="password" placeholder="Mínimo 8 caracteres" value={regForm.password}
+                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })} required minLength={8} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
-                    label="CNPJ *"
-                    placeholder="XX.XXX.XXX/XXXX-XX"
-                    value={regForm.cnpj}
-                    onChange={(e) => setRegForm({ ...regForm, cnpj: formatCNPJ(e.target.value) })}
-                    required
-                    maxLength={18}
-                  />
-                  <Input
-                    label="WhatsApp de Atendimento *"
+                    label="WhatsApp *"
                     placeholder="Ex: (44) 99999-8888"
                     value={regForm.phone}
                     onChange={(e) => setRegForm({ ...regForm, phone: formatPhone(e.target.value) })}
                     required
                     maxLength={15}
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Categoria</label>
-                  <select
-                    value={regForm.category}
-                    onChange={(e) => setRegForm({ ...regForm, category: e.target.value as any })}
-                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none text-slate-700 dark:text-white"
-                  >
-                    <option value="Comida">Comida (Lanches, Pizzas)</option>
-                    <option value="Farmácia">Farmácia</option>
-                    <option value="Construção">Construção</option>
-                    <option value="Geral">Comércio Geral</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Endereço da Loja</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-2">
-                      <Input
-                        label="Rua *"
-                        placeholder="Rua"
-                        value={regForm.address.street}
-                        onChange={(e) => setRegForm({
-                          ...regForm,
-                          address: { ...regForm.address, street: e.target.value }
-                        })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Input
-                        label="Nº *"
-                        placeholder="Nº"
-                        value={regForm.address.number}
-                        onChange={(e) => setRegForm({
-                          ...regForm,
-                          address: { ...regForm.address, number: e.target.value }
-                        })}
-                        required
-                      />
-                    </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Categoria</label>
+                    <select
+                      value={regForm.category}
+                      onChange={(e) => setRegForm({
+                        ...regForm,
+                        category: e.target.value as 'Comida' | 'Farmácia' | 'Construção' | 'Geral'
+                      })}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none text-slate-700 dark:text-white"
+                    >
+                      <option value="Comida">Comida (Lanches, Pizzas)</option>
+                      <option value="Farmácia">Farmácia</option>
+                      <option value="Construção">Construção</option>
+                      <option value="Geral">Comércio Geral</option>
+                    </select>
                   </div>
-                  <Input
-                    label="Bairro *"
-                    placeholder="Bairro"
-                    value={regForm.address.neighborhood}
-                    onChange={(e) => setRegForm({
-                      ...regForm,
-                      address: { ...regForm.address, neighborhood: e.target.value }
-                    })}
-                    required
-                  />
                 </div>
-
                 <LegalConsent
                   termsAccepted={termsAccepted}
                   privacyAccepted={privacyAccepted}
@@ -542,10 +521,11 @@ export const PartnerPortal: React.FC = () => {
 
                 <div className="pt-2">
                   <Button type="submit" fullWidth disabled={loading}>
-                    {loading ? 'Cadastrando...' : 'Criar Conta Lojista'}
+                    {loading ? 'Enviando código...' : 'Continuar com e-mail'}
                   </Button>
                 </div>
               </form>
+              )
             )}
 
             {forgotMode === 'none' && activeTab === 'admin_login' && (

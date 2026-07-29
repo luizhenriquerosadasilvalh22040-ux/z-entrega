@@ -92,6 +92,20 @@ export class MerchantController {
     }
   }
 
+  public static async completeBusinessProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      if (!req.user || !canManageMerchantResource(req.user, id)) {
+        res.status(403).json({ status: 'fail', message: 'Forbidden access' });
+        return;
+      }
+      const merchant = await MerchantService.completeBusinessProfile(id, req.body);
+      res.status(200).json({ status: 'success', data: { merchant } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   public static async deactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;

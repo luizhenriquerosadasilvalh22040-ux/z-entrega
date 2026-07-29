@@ -110,21 +110,24 @@ model Merchant {
   name              String
   email             String    @unique
   passwordHash      String    @map("password_hash")
-  cnpj              String    @unique // Criptografado
+  cnpj              String?   @unique // Criptografado quando informado
   phone             String
   category          String?   // 'Comida', 'Farmácia', 'Construção', 'Geral'
   openTime          String    @default("08:00") @map("open_time")
   closeTime         String    @default("22:00") @map("close_time")
   paymentMethods    String[]  @map("payment_methods")
-  street            String
-  number            String
-  neighborhood      String
-  city              String
+  street            String?
+  number            String?
+  neighborhood      String?
+  city              String?
   state             String    @default("PR")
-  zipCode           String    @map("zip_code")
+  zipCode           String?   @map("zip_code")
   latitude          Float?
   longitude         Float?
   isVerified        Boolean   @default(false) @map("is_verified")
+  isEmailVerified   Boolean   @default(false) @map("is_email_verified")
+  emailVerificationCodeHash String? @map("email_verification_code_hash")
+  emailVerificationExpires DateTime? @map("email_verification_expires")
   isActive          Boolean   @default(true) @map("is_active")
   isForceClosed     Boolean   @default(false) @map("is_force_closed")
   logoImage         String?   @map("logo_image")

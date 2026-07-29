@@ -1,2 +1,2 @@
 ALTER TABLE "banners"
-ADD COLUMN "link_url" TEXT;
+ADD COLUMN IF NOT EXISTS "link_url" TEXT;

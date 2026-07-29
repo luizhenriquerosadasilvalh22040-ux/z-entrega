@@ -224,6 +224,9 @@ export class OrderCreationService {
       if (!isSupportedServiceArea(finalAddress.city, finalAddress.state)) {
         throw new Error(`No momento atendemos apenas ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
       }
+      if (!merchant.city || !merchant.street || !merchant.number || !merchant.neighborhood || !merchant.zipCode) {
+        throw new Error('A loja ainda não concluiu o endereço operacional.');
+      }
       if (!isSupportedServiceArea(merchant.city, merchant.state)) {
         throw new Error(`Esta loja está fora da área piloto ${businessConfig.serviceCity}-${businessConfig.serviceState}.`);
       }

@@ -101,7 +101,16 @@ export const Dashboard: React.FC = () => {
     coverImage: '',
     open: '08:00',
     close: '22:00',
-    paymentMethods: [] as string[]
+    paymentMethods: [] as string[],
+    cnpj: '',
+    address: {
+      street: '',
+      number: '',
+      neighborhood: '',
+      city: '',
+      state: 'PR',
+      zipCode: ''
+    }
   });
 
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -313,7 +322,16 @@ export const Dashboard: React.FC = () => {
         coverImage: (user as any).coverImage || '',
         open: user.operatingHours?.open || '08:00',
         close: user.operatingHours?.close || '22:00',
-        paymentMethods: user.paymentMethods || ['PIX', 'Dinheiro']
+        paymentMethods: user.paymentMethods || ['PIX', 'Dinheiro'],
+        cnpj: '',
+        address: {
+          street: user.address?.street || '',
+          number: user.address?.number || '',
+          neighborhood: user.address?.neighborhood || '',
+          city: user.address?.city || '',
+          state: user.address?.state || 'PR',
+          zipCode: user.address?.zipCode || ''
+        }
       });
     }
   }, [user]);
@@ -424,6 +442,13 @@ export const Dashboard: React.FC = () => {
     e.preventDefault();
     try {
       if (!user?._id) return;
+
+      if (!user.hasCnpj) {
+        await apiClient.put(`/merchants/${user._id}/business-profile`, {
+          cnpj: settingsForm.cnpj.replace(/\D/g, ''),
+          address: settingsForm.address
+        });
+      }
       
       // 1. Atualizar Horário de Funcionamento
       await apiClient.put(`/merchants/${user._id}/operating-hours`, {
@@ -1253,6 +1278,34 @@ export const Dashboard: React.FC = () => {
               </h3>
 
               <form onSubmit={handleSaveSettings} className="space-y-5">
+                {!user?.hasCnpj && (
+                  <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+                    <div>
+                      <p className="text-sm font-extrabold text-amber-900 dark:text-amber-200">Complete os dados para publicar sua loja</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">Esses dados são solicitados uma única vez.</p>
+                    </div>
+                    <Input label="CNPJ" inputMode="numeric" value={settingsForm.cnpj}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, cnpj: e.target.value })} required />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="sm:col-span-2">
+                        <Input label="Rua" value={settingsForm.address.street}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, street: e.target.value } })} required />
+                      </div>
+                      <Input label="Número" value={settingsForm.address.number}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, number: e.target.value } })} required />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Input label="Bairro" value={settingsForm.address.neighborhood}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, neighborhood: e.target.value } })} required />
+                      <Input label="Cidade" value={settingsForm.address.city}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, city: e.target.value } })} required />
+                      <Input label="Estado" maxLength={2} value={settingsForm.address.state}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, state: e.target.value.toUpperCase() } })} required />
+                      <Input label="CEP" value={settingsForm.address.zipCode}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, address: { ...settingsForm.address, zipCode: e.target.value } })} required />
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                   {/* Imagem da Logo */}
                   <div className="flex flex-col">

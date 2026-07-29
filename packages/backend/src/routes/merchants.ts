@@ -5,7 +5,8 @@ import { validate } from '../middlewares/validation';
 import {
   updateMerchantProfileSchema,
   updateOperatingHoursSchema,
-  updatePaymentMethodsSchema
+  updatePaymentMethodsSchema,
+  completeMerchantBusinessProfileSchema
 } from '../validators/merchant';
 
 const router = Router();
@@ -25,6 +26,7 @@ router.use(authenticate);
 router.put('/:id/profile', validate(updateMerchantProfileSchema), MerchantController.updateProfile);
 router.put('/:id/operating-hours', validate(updateOperatingHoursSchema), MerchantController.updateOperatingHours);
 router.put('/:id/payment-method', validate(updatePaymentMethodsSchema), MerchantController.updatePaymentMethods);
+router.put('/:id/business-profile', validate(completeMerchantBusinessProfileSchema), MerchantController.completeBusinessProfile);
 router.put('/:id/logo', MerchantController.updateLogo);
 router.put('/:id/cover', MerchantController.updateCover);
 router.delete('/:id', MerchantController.deactivate);

@@ -4,16 +4,17 @@ import { apiClient } from '../services/apiClient';
 export interface IUser {
   _id: string;
   name: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
   subscriptionStatus?: string;
+  hasCnpj?: boolean;
   address?: {
-    street: string;
-    number: string;
-    neighborhood: string;
-    city: string;
+    street?: string;
+    number?: string;
+    neighborhood?: string;
+    city?: string;
     state: string;
-    zipCode: string;
+    zipCode?: string;
     complement?: string;
     referencePoint?: string;
   };
@@ -40,7 +41,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (identifier: string, password: string, role: 'customer' | 'merchant' | 'admin') => Promise<void>;
+  login: (identifier: string, password: string, role: 'merchant' | 'admin') => Promise<void>;
   requestOtp: (
     phone: string,
     name?: string,
@@ -48,6 +49,7 @@ interface AuthState {
     privacy?: { termsAccepted?: boolean; privacyAccepted?: boolean; marketingConsent?: boolean }
   ) => Promise<{ isNewUser: boolean; isMock?: boolean }>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
+  verifyMerchantEmail: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -66,21 +68,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       let endpoint = '';
-      if (role === 'customer') endpoint = '/auth/customer/login';
-      else if (role === 'merchant') endpoint = '/auth/merchant/login';
+      if (role === 'merchant') endpoint = '/auth/merchant/login';
       else if (role === 'admin') endpoint = '/auth/admin/login';
 
-      const isEmail = identifier.includes('@');
-      const payload = role === 'customer'
-        ? (isEmail ? { email: identifier, password } : { phone: identifier.replace(/\D/g, ''), password })
-        : { email: identifier, password };
+      const payload = { email: identifier, password };
 
       const response = await apiClient.post(endpoint, payload);
       
-      const { customer, merchant, admin, accessToken, refreshToken } = response.data.data;
+      const { merchant, admin, accessToken, refreshToken } = response.data.data;
       let user = null;
-      if (role === 'customer') user = customer;
-      else if (role === 'merchant') user = merchant;
+      if (role === 'merchant') user = merchant;
       else if (role === 'admin') user = admin;
 
       // Armazena as flags auxiliares e tokens
@@ -144,6 +141,28 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch (error: any) {
       const message = error.response?.data?.message || 'Código inválido';
+      set({ error: message, isLoading: false });
+      throw error;
+    }
+  },
+
+  verifyMerchantEmail: async (email, code) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiClient.post('/auth/merchant/verify-email', { email, code });
+      const { merchant, accessToken, refreshToken } = response.data.data;
+      localStorage.setItem('role', 'merchant');
+      localStorage.setItem('isLogged', 'true');
+      if (accessToken) localStorage.setItem('accessToken', accessToken);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+      set({
+        user: merchant,
+        role: 'merchant',
+        isAuthenticated: true,
+        isLoading: false
+      });
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Código de verificação inválido';
       set({ error: message, isLoading: false });
       throw error;
     }

@@ -4,27 +4,27 @@ import { validate } from '../middlewares/validation';
 import { authenticate } from '../middlewares/auth';
 import { otpRateLimiter, verifyOtpRateLimiter, resetPasswordRateLimiter } from '../middlewares/rateLimiter';
 import {
-  customerRegisterSchema,
   merchantRegisterSchema,
   loginSchema,
-  customerLoginSchema,
   refreshSchema,
   customerRequestOtpSchema,
   customerVerifyOtpSchema,
+  merchantVerifyEmailSchema,
+  merchantResendEmailSchema,
   forgotPasswordSchema,
   resetPasswordSchema
 } from '../validators/auth';
 
 const router = Router();
 
-// Registro e login de Clientes
-router.post('/customer/register', validate(customerRegisterSchema), AuthController.registerCustomer);
-router.post('/customer/login', validate(customerLoginSchema), AuthController.loginCustomer);
+// Clientes entram e concluem o cadastro exclusivamente por OTP no WhatsApp
 router.post('/customer/request-otp', otpRateLimiter, validate(customerRequestOtpSchema), AuthController.requestCustomerOtp);
 router.post('/customer/verify-otp', verifyOtpRateLimiter, validate(customerVerifyOtpSchema), AuthController.verifyCustomerOtp);
 
 // Registro e login de Lojistas
 router.post('/merchant/register', validate(merchantRegisterSchema), AuthController.registerMerchant);
+router.post('/merchant/verify-email', verifyOtpRateLimiter, validate(merchantVerifyEmailSchema), AuthController.verifyMerchantEmail);
+router.post('/merchant/resend-verification', otpRateLimiter, validate(merchantResendEmailSchema), AuthController.resendMerchantEmailVerification);
 router.post('/merchant/login', validate(loginSchema), AuthController.loginMerchant);
 
 // Login de Administrador Geral

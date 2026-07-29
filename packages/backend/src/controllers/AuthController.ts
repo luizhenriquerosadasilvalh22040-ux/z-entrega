@@ -3,6 +3,7 @@ import { AuthService } from '../services/AuthService';
 import { formatCustomer } from '../services/CustomerService';
 import { formatMerchant } from '../services/MerchantService';
 import prisma from '../config/prisma';
+import { EmailService } from '../services/EmailService';
 
 export class AuthController {
   private static setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
@@ -35,48 +36,6 @@ export class AuthController {
     });
   }
 
-  public static async registerCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const customer = await AuthService.registerCustomer(req.body);
-      
-      const response = customer.toObject ? customer.toObject() : customer;
-
-      res.status(201).json({
-        status: 'success',
-        data: { customer: response }
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  public static async loginCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { email, phone, password } = req.body;
-      const identifier = email || phone;
-      if (!identifier) {
-        res.status(400).json({ status: 'fail', message: 'E-mail ou telefone deve ser fornecido' });
-        return;
-      }
-      const { customer, accessToken, refreshToken } = await AuthService.loginCustomer(identifier, password);
-
-      const customerObj = customer.toObject ? customer.toObject() : customer;
-
-      AuthController.setAuthCookies(res, accessToken, refreshToken);
-
-      res.status(200).json({
-        status: 'success',
-        data: {
-          customer: customerObj,
-          accessToken,
-          refreshToken
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
   public static async registerMerchant(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const merchant = await AuthService.registerMerchant(req.body);
@@ -85,7 +44,34 @@ export class AuthController {
 
       res.status(201).json({
         status: 'success',
-        data: { merchant: response }
+        message: 'Cadastro iniciado. Confirme o código enviado ao e-mail da loja.',
+        data: { merchant: response, isMock: EmailService.isMock() }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async verifyMerchantEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, code } = req.body;
+      const { merchant, accessToken, refreshToken } = await AuthService.verifyMerchantEmail(email, code);
+      AuthController.setAuthCookies(res, accessToken, refreshToken);
+      res.status(200).json({
+        status: 'success',
+        data: { merchant, accessToken, refreshToken }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  public static async resendMerchantEmailVerification(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await AuthService.resendMerchantEmailVerification(req.body.email);
+      res.status(200).json({
+        status: 'success',
+        message: 'Se o cadastro estiver pendente, um novo código será enviado.'
       });
     } catch (error) {
       next(error);
