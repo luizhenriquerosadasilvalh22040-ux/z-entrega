@@ -23,7 +23,7 @@ interface Slide extends HeroBanner {
 const fallbackSlides: Slide[] = [
   {
     _id: 'discover-local',
-    imageUrl: '/banner_home_4k.jpg',
+    imageUrl: '/banner-near-you-v1.png',
     title: 'O que você precisa, mais perto de você',
     description: 'Descubra lojas locais e peça em poucos toques.',
     eyebrow: 'Entrega local, do seu jeito',
@@ -43,7 +43,7 @@ const fallbackSlides: Slide[] = [
   },
   {
     _id: 'local-economy',
-    imageUrl: '',
+    imageUrl: '/banner-local-commerce-v1.png',
     title: 'Seu pedido fortalece o comércio local',
     description: 'Compre de quem faz parte da sua cidade.',
     eyebrow: 'Compre perto',
