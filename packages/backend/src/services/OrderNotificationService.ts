@@ -2,6 +2,8 @@ import { ORDER_STATUS } from '../domain/orderStatus';
 import { NotificationService } from './NotificationService';
 import { WhatsAppTemplateService } from './WhatsAppTemplateService';
 import { WhatsAppTemplateType } from '@prisma/client';
+import { buildMerchantOrderMessage } from '../domain/merchantOrderMessage';
+import { shouldNotifyCustomerForOrderStatus } from '../domain/notificationPolicy';
 
 type QueueContext = {
   tx: any;
@@ -17,59 +19,44 @@ export class OrderNotificationService {
   public static async queueOrderCreated(
     { tx }: QueueContext,
     params: {
-      customer: any;
-      merchant: any;
-      orderId: string;
-      total: number;
-      paymentMethod: string;
+      order: any;
       paymentConfirmedNow: boolean;
     }
   ): Promise<string[]> {
     const notificationIds: string[] = [];
+    const { order } = params;
 
     const customerContent = await WhatsAppTemplateService.render(
       WhatsAppTemplateType.ORDER_CREATED,
       {
-        customerName: params.customer.name,
-        orderId: params.orderId,
-        merchantName: params.merchant.name,
-        total: params.total.toFixed(2),
-        paymentMethod: params.paymentMethod
+        customerName: order.customer.name,
+        orderId: order.id,
+        merchantName: order.merchant.name,
+        total: Number(order.total).toFixed(2),
+        paymentMethod: order.paymentMethod
       },
-      params.paymentMethod === 'PIX'
+      order.paymentMethod === 'PIX'
         ? 'Olá, *{{customerName}}*! Recebemos o seu pedido nº *{{orderId}}* no estabelecimento *{{merchantName}}*. Total: R$ {{total}}. Aguardando confirmação do pagamento PIX.'
         : 'Olá, *{{customerName}}*! Recebemos o seu pedido nº *{{orderId}}* no estabelecimento *{{merchantName}}*. Total: R$ {{total}}. Aguardando confirmação do lojista!',
       tx
     );
 
     const customerNotificationId = await NotificationService.queueNotification({
-      userId: params.customer.id,
+      userId: order.customer.id,
       userType: 'Customer',
       type: 'WhatsApp',
-      target: params.customer.phone,
+      target: order.customer.phone,
       content: customerContent
     }, tx);
     notificationIds.push(customerNotificationId);
 
-    if (params.paymentMethod === 'Dinheiro' || params.paymentConfirmedNow) {
-      const merchantContent = await WhatsAppTemplateService.render(
-        WhatsAppTemplateType.STORE_ORDER_CREATED,
-        {
-          customerName: params.customer.name,
-          orderId: params.orderId,
-          paymentMethod: params.paymentMethod,
-          total: params.total.toFixed(2)
-        },
-        'Novo pedido aguardando aceite.\n\nPedido: *{{orderId}}*\nCliente: *{{customerName}}*\nPagamento: *{{paymentMethod}}*\nTotal: R$ {{total}}\n\nAcesse o painel do lojista para aceitar ou cancelar.',
-        tx
-      );
-
+    if (order.paymentMethod === 'Dinheiro' || params.paymentConfirmedNow) {
       const merchantNotificationId = await NotificationService.queueNotification({
-        userId: params.merchant.id,
+        userId: order.merchant.id,
         userType: 'Merchant',
         type: 'WhatsApp',
-        target: params.merchant.phone,
-        content: merchantContent
+        target: order.merchant.phone,
+        content: buildMerchantOrderMessage(order)
       }, tx);
       notificationIds.push(merchantNotificationId);
     }
@@ -105,17 +92,7 @@ export class OrderNotificationService {
       userType: 'Merchant',
       type: 'WhatsApp',
       target: order.merchant.phone,
-      content: await WhatsAppTemplateService.render(
-        WhatsAppTemplateType.STORE_ORDER_CREATED,
-        {
-          customerName: order.customer.name,
-          orderId: order.id,
-          paymentMethod: order.paymentMethod,
-          total: Number(order.total).toFixed(2)
-        },
-        undefined,
-        tx
-      )
+      content: buildMerchantOrderMessage(order)
     }, tx);
 
     return [customerNotificationId, merchantNotificationId];
@@ -135,7 +112,7 @@ export class OrderNotificationService {
     const merchant = order.merchant;
     const deliverer = order.deliverer;
 
-    if (status === ORDER_STATUS.ACCEPTED || status === ORDER_STATUS.PREPARING) {
+    if (shouldNotifyCustomerForOrderStatus(status) && (status === ORDER_STATUS.ACCEPTED || status === ORDER_STATUS.PREPARING)) {
       const nId = await NotificationService.queueNotification({
         userId: customer.id,
         userType: 'Customer',
@@ -184,45 +161,8 @@ export class OrderNotificationService {
         }, tx);
         notificationIds.push(delivererNotificationId);
 
-        const customerNotificationId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: await WhatsAppTemplateService.render(
-            WhatsAppTemplateType.ORDER_READY,
-            {
-              customerName: customer.name,
-              orderId: order.id,
-              merchantName: merchant.name,
-              delivererName: `O entregador ${deliverer.name} foi acionado para a entrega.`
-            },
-            undefined,
-            tx
-          )
-        }, tx);
-        notificationIds.push(customerNotificationId);
-      } else {
-        const nId = await NotificationService.queueNotification({
-          userId: customer.id,
-          userType: 'Customer',
-          type: 'WhatsApp',
-          target: customer.phone,
-          content: await WhatsAppTemplateService.render(
-            WhatsAppTemplateType.ORDER_READY,
-            {
-              customerName: customer.name,
-              orderId: order.id,
-              merchantName: merchant.name,
-              delivererName: 'Estamos buscando um entregador disponível.'
-            },
-            undefined,
-            tx
-          )
-        }, tx);
-        notificationIds.push(nId);
       }
-    } else if (status === ORDER_STATUS.DISPATCHED || status === ORDER_STATUS.IN_TRANSIT) {
+    } else if (shouldNotifyCustomerForOrderStatus(status) && (status === ORDER_STATUS.DISPATCHED || status === ORDER_STATUS.IN_TRANSIT)) {
       const nId = await NotificationService.queueNotification({
         userId: customer.id,
         userType: 'Customer',
@@ -241,7 +181,7 @@ export class OrderNotificationService {
         )
       }, tx);
       notificationIds.push(nId);
-    } else if (status === ORDER_STATUS.DELIVERED) {
+    } else if (shouldNotifyCustomerForOrderStatus(status) && status === ORDER_STATUS.DELIVERED) {
       const nId = await NotificationService.queueNotification({
         userId: customer.id,
         userType: 'Customer',
@@ -250,7 +190,7 @@ export class OrderNotificationService {
         content: `Olá, *${customer.name}*! Seu pedido nº *${order.id}* foi entregue! Agradecemos a preferência.`
       }, tx);
       notificationIds.push(nId);
-    } else if (status === ORDER_STATUS.CANCELLED) {
+    } else if (shouldNotifyCustomerForOrderStatus(status) && status === ORDER_STATUS.CANCELLED) {
       const nId = await NotificationService.queueNotification({
         userId: customer.id,
         userType: 'Customer',

@@ -43,6 +43,17 @@ test('merchant can accept an offline cash order while pending', () => {
   assert.equal(canTransitionOrder(order, ORDER_STATUS.ACCEPTED, 'merchant'), true);
 });
 
+test('merchant must prepare an accepted order before marking it ready', () => {
+  const order = {
+    status: ORDER_STATUS.ACCEPTED,
+    paymentMethod: 'Dinheiro',
+    paymentStatus: PAYMENT_STATUS.PENDING
+  };
+
+  assert.equal(canTransitionOrder(order, ORDER_STATUS.READY, 'merchant'), false);
+  assert.equal(canTransitionOrder(order, ORDER_STATUS.PREPARING, 'merchant'), true);
+});
+
 test('final orders cannot transition again', () => {
   const delivered = {
     status: ORDER_STATUS.DELIVERED,

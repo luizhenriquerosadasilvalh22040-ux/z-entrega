@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { apiClient } from '../services/apiClient';
 import { Button, Card, Badge, Modal, Toast, Input } from '../components/ui';
-import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2, MessageSquare, Store as StoreIcon, Truck } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, ArrowLeft, Clock, MapPin, Phone, CreditCard, Shield, Ban, Star, Copy, Check, Loader2, MessageSquare, Store as StoreIcon, Truck, Trash2 } from 'lucide-react';
 import { CheckoutCardForm } from '../components/CheckoutCardForm';
 import { DELIVERY_FEE } from '../config/publicEnv';
 
@@ -66,6 +66,7 @@ export const Store: React.FC = () => {
     cart,
     addToCart,
     updateCartQty,
+    removeFromCart,
     clearCart,
     appliedCoupon,
     applyCoupon,
@@ -377,6 +378,14 @@ export const Store: React.FC = () => {
       setIsCheckingOut(false);
     }
     updateCartQty(cartId, delta);
+  };
+
+  const handleRemoveCartItem = (cartId: string) => {
+    const item = cart.find((cartItem) => cartItem.cartId === cartId);
+    if (!item) return;
+    removeFromCart(cartId);
+    if (cart.length === 1) setIsCheckingOut(false);
+    setToast({ message: `${item.product.name} removido do carrinho.`, type: 'success' });
   };
 
   const getItemTotalPrice = (item: ICartItem): number => {
@@ -893,9 +902,14 @@ export const Store: React.FC = () => {
                     </div>
 
                     <div className="flex justify-between items-center mt-1">
-                      <span className="text-[10px] text-slate-400">
-                        Valor unitário: R$ {itemPrice.toFixed(2)}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCartItem(item.cartId)}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
+                        aria-label={`Excluir ${item.product.name} do carrinho`}
+                      >
+                        <Trash2 size={13} /> Excluir
+                      </button>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"

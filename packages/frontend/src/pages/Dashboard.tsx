@@ -517,19 +517,19 @@ export const Dashboard: React.FC = () => {
       },
       ACCEPTED: {
         label: 'Aceito',
-        description: 'Pedido aceito. Próximo passo: iniciar preparo.',
+        description: 'Pedido aceito. Próximo passo obrigatório: preparar.',
         variant: 'blue',
         icon: CheckCircle2
       },
       PREPARING: {
         label: 'Em preparo',
-        description: 'Pedido em produção. Avise quando estiver pronto para chamar motoboy.',
+        description: 'Pedido em produção. Marque como pronto para acionar o motoboy.',
         variant: 'orange',
         icon: ChefHat
       },
       READY: {
-        label: 'Buscando motoboy',
-        description: 'Pedido pronto. O sistema está tentando atribuir um motoboy.',
+        label: 'Pronto / Buscando motoboy',
+        description: 'A retirada foi enviada diretamente ao canal dos motoboys.',
         variant: 'orange',
         icon: Search
       },
@@ -567,8 +567,8 @@ export const Dashboard: React.FC = () => {
 
   const getNextStatusAction = (status: string) => {
     const flows: { [key: string]: { label: string; next: string } } = {
-      ACCEPTED: { label: 'Iniciar Preparação', next: 'PREPARING' },
-      PREPARING: { label: 'Pedido pronto / Chamar motoboy', next: 'READY' }
+      ACCEPTED: { label: 'Preparar pedido', next: 'PREPARING' },
+      PREPARING: { label: 'Pronto / Enviar para entrega', next: 'READY' }
     };
     return flows[status];
   };
@@ -997,7 +997,7 @@ export const Dashboard: React.FC = () => {
                               <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold leading-relaxed text-slate-600 dark:border-blue-900/40 dark:bg-blue-950/10 dark:text-slate-300">
                                 <div className="flex items-start gap-2">
                                   <MessageSquare size={15} className="mt-0.5 text-blue-500" />
-                                  <span>Entrega em andamento. O cliente será atualizado pelo app e WhatsApp.</span>
+                                  <span>Entrega em andamento. O acompanhamento permanece disponível no aplicativo.</span>
                                 </div>
                               </div>
                             )}

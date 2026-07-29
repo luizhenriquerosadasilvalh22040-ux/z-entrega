@@ -10,3 +10,7 @@ export const maskNotificationTarget = (target: string): string => {
 export const shouldRetryNotification = (attempts: number): boolean => {
   return attempts < NOTIFICATION_QUEUE_ATTEMPTS;
 };
+
+export const shouldNotifyCustomerForOrderStatus = (status: string): boolean => {
+  return status !== 'READY';
+};

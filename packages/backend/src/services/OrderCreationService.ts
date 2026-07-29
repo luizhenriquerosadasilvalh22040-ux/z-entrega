@@ -428,11 +428,7 @@ export class OrderCreationService {
       if (!order) throw new Error('Order not found after creation');
 
       const notificationIds = await OrderNotificationService.queueOrderCreated({ tx }, {
-        customer: order.customer,
-        merchant: order.merchant,
-        orderId: order.id,
-        total: Number(order.total),
-        paymentMethod: input.paymentMethod,
+        order,
         paymentConfirmedNow
       });
 
