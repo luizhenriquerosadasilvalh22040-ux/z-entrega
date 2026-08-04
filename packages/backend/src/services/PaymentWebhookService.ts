@@ -1,3 +1,4 @@
+import { PaymentStatus as PrismaPaymentStatus } from '@prisma/client';
 import logger from '../config/logger';
 import prisma from '../config/prisma';
 import { ORDER_STATUS, PAYMENT_STATUS } from '../domain/orderStatus';
@@ -8,6 +9,7 @@ import { AuditLogService } from './AuditLogService';
 import { SubscriptionService } from './SubscriptionService';
 import {
   buildMercadoPagoEventId,
+  mapMercadoPagoToPaymentStatus,
   resolvePaymentWebhookAction
 } from '../domain/paymentWebhookDecision';
 import { sanitizeMercadoPagoWebhookPayload } from '../domain/webhookSecurity';
@@ -36,11 +38,11 @@ export class PaymentWebhookService {
     return buildMercadoPagoEventId(payload);
   }
 
-  public static resolvePaymentAction(mpStatus: string, order: {
+  public static resolvePaymentAction(targetPaymentStatus: string, order: {
     status: string;
     paymentStatus?: string | null;
   }) {
-    return resolvePaymentWebhookAction(mpStatus, order);
+    return resolvePaymentWebhookAction(targetPaymentStatus, order);
   }
 
   public static async processMercadoPagoWebhook(
@@ -163,10 +165,11 @@ export class PaymentWebhookService {
       data: { orderId: order.id }
     });
 
-    const mpStatus = await MercadoPagoService.getPaymentStatus(paymentId, order.merchantId);
-    logger.info(`💳 [Mercado Pago Webhook] Status do pagamento ${paymentId}: ${mpStatus}`);
+    const mpDetails = await MercadoPagoService.getPaymentDetails(paymentId, order.merchantId);
+    logger.info(`💳 [Mercado Pago Webhook] Status do pagamento ${paymentId}: ${mpDetails.status} (${mpDetails.statusDetail})`);
 
-    const action = this.resolvePaymentAction(mpStatus, order);
+    const targetPaymentStatus = mapMercadoPagoToPaymentStatus(mpDetails.status, mpDetails.statusDetail);
+    const action = this.resolvePaymentAction(targetPaymentStatus, order);
 
     if (action === 'APPROVE_PAYMENT') {
       const updatedOrder = await OrderPaymentSyncService.confirmPaymentApproved(order.id);
@@ -185,6 +188,10 @@ export class PaymentWebhookService {
       return this.skip(webhookEventId, eventId, 'approved_payment_for_final_order', order.id);
     }
 
+    if (action === 'SKIP_NON_PENDING_REJECTION') {
+      return this.skip(webhookEventId, eventId, 'rejected_payment_for_non_pending_order', order.id);
+    }
+
     if (action === 'CANCEL_PENDING_ORDER') {
       await prisma.$transaction(async (tx) => {
         const cancelled = await tx.order.updateMany({
@@ -194,7 +201,7 @@ export class PaymentWebhookService {
           },
           data: {
             status: ORDER_STATUS.CANCELLED,
-            paymentStatus: mpStatus === 'cancelled' ? PAYMENT_STATUS.CANCELLED : PAYMENT_STATUS.REJECTED
+            paymentStatus: targetPaymentStatus as PrismaPaymentStatus
           }
         });
 
@@ -216,7 +223,7 @@ export class PaymentWebhookService {
             metadata: {
               provider: 'mercadopago',
               paymentId,
-              paymentStatus: mpStatus,
+              paymentStatus: targetPaymentStatus,
               webhookType: payload.type,
               webhookAction: payload.action
             }
@@ -232,12 +239,81 @@ export class PaymentWebhookService {
       return { status: 'processed', eventId, orderId: order.id };
     }
 
-    if (action === 'SKIP_NON_PENDING_REJECTION') {
-      return this.skip(webhookEventId, eventId, 'rejected_payment_for_non_pending_order', order.id);
+    if (action === 'CANCEL_ORDER_BY_REFUND') {
+      await prisma.$transaction(async (tx) => {
+        const cancelled = await tx.order.updateMany({
+          where: {
+            id: order.id,
+            status: {
+              in: [
+                ORDER_STATUS.PENDING,
+                ORDER_STATUS.PAID,
+                ORDER_STATUS.ACCEPTED,
+                ORDER_STATUS.PREPARING,
+                ORDER_STATUS.READY
+              ]
+            }
+          },
+          data: {
+            status: ORDER_STATUS.CANCELLED,
+            paymentStatus: targetPaymentStatus as PrismaPaymentStatus
+          }
+        });
+
+        if (cancelled.count > 0) {
+          await InventoryService.restoreOrderStock(tx, order.id);
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: order.id,
+              status: ORDER_STATUS.CANCELLED
+            }
+          });
+          await AuditLogService.record(tx, {
+            actorType: 'system',
+            action: 'ORDER_CANCELLED_BY_REFUND_WEBHOOK',
+            entityType: 'Order',
+            entityId: order.id,
+            orderId: order.id,
+            merchantId: order.merchantId,
+            metadata: {
+              provider: 'mercadopago',
+              paymentId,
+              paymentStatus: targetPaymentStatus,
+              webhookType: payload.type,
+              webhookAction: payload.action
+            }
+          });
+        }
+      });
+
+      if (io) {
+        io.to(`order:${order.id}`).emit('orderStatusUpdated', { orderId: order.id, status: ORDER_STATUS.CANCELLED });
+        io.to(`merchant:${order.merchantId}`).emit('orderStatusUpdated', { orderId: order.id, status: ORDER_STATUS.CANCELLED });
+      }
+
+      await this.markProcessed(webhookEventId);
+      return { status: 'processed', eventId, orderId: order.id };
+    }
+
+    if (action === 'UPDATE_PAYMENT_STATUS_ONLY') {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: targetPaymentStatus as PrismaPaymentStatus
+        }
+      });
+
+      if (io) {
+        io.to(`merchant:${order.merchantId}`).emit('paymentStatusUpdated', { orderId: order.id, paymentStatus: targetPaymentStatus });
+        io.to(`order:${order.id}`).emit('paymentStatusUpdated', { orderId: order.id, paymentStatus: targetPaymentStatus });
+      }
+
+      await this.markProcessed(webhookEventId);
+      return { status: 'processed', eventId, orderId: order.id, reason: `payment_status_updated_to_${targetPaymentStatus}` };
     }
 
     await this.markProcessed(webhookEventId);
-    return { status: 'processed', eventId, orderId: order.id, reason: `payment_status_${mpStatus}` };
+    return { status: 'processed', eventId, orderId: order.id, reason: 'no_action_taken' };
   }
 
   private static async processSubscriptionEvent(

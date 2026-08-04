@@ -11,6 +11,12 @@ export interface IMercadoPagoPixResponse {
   qrCodeBase64: string;
 }
 
+export interface IMercadoPagoPaymentDetails {
+  status: string;
+  statusDetail: string;
+  refundedAmount?: number;
+}
+
 export const buildMercadoPagoPixPayer = (
   mpCustomerId: string | null | undefined,
   customerEmail: string,
@@ -428,10 +434,19 @@ export class MercadoPagoService {
   /**
    * Busca o status atual de uma cobrança no Mercado Pago
    */
-  public static async getPaymentStatus(mpPaymentId: string, merchantId: string): Promise<string> {
+  /**
+   * Busca os detalhes atuais (status e status_detail) de uma cobrança no Mercado Pago
+   */
+  public static async getPaymentDetails(
+    mpPaymentId: string,
+    merchantId: string
+  ): Promise<IMercadoPagoPaymentDetails> {
     if (mpPaymentId.startsWith('pay_mock_')) {
       this.assertCanUseMockPayment();
-      return 'approved';
+      return {
+        status: 'approved',
+        statusDetail: 'accredited'
+      };
     }
 
     const merchant = await prisma.merchant.findUnique({
@@ -443,7 +458,7 @@ export class MercadoPagoService {
       try {
         merchantToken = decrypt(merchant.mpAccessToken);
       } catch (err) {
-        logger.error(`❌ [Mercado Pago] Falha ao decriptar token do lojista ${merchantId} para obter status:`, err);
+        logger.error(`❌ [Mercado Pago] Falha ao decriptar token do lojista ${merchantId} para obter detalhes:`, err);
       }
     }
 
@@ -457,15 +472,29 @@ export class MercadoPagoService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Erro Mercado Pago (Get Payment): ${response.status} - ${errorText}`);
+        throw new Error(`Erro Mercado Pago (Get Payment Details): ${response.status} - ${errorText}`);
       }
 
       const resData: any = await response.json();
-      return resData.status; // approved, in_process, pending, rejected, cancelled, etc.
+      return {
+        status: String(resData.status || ''),
+        statusDetail: String(resData.status_detail || ''),
+        refundedAmount: resData.transaction_details?.total_refunded_amount !== undefined
+          ? Number(resData.transaction_details.total_refunded_amount)
+          : undefined
+      };
     } catch (err: any) {
-      logger.error(`❌ [Mercado Pago] Falha ao obter status do pagamento ${mpPaymentId}: ${err.message}`);
+      logger.error(`❌ [Mercado Pago] Falha ao obter detalhes do pagamento ${mpPaymentId}: ${err.message}`);
       throw err;
     }
+  }
+
+  /**
+   * Busca o status atual de uma cobrança no Mercado Pago
+   */
+  public static async getPaymentStatus(mpPaymentId: string, merchantId: string): Promise<string> {
+    const details = await this.getPaymentDetails(mpPaymentId, merchantId);
+    return details.status;
   }
 
   /**
