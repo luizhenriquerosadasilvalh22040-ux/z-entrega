@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Sun, Moon, LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart, ShoppingCart, ChevronDown } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, User, LayoutDashboard, ShoppingBag, Menu, X, Building, Heart, ShoppingCart, ChevronDown, MoveUpRight, Sun, Moon } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 
 interface LayoutProps {
@@ -11,17 +11,16 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, role, isAuthenticated, logout } = useAuthStore();
   const { cart, merchantId } = useCartStore();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    return savedTheme === 'dark'
-      || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  });
+  const isCustomerHome = location.pathname === '/';
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDarkMode);
     document.body.classList.toggle('dark', isDarkMode);
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
@@ -40,19 +39,17 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
   }, []);
 
-  const toggleDarkMode = () => {
-    setIsDarkMode((current) => !current);
-  };
-
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
 
+  const toggleDarkMode = () => setIsDarkMode((current) => !current);
+
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-night-dark transition-colors duration-300">
+    <div className={`min-h-screen flex flex-col bg-slate-50 dark:bg-night-dark transition-colors duration-300 ${isCustomerHome ? 'customer-home-shell' : ''}`}>
       {/* Offline banner */}
       {isOffline && (
         <div className="bg-red-600 dark:bg-red-950 text-white text-xs md:text-sm py-2.5 px-4 text-center flex items-center justify-center gap-3 transition-all duration-300 relative z-50 flex-wrap border-b border-red-700/50 dark:border-red-900/50 flex-shrink-0">
@@ -70,13 +67,28 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800/80">
+      <header className="customer-home-header sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight">
-              Traz Pra Cá <span className="text-energy">Delivery</span>
-            </span>
+            {isCustomerHome ? (
+              <span className="customer-brand flex items-center gap-2.5">
+                <span className="customer-brand-mark flex h-10 w-10 items-center justify-center rounded-xl">
+                  <MoveUpRight size={24} strokeWidth={3} aria-hidden="true" />
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="customer-brand-name flex flex-col text-[13px] font-black leading-[0.95] tracking-[-0.04em]">
+                    <span>TRAZ</span>
+                    <span>PRA CÁ</span>
+                  </span>
+                  <span className="customer-brand-delivery self-end pb-0.5 text-[10px] font-bold">delivery</span>
+                </span>
+              </span>
+            ) : (
+              <span className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight">
+                Traz Pra Cá <span className="text-energy">Delivery</span>
+              </span>
+            )}
           </Link>
 
           {/* Navigation - Desktop */}
@@ -120,11 +132,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               </Link>
             )}
 
-            {/* Dark mode button */}
-            <button 
+            <button
+              type="button"
               onClick={toggleDarkMode}
               className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
               aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
+              title={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
             >
               {isDarkMode ? <Sun size={20} className="text-yellow-500" /> : <Moon size={20} />}
             </button>
@@ -211,10 +224,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </span>
               </Link>
             )}
-            <button 
+            <button
+              type="button"
               onClick={toggleDarkMode}
               className="p-2 rounded-xl text-slate-500 dark:text-slate-400"
               aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
+              title={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
             >
               {isDarkMode ? <Sun size={18} className="text-yellow-500" /> : <Moon size={18} />}
             </button>

@@ -18,6 +18,8 @@ interface Slide extends HeroBanner {
   description?: string;
   ctaLabel?: string;
   tone?: 'energy' | 'night' | 'fresh';
+  benefits?: string[];
+  imageLayout?: 'split';
 }
 
 const fallbackSlides: Slide[] = [
@@ -50,13 +52,25 @@ const fallbackSlides: Slide[] = [
     ctaLabel: 'Conhecer estabelecimentos',
     linkUrl: '#estabelecimentos',
     tone: 'fresh'
+  },
+  {
+    _id: 'local-delivery-value',
+    imageUrl: '/banner-local-delivery.jpg',
+    title: 'Sua cidade, mais perto de você',
+    description: 'Peça no comércio local e receba com praticidade, valorizando quem faz parte do seu bairro.',
+    eyebrow: 'Mais motivos para pedir',
+    ctaLabel: 'Descobrir lojas',
+    linkUrl: '#estabelecimentos',
+    tone: 'night',
+    imageLayout: 'split',
+    benefits: ['Comércio local', 'Entrega prática', 'Compra segura']
   }
 ];
 
 const toneClasses = {
-  energy: 'from-[#ea1d2c] via-[#f04435] to-[#ff7a33]',
-  night: 'from-[#17131f] via-[#30203e] to-[#ea1d2c]',
-  fresh: 'from-[#0d7c66] via-[#159675] to-[#54b979]'
+  energy: 'from-[#ed6a13] via-[#f28b24] to-[#ffc267]',
+  night: 'from-[#192119] via-[#315231] to-[#648c52]',
+  fresh: 'from-[#17774e] via-[#2b9b66] to-[#83bd70]'
 };
 
 export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
@@ -67,14 +81,17 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
   const slides = useMemo<Slide[]>(() => {
     if (!banners.length) return fallbackSlides;
 
-    return banners.map((banner, index) => ({
-      ...banner,
-      title: banner.title || 'Uma oferta escolhida para você',
-      eyebrow: 'Destaque da semana',
-      description: 'Aproveite enquanto estiver disponível.',
-      ctaLabel: banner.linkUrl ? 'Quero aproveitar' : undefined,
-      tone: (['energy', 'night', 'fresh'] as const)[index % 3]
-    }));
+    return [
+      ...banners.map((banner, index) => ({
+        ...banner,
+        title: banner.title || 'Uma oferta escolhida para você',
+        eyebrow: 'Destaque da semana',
+        description: 'Aproveite enquanto estiver disponível.',
+        ctaLabel: banner.linkUrl ? 'Quero aproveitar' : undefined,
+        tone: (['energy', 'night', 'fresh'] as const)[index % 3]
+      })),
+      fallbackSlides[fallbackSlides.length - 1]
+    ];
   }, [banners]);
 
   useEffect(() => {
@@ -115,7 +132,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
       onFocusCapture={() => setIsPaused(true)}
       onBlurCapture={() => setIsPaused(false)}
     >
-      <div className="relative min-h-[360px] sm:min-h-[390px] lg:min-h-[420px]">
+      <div className={`relative min-h-[360px] sm:min-h-[390px] lg:min-h-[420px] ${slides[displayedIndex]?.imageLayout === 'split' ? 'customer-hero-split-container' : ''}`}>
         {slides.map((slide, index) => {
           const isActive = index === displayedIndex;
           return (
@@ -127,19 +144,32 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
               aria-hidden={!isActive}
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${toneClasses[slide.tone || 'energy']}`} />
-              {slide.imageUrl && (
+              {slide.imageUrl && slide.imageLayout === 'split' && (
+                <div className="absolute inset-y-0 right-0 w-full overflow-hidden sm:w-[48%]">
+                  <img
+                    src={slide.imageUrl}
+                    alt=""
+                    className="h-full w-full object-cover object-right"
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    fetchPriority={index === 0 ? 'high' : 'auto'}
+                  />
+                </div>
+              )}
+              {slide.imageUrl && slide.imageLayout !== 'split' && (
                 <img
                   src={slide.imageUrl}
                   alt=""
-                  className="absolute inset-0 h-full w-full object-cover object-center opacity-65 mix-blend-luminosity sm:opacity-75"
+                  className="absolute inset-0 h-full w-full object-cover object-center"
                   loading={index === 0 ? 'eager' : 'lazy'}
                   fetchPriority={index === 0 ? 'high' : 'auto'}
                 />
               )}
-              <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/42 to-black/5" />
-              <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
 
-              <div className="relative z-10 flex min-h-[360px] max-w-2xl flex-col justify-end px-6 pb-16 pt-8 text-white sm:min-h-[390px] sm:justify-center sm:px-10 sm:pb-20 lg:min-h-[420px] lg:px-14">
+              {slide.imageUrl && slide.imageLayout === 'split' && (
+                <div className="customer-hero-value-overlay absolute inset-y-0 left-0 w-full sm:w-[58%]" />
+              )}
+
+              <div className={`customer-hero-copy relative z-10 flex min-h-[360px] max-w-2xl flex-col justify-end px-6 pb-16 pt-8 text-white sm:min-h-[390px] sm:justify-center sm:px-10 sm:pb-20 lg:min-h-[420px] lg:px-14 ${slide.imageLayout === 'split' ? 'customer-hero-value-copy' : ''}`}>
                 <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] backdrop-blur-md">
                   <Sparkles size={13} aria-hidden="true" />
                   {slide.eyebrow}
@@ -151,6 +181,15 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ banners }) => {
                   <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-white/85 sm:text-base">
                     {slide.description}
                   </p>
+                )}
+                {slide.benefits && (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {slide.benefits.map((benefit) => (
+                      <span key={benefit} className="rounded-full border border-white/35 bg-white/15 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+                        {benefit}
+                      </span>
+                    ))}
+                  </div>
                 )}
                 <div className="mt-6 flex flex-wrap items-center gap-3">
                   {slide.ctaLabel && (
